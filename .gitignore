@@ -22,4 +22,5 @@ logs/
 .idea/
 .claude/
 topic_history.json
+url_history.json
 bgm/*.mp3
