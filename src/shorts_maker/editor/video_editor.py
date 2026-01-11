@@ -12,17 +12,15 @@ class VideoEditor:
         self.bgm_manager = BGMManager()
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         
-        # Voice mapping based on mood
         self.voice_map = {
             'mysterious': 'onyx', 'dramatic': 'onyx', 'dark': 'onyx', 'suspense': 'onyx',
             'happy': 'nova', 'playful': 'nova', 'upbeat': 'nova', 'inspiring': 'nova',
             'calm': 'echo', 'romantic': 'echo', 'ambient': 'echo',
             'energetic': 'fable', 'aggressive': 'fable', 'epic': 'fable',
-            'cinematic': 'alloy' # Default neutral
+            'cinematic': 'alloy'
         }
 
     def _get_voice_for_mood(self, mood: str) -> str:
-        # Default to 'alloy' if mood not found
         return self.voice_map.get(mood.lower(), 'alloy')
 
     async def compose_video(self, media_paths: List[str], script) -> str:
@@ -33,19 +31,17 @@ class VideoEditor:
         for i, (path, scene) in enumerate(zip(media_paths, script.scenes)):
             print(f"Editing scene {scene.scene_number}...")
             
-            # 1. OpenAI TTS 생성 (Dynamic Voice)
+            # 1. TTS
             audio_path = await self._generate_tts(scene.script_text, i, voice_name)
-            # Add delay to prevent OpenAI Rate Limit/Intermittent 403
             await asyncio.sleep(2)
-            
             audio = AudioFileClip(audio_path)
             duration = audio.duration + 0.5
             
-            # 2. 영상 클립 생성
+            # 2. Visual Clip
             clip = self._create_visual_clip(path, duration)
             clip = clip.with_audio(audio)
             
-            # 3. 자막 생성
+            # 3. Subtitle (Styled without background box)
             subtitle_clip = self._create_subtitle_clip(scene.script_text, duration)
             
             final_scene_clip = CompositeVideoClip([clip, subtitle_clip])
@@ -62,7 +58,7 @@ class VideoEditor:
         print("Concatenating all clips...")
         final_video = concatenate_videoclips(processed_clips, method="compose")
         
-        # 4. BGM 추가
+        # 4. BGM
         try:
             mood = getattr(script, 'mood', 'cinematic')
             bgm_path = self.bgm_manager.get_bgm_path(mood)
@@ -75,7 +71,6 @@ class VideoEditor:
                     bgm = bgm.subclipped(0, final_video.duration)
                 
                 bgm = bgm.with_volume_scaled(0.15)
-                
                 final_audio = CompositeAudioClip([final_video.audio, bgm])
                 final_video = final_video.with_audio(final_audio)
                 print(f"BGM added: {mood}")
@@ -110,18 +105,21 @@ class VideoEditor:
             return ColorClip(size=(1080, 1920), color=(0,0,0), duration=duration)
 
     def _create_subtitle_clip(self, text, duration):
+        """Creates a high-quality subtitle with heavy stroke for readability."""
         try:
+            # Styled Text without background box
+            # Using white color with a thick black stroke
             txt_clip = TextClip(
                 text=text,
-                font_size=55,
+                font_size=60, 
                 color='white', 
-                stroke_color='black',
-                stroke_width=2,
                 font='AppleGothic', 
-                method='caption',
-                size=(900, None), 
-                text_align='center'
-            ).with_duration(duration).with_position(('center', 1400))
+                method='caption', 
+                size=(850, None), 
+                text_align='center',
+                stroke_color='black', # Heavy black stroke for readability
+                stroke_width=4        # Increased stroke thickness
+            ).with_duration(duration).with_position(('center', 1440))
             
             return txt_clip
         except Exception as e:
@@ -133,9 +131,8 @@ class VideoEditor:
         output_path = f"temp/audio_{scene_idx}_{int(asyncio.get_event_loop().time())}.mp3"
         print(f"Generating OpenAI TTS ({voice}) for scene {scene_idx}...")
         
-        # Retry logic for OpenAI TTS
         max_retries = 3
-        retry_delay = 5 # Start with 5s
+        retry_delay = 5
         
         for attempt in range(max_retries):
             try:
@@ -152,7 +149,7 @@ class VideoEditor:
                 if attempt < max_retries - 1:
                     print(f"Waiting {retry_delay}s before retry...")
                     await asyncio.sleep(retry_delay)
-                    retry_delay *= 2 # Exponential backoff
+                    retry_delay *= 2
                 else:
                     print("Switching to gTTS fallback...")
                     loop = asyncio.get_running_loop()
