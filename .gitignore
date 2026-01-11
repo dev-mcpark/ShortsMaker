@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+build/
+dist/
+*.egg-info/
+
+# Environment
+.env
+auth_token.json
+client_secrets.json
+service_account.json
+token.pickle
+token.json
+
+# Project specific
+outputs/
+temp/
+logs/
+.idea/
+.claude/
+topic_history.json
+bgm/*.mp3
