@@ -1,11 +1,11 @@
 import os
 import json
 import random
+import feedparser
 from datetime import datetime
 from openai import AsyncOpenAI
 from pydantic import BaseModel
-from typing import List, Tuple
-from googlesearch import search
+from typing import List, Dict
 
 class VideoScene(BaseModel):
     scene_number: int
@@ -26,151 +26,144 @@ class ScriptPlanner:
     def __init__(self):
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.history_file = "topic_history.json"
+        self.url_history_file = "url_history.json"
+        self.script_output_dir = "outputs/scripts"
         
-        # Define Specific Niches (removed as per request for broad trends, but structure kept clean)
-        # We are using broad trend search now.
-        
-        self.allowed_moods = [
-            'happy', 'upbeat', 'energetic', 'playful', 'inspiring',
-            'mysterious', 'cinematic', 'calm', 'ambient', 'romantic',
-            'dramatic', 'epic', 'suspense', 'dark', 'aggressive'
-        ]
-        
-        self.story_styles = [
-            "The Mystery Gap (Keep the answer until the end)",
-            "The Myth Buster (Challenge common beliefs)",
-            "The Shocking Listicle (Rapid fire facts)"
-        ]
+        # Tech/News focused moods
+        self.allowed_moods = ['upbeat', 'inspiring', 'cinematic', 'energetic', 'calm']
+        self.story_styles = ["The Tech Reporter", "The Insight Curator"]
 
-    def _load_history(self) -> List[str]:
-        if os.path.exists(self.history_file):
+    def _load_url_history(self) -> List[str]:
+        if os.path.exists(self.url_history_file):
             try:
-                with open(self.history_file, 'r') as f:
+                with open(self.url_history_file, 'r') as f:
                     return json.load(f)
-            except:
-                return []
+            except: return []
         return []
 
-    def _save_history(self, topic: str):
-        history = self._load_history()
-        history.append(topic)
-        with open(self.history_file, 'w') as f:
-            json.dump(history, f, indent=2)
+    def _save_history(self, title: str, url: str):
+        # Save URL history
+        url_history = self._load_url_history()
+        url_history.append(url)
+        with open(self.url_history_file, 'w') as f:
+            json.dump(url_history[-100:], f, indent=2)
 
-    def _get_trend_search_query(self) -> str:
-        """Generates a broad, trend-focused search query."""
-        now = datetime.now()
-        year = now.year
-        month = now.strftime("%B")
-        
-        # Broad queries to catch anything interesting
-        queries = [
-            f"most interesting news {month} {year}",
-            f"viral stories {month} {year}",
-            f"weirdest facts discovered recently {year}",
-            f"trending science mysteries {year}",
-            f"internet sensation topics {year}",
-            f"mind blowing discoveries {month} {year}",
-            f"unbelievable true stories {year}",
-            f"what people are talking about today {year}"
-        ]
-        
-        return random.choice(queries)
+    def _fetch_geeknews_rss(self, limit=10) -> List[Dict]:
+        """Fetches latest news from GeekNews RSS."""
+        print("Fetching trends from GeekNews (news.hada.io)...")
+        url = "https://news.hada.io/rss/news"
+        try:
+            feed = feedparser.parse(url)
+            posts = []
+            url_history = self._load_url_history()
+            
+            for entry in feed.entries:
+                if entry.link in url_history: continue
+                
+                # GeekNews often puts summary in description
+                content = entry.description if hasattr(entry, 'description') else entry.title
+                
+                posts.append({
+                    'source': 'GeekNews',
+                    'title': entry.title,
+                    'content': content,
+                    'url': entry.link
+                })
+                if len(posts) >= limit: break
+            return posts
+        except Exception as e:
+            print(f"RSS fetch failed: {e}")
+            return []
 
     async def plan_content(self, topic: str = None) -> ShortsScript:
-        selected_topic = topic
-        context = ""
+        candidates = self._fetch_geeknews_rss()
         
-        if not selected_topic:
-            selected_topic, context = await self._generate_topic_from_search()
-        
-        print(f"🔥 Selected Topic: {selected_topic}")
-        self._save_history(selected_topic)
+        if not candidates:
+            print("⚠️ No new GeekNews items found. Using fallback.")
+            candidates = [{'source': 'Fallback', 'title': 'AI is changing the world', 'content': 'AI impact.', 'url': 'google.com'}]
 
-        script = await self._write_script(selected_topic, context)
+        selection = await self._select_best_topic(candidates)
+        
+        print(f"🔥 Selected Topic: {selection['title']}")
+        self._save_history(selection['title'], selection['url'])
+
+        script = await self._write_script(selection)
+        
+        # Save script file
+        try:
+            import re
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_title = re.sub(r'[^\w\s-]', '', script.title).strip().replace(' ', '_')[:30]
+            filepath = os.path.join(self.script_output_dir, f"script_{timestamp}_{safe_title}.json")
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write(script.model_dump_json(indent=2))
+        except: pass
+        
         return script
 
-    async def _generate_topic_from_search(self) -> Tuple[str, str]:
-        history = self._load_history()
-        recent_history = history[-20:] if history else []
-        
-        query = self._get_trend_search_query()
-        print(f"🔎 Searching Global Trends for: '{query}'...")
-        
-        search_results = []
-        try:
-            results = search(query, num_results=10, advanced=True)
-            for r in results:
-                if "youtube.com" not in r.url:
-                    search_results.append(f"Title: {r.title}\nSnippet: {r.description}\nSource: {r.url}")
-                
-        except Exception as e:
-            print(f"Search failed: {e}. Falling back.")
-            search_results = ["Fallback context."]
+    async def _select_best_topic(self, candidates: List[Dict]) -> Dict:
+        candidates_text = ""
+        for i, item in enumerate(candidates):
+            candidates_text += f"{i+1}. {item['title']}\n"
 
-        search_context = "\n---\n".join(search_results)
-        
         prompt = f"""
-        You are a 'Viral Trend Hunter'.
-        Scan the search results below and pick the SINGLE most fascinating, click-worthy topic for a general audience.
+        You are a 'Tech News Editor'.
+        Select the ONE most interesting/impactful news item for a general audience.
         
-        **Search Results (Context):**
-        {search_context}
+        **Candidates:**
+        {candidates_text}
         
-        **Constraints:**
-        1. **Broad Appeal:** Must be interesting to ANYONE (not just experts).
-        2. **Format:** Question ("~까?") or Statement ("~다").
-        3. **Trigger:** Curiosity, Shock, Fun, or Awe.
-        4. **Length:** Under 25 chars (Korean).
-        5. **No Repeats:** Avoid: {', '.join(recent_history)}.
-        
-        Output ONLY the topic sentence.
+        Output ONLY the index number (e.g., '1').
         """
         
         try:
             response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=50
+                max_tokens=10
             )
-            topic = response.choices[0].message.content.strip().replace('"', '')
-            return topic, search_context
-        except Exception as e:
-            print(f"Topic generation failed: {e}")
-            return "오늘 인터넷에서 가장 핫한 이야기", ""
+            import re
+            match = re.search(r'\d+', response.choices[0].message.content)
+            idx = int(match.group()) - 1 if match else 0
+            return candidates[idx] if 0 <= idx < len(candidates) else candidates[0]
+        except:
+            return random.choice(candidates)
 
-    async def _write_script(self, topic: str, context: str) -> ShortsScript:
-        selected_style = random.choice(self.story_styles)
-        print(f"Writing script for: {topic} (Style: {selected_style})")
+    async def _write_script(self, item: Dict) -> ShortsScript:
+        print(f"Writing script for: {item['title']}")
         
         mood_list_str = ', '.join(self.allowed_moods)
+        style = "The Tech Reporter"
         
         prompt = f"""
-        Act as a professional YouTube Shorts scriptwriter.
-        Create a 40-50 second viral script based on the topic: "{topic}".
+        Act as a professional **Tech News Anchor**.
+        Create a 45-second YouTube Shorts script summarizing this news.
         
-        **CORE MATERIAL (SEARCH DATA):**
-        {context}
+        **NEWS SOURCE:**
+        Title: {item['title']}
+        Summary: {item['content']}
         
-        **INSTRUCTION:** 
-        - Use the CORE MATERIAL to ensure the script is based on real, recent info.
-        - **Identify the specific Source URL** from the context.
-        - **ALL OUTPUT (Title, Script, Description) MUST BE IN KOREAN.**
-        
-        **STORYTELLING STYLE: {selected_style}**
+        **INSTRUCTION:**
+        - **Language:** Korean (Natural, Professional yet Engaging).
+        - **Structure:**
+          1. **Hook:** "Did you hear about [Title]?"
+          2. **Body:** Summarize key points clearly.
+          3. **Takeaway:** Why is this important?
+        - **Visuals:** Describe relevant Tech/Abstract imagery in **ENGLISH** (Cyberpunk, Futuristic, Clean Minimalist).
+        - **Mood:** Choose best from [{mood_list_str}].
         
         Output JSON:
         {{
-            "title": "{topic}",
-            "description": "Short description",
-            "tags": ["tag1", "tag2"],
-            "mood": "mysterious",
-            "style": "{selected_style}",
-            "source_url": "The specific URL from CORE MATERIAL",
+            "title": "{item['title']}",
+            "description": "Tech news summary",
+            "tags": ["tech", "news", "geeknews"],
+            "mood": "upbeat",
+            "style": "{style}",
+            "source_url": "{item['url']}",
             "scenes": [
                 {{
                     "scene_number": 1,
-                    "visual_description": "Cinematic shot description in ENGLISH",
+                    "visual_description": "Futuristic AI dashboard in 8k...",
                     "script_text": "Korean narration",
                     "duration_seconds": 3.0
                 }}
@@ -184,15 +177,7 @@ class ScriptPlanner:
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"}
             )
-            
-            content = response.choices[0].message.content
-            data = json.loads(content)
-            
-            if data.get('mood') not in self.allowed_moods:
-                data['mood'] = 'cinematic'
-                
+            data = json.loads(response.choices[0].message.content)
+            if data.get('mood') not in self.allowed_moods: data['mood'] = 'upbeat'
             return ShortsScript(**data)
-            
-        except Exception as e:
-            print(f"Script writing failed: {e}")
-            raise e
+        except Exception as e: raise e
