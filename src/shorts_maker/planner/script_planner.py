@@ -2,7 +2,8 @@ import os
 import json
 import random
 import feedparser
-from datetime import datetime
+from datetime import datetime, timedelta
+import time
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from typing import List, Dict
@@ -29,9 +30,38 @@ class ScriptPlanner:
         self.url_history_file = "url_history.json"
         self.script_output_dir = "outputs/scripts"
         
-        # Tech/News focused moods
-        self.allowed_moods = ['upbeat', 'inspiring', 'cinematic', 'energetic', 'calm']
-        self.story_styles = ["The Tech Reporter", "The Insight Curator"]
+        self.allowed_moods = [
+            'upbeat', 'inspiring', 'cinematic', 'energetic', 'calm', 
+            'mysterious', 'playful', 'dramatic'
+        ]
+        self.story_styles = ["The Insight Curator", "The Trend Reporter", "The Deep Dive"]
+
+        # 🚀 Mega Expansion of RSS Sources
+        self.rss_sources = {
+            "Tech_IT": [
+                "https://news.hada.io/rss/news", # GeekNews
+                "http://www.theverge.com/rss/full.xml",
+                "https://techcrunch.com/feed/"
+            ],
+            "Finance_Economy": [
+                "https://www.investing.com/rss/news.rss",
+                "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+                "https://rss.hankyung.com/feed/market.xml"
+            ],
+            "Gaming_Esports": [
+                "http://feeds.ign.com/ign/games-all",
+                "https://www.polygon.com/rss/index.xml",
+                "https://kotaku.com/rss/index.xml"
+            ],
+            "Life_Tips": [
+                "https://lifehacker.com/rss", # Life hacks
+                "https://www.psychologytoday.com/us/feed/index.rss" # Mental Health
+            ],
+            "Design_Culture": [
+                "https://www.designboom.com/feed/",
+                "https://hypebeast.kr/feed"
+            ]
+        }
 
     def _load_url_history(self) -> List[str]:
         if os.path.exists(self.url_history_file):
@@ -42,54 +72,80 @@ class ScriptPlanner:
         return []
 
     def _save_history(self, title: str, url: str):
-        # Save URL history
         url_history = self._load_url_history()
         url_history.append(url)
         with open(self.url_history_file, 'w') as f:
             json.dump(url_history[-100:], f, indent=2)
 
-    def _fetch_geeknews_rss(self, limit=10) -> List[Dict]:
-        """Fetches latest news from GeekNews RSS."""
-        print("Fetching trends from GeekNews (news.hada.io)...")
-        url = "https://news.hada.io/rss/news"
+    def _is_recent(self, entry) -> bool:
         try:
-            feed = feedparser.parse(url)
-            posts = []
-            url_history = self._load_url_history()
+            if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                published_dt = datetime.fromtimestamp(time.mktime(entry.published_parsed))
+                if (datetime.now() - published_dt).days <= 7:
+                    return True
+                else:
+                    return False
+            return True 
+        except:
+            return True
+
+    def _fetch_rss_feeds(self) -> List[Dict]:
+        posts = []
+        url_history = self._load_url_history()
+        
+        # Pick 1 source from EACH category for maximum variety
+        selected_sources = []
+        for category, urls in self.rss_sources.items():
+            source_url = random.choice(urls)
+            selected_sources.append((category, source_url))
             
-            for entry in feed.entries:
-                if entry.link in url_history: continue
+        print(f"📡 Fetching feeds from: {[s[1] for s in selected_sources]}")
+
+        for category, url in selected_sources:
+            try:
+                feed = feedparser.parse(url)
+                for entry in feed.entries:
+                    if entry.link in url_history: continue
+                    if not self._is_recent(entry): continue
+
+                    content = ""
+                    if hasattr(entry, 'summary'): content = entry.summary
+                    elif hasattr(entry, 'description'): content = entry.description
+                    else: content = entry.title
+                    
+                    if len(content) < 50: continue
+
+                    posts.append({
+                        'category': category,
+                        'source': feed.feed.get('title', 'Unknown Source'),
+                        'title': entry.title,
+                        'content': content[:1500],
+                        'url': entry.link
+                    })
+                    
+                    if len([p for p in posts if p['category'] == category]) >= 2:
+                        break
+            except Exception as e:
+                print(f"Failed to fetch {url}: {e}")
+                continue
                 
-                # GeekNews often puts summary in description
-                content = entry.description if hasattr(entry, 'description') else entry.title
-                
-                posts.append({
-                    'source': 'GeekNews',
-                    'title': entry.title,
-                    'content': content,
-                    'url': entry.link
-                })
-                if len(posts) >= limit: break
-            return posts
-        except Exception as e:
-            print(f"RSS fetch failed: {e}")
-            return []
+        print(f"✅ Found {len(posts)} recent candidates.")
+        return posts
 
     async def plan_content(self, topic: str = None) -> ShortsScript:
-        candidates = self._fetch_geeknews_rss()
+        candidates = self._fetch_rss_feeds()
         
         if not candidates:
-            print("⚠️ No new GeekNews items found. Using fallback.")
-            candidates = [{'source': 'Fallback', 'title': 'AI is changing the world', 'content': 'AI impact.', 'url': 'google.com'}]
+            print("⚠️ No recent items found. Using fallback.")
+            candidates = [{'category': 'General', 'source': 'Fallback', 'title': 'AI Future', 'content': 'AI impact.', 'url': 'google.com'}]
 
         selection = await self._select_best_topic(candidates)
         
-        print(f"🔥 Selected Topic: {selection['title']}")
+        print(f"🔥 Selected Topic: {selection['title']} ({selection['category']})")
         self._save_history(selection['title'], selection['url'])
 
         script = await self._write_script(selection)
         
-        # Save script file
         try:
             import re
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -104,11 +160,12 @@ class ScriptPlanner:
     async def _select_best_topic(self, candidates: List[Dict]) -> Dict:
         candidates_text = ""
         for i, item in enumerate(candidates):
-            candidates_text += f"{i+1}. {item['title']}\n"
+            candidates_text += f"{i+1}. [{item['category']}] {item['title']}\n"
 
         prompt = f"""
-        You are a 'Tech News Editor'.
-        Select the ONE most interesting/impactful news item for a general audience.
+        You are an **Editor-in-Chief** for a viral YouTube Shorts channel covering Tech, Finance, Gaming, and Life Hacks.
+        
+        Select the ONE article from the list that is most **Viral, Useful, or Entertaining**.
         
         **Candidates:**
         {candidates_text}
@@ -133,37 +190,41 @@ class ScriptPlanner:
         print(f"Writing script for: {item['title']}")
         
         mood_list_str = ', '.join(self.allowed_moods)
-        style = "The Tech Reporter"
+        style = "The Info Curator"
         
         prompt = f"""
-        Act as a professional **Tech News Anchor**.
-        Create a 45-second YouTube Shorts script summarizing this news.
+        Act as a professional **Content Creator**.
+        Create a YouTube Shorts script (50-60s) summarizing this news.
         
-        **NEWS SOURCE:**
+        **SOURCE MATERIAL:**
+        Category: {item['category']}
         Title: {item['title']}
-        Summary: {item['content']}
+        Content: {item['content']}
         
         **INSTRUCTION:**
-        - **Language:** Korean (Natural, Professional yet Engaging).
-        - **Structure:**
-          1. **Hook:** "Did you hear about [Title]?"
-          2. **Body:** Summarize key points clearly.
-          3. **Takeaway:** Why is this important?
-        - **Visuals:** Describe relevant Tech/Abstract imagery in **ENGLISH** (Cyberpunk, Futuristic, Clean Minimalist).
-        - **Mood:** Choose best from [{mood_list_str}].
+        - **Language:** Korean (Natural, Engaging).
+        - **Tone:** Match the category (e.g., Gaming -> Energetic, Finance -> Professional, Life -> Friendly).
+        - **Structure:** Hook -> Main Info -> Takeaway.
+        
+        **Visuals (CRITICAL):** 
+        - Write **High-Quality Image Prompts** for Imagen 3 in **ENGLISH**.
+        - [Subject] + [Environment] + [Lighting] + [Style].
+        - Match visual style to category (e.g., Gaming -> 3D Render/Character, Finance -> Wall Street/Chart).
+        
+        **Mood:** Choose best from [{mood_list_str}].
         
         Output JSON:
         {{
             "title": "{item['title']}",
-            "description": "Tech news summary",
-            "tags": ["tech", "news", "geeknews"],
+            "description": "Summary",
+            "tags": ["{item['category']}", "shorts"],
             "mood": "upbeat",
             "style": "{style}",
             "source_url": "{item['url']}",
             "scenes": [
                 {{
                     "scene_number": 1,
-                    "visual_description": "Futuristic AI dashboard in 8k...",
+                    "visual_description": "Detailed English prompt...",
                     "script_text": "Korean narration",
                     "duration_seconds": 3.0
                 }}
