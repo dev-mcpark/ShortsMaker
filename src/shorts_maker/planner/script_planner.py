@@ -7,12 +7,13 @@ import time
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from typing import List, Dict
+import trafilatura
 
 class VideoScene(BaseModel):
     scene_number: int
     visual_description: str
     script_text: str
-    duration_seconds: float
+    duration_seconds: float = 5.0
 
 class ShortsScript(BaseModel):
     title: str
@@ -39,10 +40,35 @@ class ScriptPlanner:
             "Tech_IT": [
                 "https://news.hada.io/rss/news",
                 "http://www.theverge.com/rss/full.xml",
-                "https://techcrunch.com/feed/"
+                "https://techcrunch.com/feed/",
+                "https://feeds.feedburner.com/TechCrunch/"
+            ],
+            "Science": [
+                "https://www.sciencedaily.com/rss/top/science.xml",
+                "https://www.scientificamerican.com/feed/home",
+                "https://www.newscientist.com/feed/home/",
+                "https://phys.org/rss-feed/",
+                "https://www.livescience.com/feeds/all"
+            ],
+            "Health": [
+                "https://www.medicalnewstoday.com/feed",
+                "https://rss.medicalxpress.com/medicalxpress.xml",
+                "https://www.sciencedaily.com/rss/top/health.xml",
+                "https://www.healthline.com/feed"
+            ],
+            "Business": [
+                "https://www.cnbc.com/id/10001147/device/rss/rss.html", # CNBC Business
+                "https://feeds.contenthub.gerben.nl/economist/business", # The Economist
+                "http://feeds.marketwatch.com/marketwatch/topstories/",
+                "https://www.investing.com/rss/news.rss"
+            ],
+            "Entertainment": [
+                "https://variety.com/feed/",
+                "https://deadline.com/feed/",
+                "https://www.hollywoodreporter.com/feed/",
+                "https://www.cinema-life.net/feed/"
             ],
             "Finance_Economy": [
-                "https://www.investing.com/rss/news.rss",
                 "https://www.cnbc.com/id/10000664/device/rss/rss.html",
                 "https://rss.hankyung.com/feed/market.xml"
             ],
@@ -70,15 +96,29 @@ class ScriptPlanner:
         return []
 
     def _save_history(self, title: str, url: str):
+        # Save URL history (simple list for dedup)
         url_history = self._load_url_history()
         url_history.append(url)
         with open(self.url_history_file, 'w') as f: json.dump(url_history[-100:], f, indent=2)
+        
+        # Save Topic history (detailed for variety check)
+        topic_history = []
+        if os.path.exists(self.history_file):
+            try: topic_history = json.load(open(self.history_file, 'r'))
+            except: pass
+        
+        topic_history.append({
+            "title": title,
+            "url": url,
+            "date": datetime.now().isoformat()
+        })
+        with open(self.history_file, 'w') as f: json.dump(topic_history[-20:], f, indent=2)
 
     def _is_recent(self, entry) -> bool:
         try:
             if hasattr(entry, 'published_parsed') and entry.published_parsed:
                 published_dt = datetime.fromtimestamp(time.mktime(entry.published_parsed))
-                if (datetime.now() - published_dt).days <= 7: return True
+                if (datetime.now() - published_dt).days <= 14: return True
                 else: return False
             return True 
         except: return True
@@ -86,30 +126,44 @@ class ScriptPlanner:
     def _fetch_rss_feeds(self) -> List[Dict]:
         posts = []
         url_history = self._load_url_history()
+        # Use ALL available sources to maximize candidate pool
         selected_sources = []
         for category, urls in self.rss_sources.items():
-            selected_sources.append((category, random.choice(urls)))
+            for url in urls:
+                selected_sources.append((category, url))
         
-        print(f"📡 Fetching feeds from: {[s[1] for s in selected_sources]}")
+        # Shuffle to mix categories during fetch
+        random.shuffle(selected_sources)
+        
+        print(f"📡 Fetching feeds from {len(selected_sources)} sources...")
         for category, url in selected_sources:
             try:
                 feed = feedparser.parse(url)
-                for entry in feed.entries:
+                
+                # Shuffle entries to avoid only picking the latest "Breaking News"
+                entries = list(feed.entries)
+                random.shuffle(entries)
+                
+                for entry in entries:
                     if entry.link in url_history: continue
                     if not self._is_recent(entry): continue
                     content = ""
                     if hasattr(entry, 'summary'): content = entry.summary
                     elif hasattr(entry, 'description'): content = entry.description
                     else: content = entry.title
-                    if len(content) < 50: continue
+                    
+                    # Filter out short/empty content to ensure quality
+                    if len(content) < 200: continue
+
                     posts.append({
                         'category': category,
                         'source': feed.feed.get('title', 'Unknown Source'),
                         'title': entry.title,
-                        'content': content[:1500],
+                        'content': content[:3000], 
                         'url': entry.link
                     })
-                    if len([p for p in posts if p['category'] == category]) >= 2: break
+                    # Increased limit: Collect up to 5 items per category
+                    if len([p for p in posts if p['category'] == category]) >= 5: break
             except Exception as e:
                 print(f"Failed to fetch {url}: {e}")
                 continue
@@ -120,10 +174,38 @@ class ScriptPlanner:
         candidates_text = ""
         for i, item in enumerate(candidates):
             candidates_text += f"{i+1}. [{item['category']}] {item['title']}\n"
+            
+        # Load recent history to avoid repetition
+        recent_topics = []
+        try:
+            if os.path.exists(self.history_file):
+                with open(self.history_file, 'r') as f:
+                    history = json.load(f)
+                    # Assuming history is list of dicts, take last 5 titles
+                    recent_topics = [h.get('title', '') for h in history[-5:]]
+        except: pass
+        
+        recent_context = ""
+        if recent_topics:
+            recent_context = "**AVOID these recently covered topics (Find something different):**\n" + "\n".join([f"- {t}" for t in recent_topics])
+
         prompt = f"""
-        You are an **Editor-in-Chief**. Select the ONE article that is most **Viral, Useful, or Entertaining**.
+        You are a **Trend Hunter** looking for **'Blue Ocean' content** across various fields.
+        
+        **Selection Criteria (Balance is Key):**
+        1. **Unexpected Insight:** Something counter-intuitive or surprising. ("Did you know?" factor)
+        2. **Specific Value:**
+           - **Tech/Science:** New mechanism, hidden discovery.
+           - **Biz/Finance:** Money-making opportunity, market shift.
+           - **Culture/Life:** Psychological hack, hidden trend, emotional resonance.
+        3. **Niche over Generic:** Avoid broad headlines like "Market is up" or "New Movie Released". Look for the *specific reason* or *untold story*.
+        
+        {recent_context}
+        
         **Candidates:**
         {candidates_text}
+        
+        Select the ONE article that is most interesting, regardless of category.
         Output ONLY the index number (e.g., '1').
         """
         try:
@@ -145,6 +227,16 @@ class ScriptPlanner:
 
         selection = await self._select_best_topic(candidates)
         print(f"🔥 Selected Topic: {selection['title']} ({selection['category']})")
+        
+        # 🚀 Fetch Full Content from URL
+        print(f"🕵️ Fetching full article from: {selection['url']}")
+        full_content = self._fetch_full_article(selection['url'])
+        if full_content:
+            print(f"✅ Successfully extracted {len(full_content)} chars.")
+            selection['content'] = full_content[:8000] # Limit to avoid context overflow
+        else:
+            print("⚠️ Failed to extract content. Using summary.")
+
         self._save_history(selection['title'], selection['url'])
 
         script = await self._write_script(selection)
@@ -159,6 +251,17 @@ class ScriptPlanner:
         
         return script
 
+    def _fetch_full_article(self, url: str) -> str:
+        try:
+            downloaded = trafilatura.fetch_url(url)
+            if downloaded:
+                text = trafilatura.extract(downloaded)
+                return text
+            return None
+        except Exception as e:
+            print(f"Error fetching article: {e}")
+            return None
+
     async def _write_script(self, item: Dict) -> ShortsScript:
         print(f"Writing script for: {item['title']} (Mode: {self.generation_mode})")
         
@@ -169,23 +272,22 @@ class ScriptPlanner:
         if self.generation_mode == "video":
             visual_instruction = """
             **Visuals (VIDEO MODE - HIGH QUALITY VEO 3.1):**
-            - You MUST STRICTLY follow the **'5-Step Formula'** to maximize Veo 3.1's physics and cinematic capabilities.
+            - **GOLDEN RULE:** The video MUST strictly match the `script_text`. If the script says "robotaxi", show a robotaxi. If it says "stock crash", show falling red graphs.
+            - Follow the **'5-Step Formula'** while ensuring **Contextual Relevance**:
             
             **Structure:**
-            `[Camera Angle/Movement] + [Main Subject] + [Action/Physics] + [Environment/Texture] + [Lighting/Cinematic Style]`
+            `[Camera Angle/Movement] + [Script-Matching Subject] + [Relevant Action] + [Contextual Background] + [Atmosphere]`
 
             **Detailed Guidelines:**
-            1. **Camera:** Use dynamic terms (e.g., "FPV drone dive", "Fast dolly zoom", "Low-angle tracking").
-            2. **Subject:** Define materials (e.g., "Golden metallic robot", "Fur-covered creature").
-            3. **Action (CRITICAL):** NO STATIC verbs (like "floating", "standing"). Use **high-energy physics** verbs (e.g., "shattering into glass shards", "sprinting with dust trails", "liquid morphing", "exploding in slow motion").
-            4. **Environment:** Describe textures (e.g., "Wet rainy asphalt", "Crumbling stone ruins").
-            5. **Style:** Lighting & Mood (e.g., "Volumetric god rays", "Cyberpunk neon reflection", "Film grain", "4k realistic").
+            1. **Script Match (CRITICAL):** Extract the KEY NOUNS/VERBS from the `script_text` and make them the [Subject] and [Action].
+            2. **Camera:** Dynamic but focused on the subject (e.g., "Tracking shot", "Close-up zoom").
+            3. **Action:** Use physics-based verbs (e.g., "colliding", "flowing", "burning", "morphing").
+            4. **Environment:** Must match the news context (e.g., Tech news -> Server room/Lab; Finance -> Wall Street).
+            5. **Style:** High-end cinematic look.
 
-            **Good Example:**
-            "Fast tracking shot of a futuristic sports car drifting around a sharp corner, tires smoking and kicking up debris, on a wet neon-lit Tokyo highway, cinematic lens flare, hyper-realistic 8k."
-
-            **Bad Example:**
-            "Medium shot of a car driving on a road." (Too static, no texture, no lighting detail)
+            **Example:**
+            - Script: "Tesla's new robot is walking naturally."
+            - Visual: "Low-angle tracking shot of a sleek metallic Tesla humanoid robot walking smoothly, gears moving intricately, inside a high-tech white laboratory, cinematic lighting, 4k."
             """
         else: # image mode
             visual_instruction = """
@@ -197,7 +299,7 @@ class ScriptPlanner:
 
         prompt = f"""
         Act as a professional **Content Creator**.
-        Create a YouTube Shorts script (50-60s) summarizing this news.
+        Create a **comprehensive and engaging** YouTube Shorts script (approx. 55-60s) based on this news.
         
         **SOURCE MATERIAL:**
         Category: {item['category']}
@@ -205,9 +307,18 @@ class ScriptPlanner:
         Content: {item['content']}
         
         **INSTRUCTION:**
-        - **Language:** Korean (Natural, Engaging).
-        - **Tone:** Match the category.
-        - **Structure:** Hook -> Main Info -> Takeaway.
+        - **Language:** **KOREAN ONLY** (For Script, Title, and Description).
+        - **Title:** Create a **Viral/Clickbait Korean Title** (Max 40 chars). Do NOT use the English source title directly.
+        - **Anti-Cliché Rule:** Do NOT start with "Did you know?" or generic intros. Dive straight into the specific fact or problem.
+        - **Depth:** Explain the **Specific Mechanism** or **Hidden Logic** behind the news. Avoid vague statements like "It is good." -> Say "It improves efficiency by 15% using X technology."
+        - **Length:** Target roughly **180-220 Korean characters** (approx. 150 spoken words) to fully utilize 60 seconds.
+        - **Structure:**
+          1. **Hook (0-5s):** A surprising fact or counter-intuitive statement.
+          2. **The 'Secret' (5-20s):** What is the specific hidden detail/tech?
+          3. **Deep Analysis (20-45s):** How does it work? Why is it different?
+          4. **Impact (45-60s):** A sharp, non-obvious conclusion.
+        - **Scenes:** Generate **8 to 12 scenes** to ensure fast pacing and retention.
+        - **Duration:** Each scene should be **4 to 7 seconds**.
         
         {visual_instruction}
         
@@ -215,9 +326,9 @@ class ScriptPlanner:
         
         Output JSON:
         {{
-            "title": "{item['title']}",
-            "description": "Summary",
-            "tags": ["{item['category']}", "shorts"],
+            "title": "호기심을 자극하는 한글 제목 (이모지 포함 가능)",
+            "description": "영상 내용에 대한 자세한 한글 설명...",
+            "tags": ["{item['category']}", "shorts", "trend"],
             "mood": "upbeat",
             "style": "{style}",
             "source_url": "{item['url']}",
@@ -225,9 +336,9 @@ class ScriptPlanner:
             "scenes": [
                 {{
                     "scene_number": 1,
-                    "visual_description": "Detailed English prompt...",
-                    "script_text": "Korean narration",
-                    "duration_seconds": 3.0
+                    "visual_description": "...",
+                    "script_text": "...",
+                    "duration_seconds": 5.0
                 }}
             ]
         }}
