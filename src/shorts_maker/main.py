@@ -15,35 +15,37 @@ load_dotenv()
 
 async def main():
     try:
+        # Get generation mode from env (default to 'image')
+        mode = os.getenv("GENERATION_MODE", "image").lower()
+        logger.info(f"🚀 Starting ShortsMaker in [{mode.upper()}] mode")
+
         # 1. 주제 선정 및 스크립트 작성
-        planner = ScriptPlanner()
+        planner = ScriptPlanner(generation_mode=mode)
         logger.info("Step 1: Planning content...")
-        # plan_content() call updated to match new signature if needed, but defaults are fine
         script = await planner.plan_content()
         logger.info(f"Planned script: {script.title}")
         
-        # 2. Veo3 (Imagen 3) 기반 영상 생성
-        generator = VideoGenerator()
-        logger.info("Step 2: Generating video clips using Veo3...")
+        # 2. 영상 생성 (Veo or Imagen)
+        generator = VideoGenerator(mode=mode)
+        logger.info(f"Step 2: Generating clips using {mode.title()} Generator...")
         video_paths = await generator.generate_clips(script)
-        
+
         # 3. 편집 및 자막 합성
         editor = VideoEditor()
         logger.info("Step 3: Editing and composing final video...")
         final_video_path = await editor.compose_video(video_paths, script)
-        
+
         if final_video_path:
             logger.info(f"Final video created at: {final_video_path}")
-            
+
             # 4. 유튜브 업로드
             uploader = YouTubeUploader()
             logger.info("Step 4: Uploading to YouTube...")
-            
-            # Append source to description if available
+
             description = script.description
             if hasattr(script, 'source_url') and script.source_url:
                 description += f"\n\n출처: {script.source_url}"
-                
+
             await uploader.upload(final_video_path, {
                 "title": script.title,
                 "description": description,
