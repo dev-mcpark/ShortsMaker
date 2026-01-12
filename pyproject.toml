@@ -16,6 +16,12 @@ dependencies = [
     "tqdm",
     "openai",
     "trafilatura",
+    "prefect",
+    "feedparser",
+    "gtts",
+    "google-genai",
+    "beautifulsoup4",
+    "googlesearch-python",
 ]
 
 [build-system]
