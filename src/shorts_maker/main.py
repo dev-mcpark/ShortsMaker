@@ -64,6 +64,26 @@ async def task_upload_youtube(final_video_path, script):
     })
     logger.info("Upload completed successfully.")
 
+@task(name="5. 임시 파일 정리")
+def task_cleanup_temp():
+    logger = get_run_logger()
+    temp_dir = "temp"
+    if not os.path.exists(temp_dir):
+        return
+
+    files = os.listdir(temp_dir)
+    count = 0
+    for f in files:
+        file_path = os.path.join(temp_dir, f)
+        try:
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+                count += 1
+        except Exception as e:
+            logger.warning(f"Failed to delete {file_path}: {e}")
+    
+    logger.info(f"Cleaned up {count} temporary files from '{temp_dir}'.")
+
 @flow(name="Shorts Maker Pipeline", log_prints=True)
 async def shorts_maker_flow():
     logger = get_run_logger()
@@ -85,29 +105,40 @@ async def shorts_maker_flow():
         # 4. Upload
         await task_upload_youtube(final_video_path, script)
         
+        # 5. Cleanup
+        task_cleanup_temp()
+        
         logger.info("✅ All steps completed successfully!")
         
     except Exception as e:
         logger.error(f"❌ Pipeline failed: {e}")
+        # 실패하더라도 임시 파일은 정리하도록 시도 (선택 사항)
+        task_cleanup_temp()
         raise
 
 if __name__ == "__main__":
-    # Work Pool 기반의 배포(Deployment) 정의
-    # 이 스크립트를 한 번 실행하면, Prefect 서버에 "이런 작업이 있다"고 등록만 하고 종료됩니다.
-    # 실제 실행은 'prefect worker start --pool local-process-pool' 명령어로 켜둔 워커가 담당합니다.
+    # [중요] 소스 코드의 위치를 '현재 프로젝트 폴더'로 명시합니다.
+    # 이렇게 하면 Prefect가 임시 폴더로 복사하지 않고, 이 경로를 그대로 참조합니다.
+    project_path = os.getcwd()
     
-    deployment = shorts_maker_flow.to_deployment(
+    deployment = shorts_maker_flow.from_source(
+        source=project_path,
+        entrypoint="src/shorts_maker/main.py:shorts_maker_flow"
+    ).to_deployment(
         name="daily-shorts-maker",
         version="1.0",
         tags=["production"],
-        # 'local-process-pool'이라는 이름의 Work Pool에 작업을 던집니다.
-        work_pool_name="local-process-pool", 
+        work_pool_name="local-process-pool",
+        job_variables={
+            "cwd": project_path,
+            "env": {
+                "PYTHONPATH": project_path
+            }
+        },
         parameters={}
     )
     
-    # 서버에 배포 적용
     deployment.apply()
     
-    print("✅ Deployment 'daily-shorts-maker' has been applied to work pool 'local-process-pool'.")
-    print("👉 Now run this command in a terminal to start the worker:")
-    print("   prefect worker start --pool local-process-pool")
+    print(f"✅ Deployment applied with source: {project_path}")
+    print("👉 Restart your worker if needed, then trigger a run from UI.")

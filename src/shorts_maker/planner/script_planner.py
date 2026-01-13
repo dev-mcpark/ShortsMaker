@@ -33,7 +33,16 @@ class ScriptPlanner:
         self.script_output_dir = "outputs/scripts"
         self.generation_mode = generation_mode # 'image' or 'video'
         
-        self.allowed_moods = ['upbeat', 'inspiring', 'cinematic', 'energetic', 'calm', 'mysterious']
+        # Expanded Moods for diverse storytelling
+        self.allowed_moods = [
+            'suspense',   # For shocking news, warnings, mysteries
+            'sci-fi',     # For AI, space, future tech
+            'corporate',  # For business, money, success stories
+            'emotional',  # For human stories, healing, sadness
+            'energetic',  # For sports, gaming, excitement
+            'calm',       # For nature, tips, meditation
+            'luxury'      # For fashion, expensive cars, design
+        ]
         self.story_styles = ["The Insight Curator", "The Trend Reporter"]
 
         self.rss_sources = {
@@ -271,23 +280,23 @@ class ScriptPlanner:
         # Dynamic Prompt based on Generation Mode
         if self.generation_mode == "video":
             visual_instruction = """
-            **Visuals (VIDEO MODE - HIGH QUALITY VEO 3.1):**
-            - **GOLDEN RULE:** The video MUST strictly match the `script_text`. If the script says "robotaxi", show a robotaxi. If it says "stock crash", show falling red graphs.
-            - Follow the **'5-Step Formula'** while ensuring **Contextual Relevance**:
+            **Visuals (VIDEO MODE - HIGH QUALITY VEO 3.0 OPTIMIZED):**
+            - **OBJECTIVE:** Write a "Text-to-Video Prompt" for Google Veo. It must be descriptive, visual, and full of motion.
+            - **STRUCTURE:** `[Medium/Shot Type] + [Subject & Action] + [Environment/Background] + [Lighting & Atmosphere] + [Technical Keywords]`
             
-            **Structure:**
-            `[Camera Angle/Movement] + [Script-Matching Subject] + [Relevant Action] + [Contextual Background] + [Atmosphere]`
-
-            **Detailed Guidelines:**
-            1. **Script Match (CRITICAL):** Extract the KEY NOUNS/VERBS from the `script_text` and make them the [Subject] and [Action].
-            2. **Camera:** Dynamic but focused on the subject (e.g., "Tracking shot", "Close-up zoom").
-            3. **Action:** Use physics-based verbs (e.g., "colliding", "flowing", "burning", "morphing").
-            4. **Environment:** Must match the news context (e.g., Tech news -> Server room/Lab; Finance -> Wall Street).
-            5. **Style:** High-end cinematic look.
-
-            **Example:**
-            - Script: "Tesla's new robot is walking naturally."
-            - Visual: "Low-angle tracking shot of a sleek metallic Tesla humanoid robot walking smoothly, gears moving intricately, inside a high-tech white laboratory, cinematic lighting, 4k."
+            **MANDATORY RULES:**
+            1.  **Camera Movement (MUST include one):** 
+                - Use: "Slow pan right", "Drone establishing shot", "Tracking shot following the subject", "Close-up zoom in", "Handheld camera movement".
+            2.  **Lighting (MUST include one):**
+                - Use: "Cinematic lighting", "Natural sunlight", "Soft studio lighting", "Neon cyberpunk lights", "Golden hour", "Volumetric fog".
+            3.  **Motion:** The prompt MUST describe movement. Avoid static scenes. 
+                - Good: "The robot *walks fluidly* through the door." / "Money *raining down* in slow motion."
+                - Bad: "A robot standing there."
+            4.  **Technical Specs (Append these to EVERY scene):**
+                - "4k resolution, photorealistic, highly detailed, sharp focus, cinematic look, high fidelity."
+            
+            **Example Output:**
+            "Cinematic tracking shot of a futuristic Tesla robot running fast on a highway. The robot has shiny metallic textures reflecting the sun. Background is a blurred city skyline. Golden hour lighting, lens flare. 4k resolution, photorealistic, highly detailed."
             """
         else: # image mode
             visual_instruction = """

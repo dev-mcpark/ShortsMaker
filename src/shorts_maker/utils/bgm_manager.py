@@ -10,25 +10,40 @@ class BGMManager:
     def get_bgm_path(self, mood: str) -> str:
         """
         Finds a local BGM file that matches the mood.
-        Example: if mood is 'happy', it looks for 'bgm/happy*.mp3'
+        Includes a mapping to group similar moods.
         """
         mood = mood.lower()
         
-        # Look for files starting with the mood name (e.g., happy_1.mp3, happy_song.mp3)
-        pattern = os.path.join(self.bgm_dir, f"{mood}*.mp3")
+        # Mood Groups: Map AI-generated moods to actual file categories
+        mood_map = {
+            'luxury': 'corporate',
+            'corporate': 'corporate',
+            'sci-fi': 'mysterious',
+            'suspense': 'mysterious',
+            'emotional': 'calm',
+            'energetic': 'upbeat',
+            'calm': 'calm'
+        }
+        
+        # Use mapped category if exists, otherwise use the mood name directly
+        category = mood_map.get(mood, mood)
+        
+        # 1. Try to find files for the specific category
+        pattern = os.path.join(self.bgm_dir, f"{category}*.mp3")
         files = glob.glob(pattern)
         
+        # 2. If not found, try the raw mood name
+        if not files and category != mood:
+            pattern = os.path.join(self.bgm_dir, f"{mood}*.mp3")
+            files = glob.glob(pattern)
+
         if not files:
-            # Fallback: Look for ANY mp3 file if specific mood not found
+            # Fallback: Look for ANY mp3 file
             all_files = glob.glob(os.path.join(self.bgm_dir, "*.mp3"))
             if all_files:
-                print(f"No BGM found for '{mood}', using random fallback.")
                 return random.choice(all_files)
-            else:
-                print(f"No BGM files found in '{self.bgm_dir}' folder.")
-                print(f"Please put MP3 files in '{self.bgm_dir}' named like 'happy_1.mp3', 'mysterious.mp3', etc.")
-                return None
+            return None
         
         selected_file = random.choice(files)
-        print(f"Selected BGM: {selected_file}")
+        print(f"Selected BGM Category: {category} ({selected_file})")
         return selected_file

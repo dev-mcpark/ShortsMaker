@@ -13,9 +13,16 @@ class VideoEditor:
         self.bgm_manager = BGMManager()
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.voice_map = {
-            'mysterious': 'onyx', 'dramatic': 'onyx', 'dark': 'onyx',
-            'happy': 'nova', 'playful': 'nova', 'upbeat': 'nova',
-            'cinematic': 'alloy'
+            'suspense': 'onyx',
+            'sci-fi': 'onyx',
+            'mysterious': 'onyx',
+            'corporate': 'alloy',
+            'luxury': 'alloy',
+            'cinematic': 'alloy',
+            'emotional': 'nova',
+            'calm': 'nova',
+            'energetic': 'shimmer',
+            'upbeat': 'shimmer'
         }
 
     def _get_voice_for_mood(self, mood: str) -> str:
