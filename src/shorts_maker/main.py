@@ -26,7 +26,28 @@ async def task_generate_video(script, mode: str):
     logger = get_run_logger()
     logger.info(f"Step 2: Generating clips using {mode.title()} Generator...")
     
-    generator = VideoGenerator(mode=mode)
+    # [DEBUG] Verify Code Version
+    import inspect
+    logger.info(f"🔍 VideoGenerator File Path: {inspect.getfile(VideoGenerator)}")
+    
+    # Check if method has new code
+    import shorts_maker.generator.video_generator as vg_module
+    logger.info(f"🔍 Module Path: {vg_module.__file__}")
+    
+    # Reload module to force update if persistent
+    import importlib
+    importlib.reload(vg_module)
+    from shorts_maker.generator.video_generator import VideoGenerator as VG_Reloaded
+    
+    generator = VG_Reloaded(mode=mode)
+    
+    # Print source excerpt to log
+    try:
+        source = inspect.getsource(generator._run_veo_generation)
+        logger.info(f"📜 _run_veo_generation Code Preview:\n{source[:200]}...")
+    except Exception as e:
+        logger.warning(f"Could not read source: {e}")
+
     video_paths = await generator.generate_clips(script)
     
     logger.info(f"Generated {len(video_paths)} clips.")

@@ -41,9 +41,10 @@ class VideoGenerator:
     async def _generate_video_veo(self, scene) -> str:
         output_path = f"temp/scene_{scene.scene_number}.mp4"
         
-        if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-            print(f"Video for scene {scene.scene_number} already exists.")
-            return output_path
+        # [DEBUG] Force regeneration even if file exists
+        # if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+        #     print(f"Video for scene {scene.scene_number} already exists.")
+        #     return output_path
 
         if not self.client:
             return self._create_mock_video(output_path, scene.duration_seconds)
@@ -65,47 +66,156 @@ class VideoGenerator:
             
         return self._create_mock_video(output_path, scene.duration_seconds)
 
-    def _run_veo_generation(self, model_id, scene, output_path):
-        try:
-            # CORRECTED METHOD: generate_videos (plural) with dictionary config
-            operation = self.client.models.generate_videos(
-                model=model_id,
-                prompt=scene.visual_description,
-                config={
-                    "aspect_ratio": "9:16"
-                }
-            )
+    def _get_or_upload_character_file(self, path: str) -> str:
+        # [FIX] Use Absolute Path for Cache
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.abspath(os.path.join(current_file_dir, "../../../"))
+        
+        cache_dir = os.path.join(project_root, ".cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_file = os.path.join(cache_dir, "character_file_id.txt")
+        
+        # 1. Try to load from cache
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, "r") as f:
+                    cached_id = f.read().strip()
+                
+                # Verify validity
+                print(f"🔍 Checking cached file ID: {cached_id}...")
+                file_obj = self.client.files.get(name=cached_id)
+                if file_obj.state.name == "ACTIVE":
+                    print("✅ Cached file is valid and ACTIVE.")
+                    return cached_id
+                else:
+                    print(f"⚠️ Cached file is not ACTIVE ({file_obj.state.name}). Re-uploading...")
+            except Exception as e:
+                print(f"⚠️ Cache check failed ({e}). Re-uploading...")
+
+        # 2. Upload new file
+        print(f"📤 Uploading reference image: {path}...")
+        uploaded_file = self.client.files.upload(path=path)
+        
+        print(f"⏳ Waiting for file {uploaded_file.name} to be processed...")
+        while uploaded_file.state.name == "PROCESSING":
+            time.sleep(2)
+            uploaded_file = self.client.files.get(name=uploaded_file.name)
             
-            # Polling Loop for LRO
-            print(f"⏳ Veo job started: {operation.name}. Waiting for completion...")
-            while not operation.done:
-                time.sleep(10) # Poll every 10 seconds
-                try:
-                    # Refresh operation status
-                    # Note: Using get_operation or similar based on SDK structure. 
-                    # Assuming client.operations.get works for google-genai and expects the object
+        if uploaded_file.state.name != "ACTIVE":
+             raise Exception(f"File upload failed with state: {uploaded_file.state.name}")
+        
+        # 3. Save to cache
+        with open(cache_file, "w") as f:
+            f.write(uploaded_file.name)
+            
+        print(f"✅ File uploaded and cached: {uploaded_file.name}")
+        return uploaded_file.name
+
+    def _run_veo_generation(self, model_id, scene, output_path):
+        print(f"--> Entered _run_veo_generation for Scene {scene.scene_number}", flush=True)
+        
+        # [FIX] Use Absolute Path derived from this file's location
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.abspath(os.path.join(current_file_dir, "../../../"))
+        
+        ref_path = os.path.join(project_root, "assets", "character_ref.png")
+        has_ref = os.path.exists(ref_path)
+        print(f"    Target Ref Path: {ref_path}", flush=True)
+        print(f"    Exists? {has_ref}", flush=True)
+
+        # Prepare Prompt & Image
+        current_prompt = scene.visual_description
+        image_input = None
+        
+        # [NEW] Simple Image-to-Video Logic using types.Image
+        if has_ref:
+            try:
+                from google.genai import types
+                print(f"    Loading reference image from: {ref_path}", flush=True)
+                
+                # [FIX] Manually read bytes to ensure data is loaded
+                with open(ref_path, "rb") as f:
+                    image_bytes = f.read()
+                
+                if image_bytes:
+                    print(f"    Read {len(image_bytes)} bytes from file.", flush=True)
+                    # Explicitly create Image object with bytes and mime_type
+                    image_input = types.Image(image_bytes=image_bytes, mime_type='image/png')
+                    
+                    # [FIX] Refined Prompt for Layout-based Generation
+                    # Since the user provides a pre-composed 9:16 image, we instruct Veo to animate it.
+                    current_prompt = (
+                        f"The provided image sets the scene layout. "
+                        f"Keep the character in the bottom right exactly as is, but make them move their mouth and head naturally to narrate. "
+                        f"Preserve the exact features of the character (antenna ears, spring tail, LED eyes). Zero tolerance for appearance changes during the motion. "
+                        f"CRITICAL: Replace the empty/black background with a dynamic cinematic video showing: '{current_prompt}' "
+                        f"The background video should be behind the character. "
+                        f"4k resolution, photorealistic, high quality composite."
+                    )
+                    print("    ✅ Image object created and prompt refined for layout.", flush=True)
+                else:
+                    print("    ⚠️ Image file is empty.", flush=True)
+                    
+            except Exception as e:
+                print(f"⚠️ Failed to load image: {e}", flush=True)
+
+        # Retry Logic for Safety Violations and Internal Errors
+        max_attempts = 4
+        for attempt in range(max_attempts):
+            try:
+                print(f"🎬 Generating scene {scene.scene_number} (Attempt {attempt+1}/{max_attempts})...", flush=True)
+                
+                kwargs = {
+                    "model": model_id,
+                    "prompt": current_prompt,
+                    "config": {"aspect_ratio": "9:16"}
+                }
+                
+                # Pass image object directly if available and it's the first attempt or if we haven't stripped it yet
+                if image_input:
+                    kwargs['image'] = image_input
+
+                operation = self.client.models.generate_videos(**kwargs)
+                
+                # Polling
+                while not operation.done:
+                    time.sleep(5)
                     operation = self.client.operations.get(operation)
                     print(".", end="", flush=True)
-                except Exception as poll_err:
-                    print(f"⚠️ Polling warning: {poll_err}")
-                    # If polling fails, maybe wait longer and try again, or break if critical
-                    # For now, continue waiting
-            
-            print(" Done!")
-            
-            # Access result property (not method)
-            response = operation.result
-            
-            if response and response.generated_videos:
-                video = response.generated_videos[0]
-                video.video.save(output_path)
-            else:
-                # Avoid accessing 'status' directly if it doesn't exist
-                raise Exception(f"No video returned. Operation details: {operation}")
+                print(" Done!", flush=True)
+
+                response = operation.result
+                if response and response.generated_videos:
+                    response.generated_videos[0].video.save(output_path)
+                    return # Success!
+                else:
+                    # Check for explicit error in operation result if not raised by SDK
+                    error_info = getattr(operation, 'error', 'Unknown Error')
+                    raise Exception(f"No video returned. Operation Error: {error_info}")
+
+            except Exception as e:
+                err_str = str(e).lower()
                 
-        except Exception as e:
-            print(f"SDK Error details: {e}")
-            raise e
+                # Case 1: Internal Error (Transient)
+                if "internal error" in err_str or "try again later" in err_str or "500" in err_str:
+                    print(f"⚠️ Internal Server Error detected. Waiting 30s before retry...", flush=True)
+                    time.sleep(30)
+                    continue # Retry with same settings
+                
+                # Case 2: Safety Violation (Prompt Issue)
+                if "violate" in err_str or "code': 3" in err_str:
+                    print(f"⚠️ Safety Violation detected!", flush=True)
+                    if attempt < max_attempts - 1:
+                        print("♻️ Retrying with SAFE PROMPT (No image)...", flush=True)
+                        current_prompt = "Cinematic slow motion background, atmospheric lighting, 4k resolution, photorealistic."
+                        image_input = None # Remove image input
+                        continue
+                
+                # Case 3: Other Errors
+                print(f"❌ Veo Error details: {e}", flush=True)
+                if attempt == max_attempts - 1:
+                    raise e
+                time.sleep(10) # Generic wait for other errors
 
     async def _generate_image_imagen(self, scene) -> str:
         output_path = f"temp/scene_{scene.scene_number}.png"

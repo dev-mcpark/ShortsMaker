@@ -45,25 +45,17 @@ class ScriptPlanner:
         ]
         self.story_styles = ["The Insight Curator", "The Trend Reporter"]
 
+        # [NEW] Character Persona for Consistency
+        # You can change this description to whatever character you want to appear IN the video.
+        self.character_profile = "A futuristic cute robot with glowing blue eyes and a white sleek body"
+
         self.rss_sources = {
             "Tech_IT": [
                 "https://news.hada.io/rss/news",
                 "http://www.theverge.com/rss/full.xml",
                 "https://techcrunch.com/feed/",
-                "https://feeds.feedburner.com/TechCrunch/"
-            ],
-            "Science": [
-                "https://www.sciencedaily.com/rss/top/science.xml",
-                "https://www.scientificamerican.com/feed/home",
-                "https://www.newscientist.com/feed/home/",
-                "https://phys.org/rss-feed/",
-                "https://www.livescience.com/feeds/all"
-            ],
-            "Health": [
-                "https://www.medicalnewstoday.com/feed",
-                "https://rss.medicalxpress.com/medicalxpress.xml",
-                "https://www.sciencedaily.com/rss/top/health.xml",
-                "https://www.healthline.com/feed"
+                "https://feeds.feedburner.com/TechCrunch/",
+                "http://news.mit.edu/rss/feed"
             ],
             "Business": [
                 "https://www.cnbc.com/id/10001147/device/rss/rss.html", # CNBC Business
@@ -279,24 +271,22 @@ class ScriptPlanner:
         
         # Dynamic Prompt based on Generation Mode
         if self.generation_mode == "video":
-            visual_instruction = """
+            visual_instruction = f"""
             **Visuals (VIDEO MODE - HIGH QUALITY VEO 3.0 OPTIMIZED):**
-            - **OBJECTIVE:** Write a "Text-to-Video Prompt" for Google Veo. It must be descriptive, visual, and full of motion.
-            - **STRUCTURE:** `[Medium/Shot Type] + [Subject & Action] + [Environment/Background] + [Lighting & Atmosphere] + [Technical Keywords]`
+            - **OBJECTIVE:** Create **Cinematic Background Visuals** that represent the news concept. 
+            - **ROLE:** These videos will be the background for a news report. They should be atmospheric, metaphorical, and visually stunning.
+            - **NO TEXT:** Do not generate any text inside the video.
+            
+            **STRUCTURE:** `[Camera Movement] + [Subject/Object] + [Environment] + [Lighting] + [4k, photorealistic]`
             
             **MANDATORY RULES:**
-            1.  **Camera Movement (MUST include one):** 
-                - Use: "Slow pan right", "Drone establishing shot", "Tracking shot following the subject", "Close-up zoom in", "Handheld camera movement".
-            2.  **Lighting (MUST include one):**
-                - Use: "Cinematic lighting", "Natural sunlight", "Soft studio lighting", "Neon cyberpunk lights", "Golden hour", "Volumetric fog".
-            3.  **Motion:** The prompt MUST describe movement. Avoid static scenes. 
-                - Good: "The robot *walks fluidly* through the door." / "Money *raining down* in slow motion."
-                - Bad: "A robot standing there."
-            4.  **Technical Specs (Append these to EVERY scene):**
-                - "4k resolution, photorealistic, highly detailed, sharp focus, cinematic look, high fidelity."
+            1.  **Subject:** Focus on the **Subject Matter** of the news (e.g., Robots, Money, Servers, Nature). Do NOT focus on a generic human presenter (we have an overlay for that).
+            2.  **Camera Movement (Use one):** "Slow pan right", "Drone establishing shot", "Tracking shot", "Macro close-up".
+            3.  **Lighting (Use one):** "Cinematic lighting", "Cyberpunk neon", "Golden hour", "Volumetric fog", "Studio lighting".
+            4.  **Motion:** The scene MUST have movement (e.g., "Clouds moving", "Gears turning", "Lights flashing").
             
             **Example Output:**
-            "Cinematic tracking shot of a futuristic Tesla robot running fast on a highway. The robot has shiny metallic textures reflecting the sun. Background is a blurred city skyline. Golden hour lighting, lens flare. 4k resolution, photorealistic, highly detailed."
+            "Drone shot of a futuristic city skyline at night with neon lights reflecting on wet pavement. Cyberpunk atmosphere. 4k resolution, photorealistic, high fidelity."
             """
         else: # image mode
             visual_instruction = """
@@ -320,14 +310,15 @@ class ScriptPlanner:
         - **Title:** Create a **Viral/Clickbait Korean Title** (Max 40 chars). Do NOT use the English source title directly.
         - **Anti-Cliché Rule:** Do NOT start with "Did you know?" or generic intros. Dive straight into the specific fact or problem.
         - **Depth:** Explain the **Specific Mechanism** or **Hidden Logic** behind the news. Avoid vague statements like "It is good." -> Say "It improves efficiency by 15% using X technology."
-        - **Length:** Target roughly **180-220 Korean characters** (approx. 150 spoken words) to fully utilize 60 seconds.
+        - **Length:** Target roughly **140-160 Korean characters** (approx. 120 spoken words).
+        - **TIMING:** The total spoken duration MUST be under **50 seconds**. This is a HARD LIMIT.
         - **Structure:**
           1. **Hook (0-5s):** A surprising fact or counter-intuitive statement.
-          2. **The 'Secret' (5-20s):** What is the specific hidden detail/tech?
-          3. **Deep Analysis (20-45s):** How does it work? Why is it different?
-          4. **Impact (45-60s):** A sharp, non-obvious conclusion.
-        - **Scenes:** Generate **8 to 12 scenes** to ensure fast pacing and retention.
-        - **Duration:** Each scene should be **4 to 7 seconds**.
+          2. **The 'Secret' (5-15s):** What is the specific hidden detail/tech?
+          3. **Deep Analysis (15-35s):** How does it work? Why is it different?
+          4. **Impact (35-50s):** A sharp, non-obvious conclusion.
+        - **Scenes:** Generate **6 to 10 scenes** to ensure fast pacing and retention.
+        - **Duration:** Each scene should be **5 to 8 seconds** (We will trim the start, so make it longer).
         
         {visual_instruction}
         

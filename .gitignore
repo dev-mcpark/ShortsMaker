@@ -18,6 +18,7 @@ token.json
 # Project specific
 outputs/
 temp/
+.cache/
 logs/
 .idea/
 .claude/
