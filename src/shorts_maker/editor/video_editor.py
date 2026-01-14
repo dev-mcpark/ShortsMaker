@@ -108,6 +108,7 @@ class VideoEditor:
             print(f"Error adding BGM: {e}")
 
         output_filename = f"outputs/final_shorts_{int(asyncio.get_event_loop().time())}.mp4"
+        os.makedirs("outputs", exist_ok=True)
         final_video.write_videofile(output_filename, fps=24, codec="libx264", audio_codec="aac")
         return output_filename
 
@@ -124,10 +125,6 @@ class VideoEditor:
             # VIDEO MODE
             elif path.endswith('.mp4'):
                 clip = VideoFileClip(path)
-                
-                # [HACK] Trim first 1 second to remove Veo's static image transition
-                if clip.duration > 1.5:
-                    clip = clip.subclipped(1.0)
                 
                 # Loop if too short (MoviePy v2 fix)
                 if clip.duration < duration:
@@ -199,8 +196,9 @@ class VideoEditor:
 
     async def _generate_tts(self, text: str, scene_idx: int, voice: str) -> str:
         output_path = f"temp/audio_{scene_idx}_{int(asyncio.get_event_loop().time())}.mp3"
+        os.makedirs("temp", exist_ok=True)
         print(f"Generating OpenAI TTS ({voice}) for scene {scene_idx}...")
-        
+
         max_retries = 3
         retry_delay = 5
         

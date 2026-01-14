@@ -12,6 +12,7 @@ import trafilatura
 class VideoScene(BaseModel):
     scene_number: int
     visual_description: str
+    motion_instruction: str # New: Specific motion for Veo (Stage 2)
     script_text: str
     duration_seconds: float = 5.0
 
@@ -246,6 +247,7 @@ class ScriptPlanner:
             import re
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             safe_title = re.sub(r'[^\w\s-]', '', script.title).strip().replace(' ', '_')[:30]
+            os.makedirs(self.script_output_dir, exist_ok=True)
             filepath = os.path.join(self.script_output_dir, f"script_{timestamp}_{safe_title}.json")
             with open(filepath, 'w', encoding='utf-8') as f: f.write(script.model_dump_json(indent=2))
         except: pass
@@ -328,15 +330,16 @@ class ScriptPlanner:
         {{
             "title": "호기심을 자극하는 한글 제목 (이모지 포함 가능)",
             "description": "영상 내용에 대한 자세한 한글 설명...",
-            "tags": ["{item['category']}", "shorts", "trend"],
+            "tags": ["category_name", "shorts", "trend"],
             "mood": "upbeat",
-            "style": "{style}",
-            "source_url": "{item['url']}",
+            "style": "The Info Curator",
+            "source_url": "https://example.com",
             "generation_mode": "{self.generation_mode}",
             "scenes": [
                 {{
                     "scene_number": 1,
-                    "visual_description": "...",
+                    "visual_description": "A futuristic city background with neon lights.",
+                    "motion_instruction": "The character talks while looking at the camera, gesturing with hands occasionally. Background lights flicker.",
                     "script_text": "...",
                     "duration_seconds": 5.0
                 }}
