@@ -146,35 +146,25 @@ class VideoEditor:
             return ColorClip(size=(1080, 1920), color=(0,0,0), duration=duration)
 
     def _create_subtitle_clips(self, text, duration) -> List:
-        """Returns a list of clips (Shadow + Text) to be added to layers."""
+        """Returns a list of clips for clean subtitle rendering."""
         try:
-            # Main Text (Yellow + Thick Border)
-            font_name = 'AppleGothic' 
-            
+            # Main Text (Yellow + Clean Black Border)
+            font_name = 'AppleGothic'
+
             txt_clip = TextClip(
                 text=text,
-                font_size=60, 
-                color='#FFD700', 
-                font=font_name, 
-                method='caption', 
-                size=(900, None), 
+                font_size=60,
+                color='#FFD700',  # Golden yellow
+                font=font_name,
+                method='caption',
+                size=(900, None),
                 text_align='center',
                 stroke_color='black',
-                stroke_width=2
+                stroke_width=3  # Slightly thicker for better readability
             ).with_position(('center', 1300)).with_duration(duration)
 
-            # Shadow Text
-            shadow_clip = TextClip(
-                text=text,
-                font_size=60, 
-                color='black', 
-                font=font_name, 
-                method='caption', 
-                size=(900, None), 
-                text_align='center',
-            ).with_position(('center', 1304)).with_duration(duration).with_opacity(0.6)
-
-            return [shadow_clip, txt_clip] # Return List, not Composite
+            # No shadow - clean border is sufficient for readability
+            return [txt_clip]
             
         except Exception as e:
             print(f"❌ Subtitle error: {e}")
