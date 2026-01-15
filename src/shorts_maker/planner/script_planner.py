@@ -274,21 +274,110 @@ class ScriptPlanner:
         # Dynamic Prompt based on Generation Mode
         if self.generation_mode == "video":
             visual_instruction = f"""
-            **Visuals (VIDEO MODE - HIGH QUALITY VEO 3.0 OPTIMIZED):**
-            - **OBJECTIVE:** Create **Cinematic Background Visuals** that represent the news concept. 
-            - **ROLE:** These videos will be the background for a news report. They should be atmospheric, metaphorical, and visually stunning.
-            - **NO TEXT:** Do not generate any text inside the video.
-            
-            **STRUCTURE:** `[Camera Movement] + [Subject/Object] + [Environment] + [Lighting] + [4k, photorealistic]`
-            
-            **MANDATORY RULES:**
-            1.  **Subject:** Focus on the **Subject Matter** of the news (e.g., Robots, Money, Servers, Nature). Do NOT focus on a generic human presenter (we have an overlay for that).
-            2.  **Camera Movement (Use one):** "Slow pan right", "Drone establishing shot", "Tracking shot", "Macro close-up".
-            3.  **Lighting (Use one):** "Cinematic lighting", "Cyberpunk neon", "Golden hour", "Volumetric fog", "Studio lighting".
-            4.  **Motion:** The scene MUST have movement (e.g., "Clouds moving", "Gears turning", "Lights flashing").
-            
-            **Example Output:**
-            "Drone shot of a futuristic city skyline at night with neon lights reflecting on wet pavement. Cyberpunk atmosphere. 4k resolution, photorealistic, high fidelity."
+            **Visuals (VIDEO MODE - BACKGROUND-FOCUSED NEWS BROADCAST STYLE):**
+
+            **CRITICAL COMPOSITION RULE:**
+            - The visual_description creates a LARGE BACKGROUND SCENE that occupies 80-85% of the 9:16 frame
+            - A small news presenter appears in the bottom-right corner (15-20% of frame) in a rounded window
+            - The BACKGROUND SCENE is the MAIN FOCUS and PRIMARY SUBJECT of the description
+            - Think of this as a professional news broadcast with a corner presenter overlay
+
+            **VISUAL DESCRIPTION STRUCTURE:**
+            `[Camera Movement] + [Main Subject/Scene] + [Detailed Environment] + [Atmospheric Elements] + [Lighting Style] + [Technical Quality]`
+
+            **MANDATORY COMPONENTS:**
+
+            1. **Camera Movement (REQUIRED - Choose ONE):**
+               - "Slow drone shot descending from above"
+               - "Smooth tracking shot moving forward"
+               - "Gentle pan across the scene from left to right"
+               - "Gradual zoom in revealing details"
+               - "Orbital camera rotating around the subject"
+               - "Steady cinematic push-in shot"
+
+            2. **Main Subject/Scene (REQUIRED - BE SPECIFIC):**
+               - NOT generic: ❌ "A city"
+               - SPECIFIC: ✅ "A towering futuristic metropolis with holographic billboards and flying vehicles"
+               - Focus on CONCRETE OBJECTS: Buildings, Nature, Technology, Vehicles, Architecture, etc.
+               - Describe SCALE: "Massive", "Towering", "Sprawling", "Intimate", "Vast"
+
+            3. **Detailed Environment (REQUIRED - 2-3 ELEMENTS):**
+               - Background layers: "Distant mountains with snow-capped peaks"
+               - Mid-ground: "Rows of glass skyscrapers reflecting sunset"
+               - Foreground: "Busy street with neon signs and steam vents"
+               - Weather/Atmosphere: "Light fog rolling through", "Rain-slicked surfaces"
+
+            4. **Atmospheric Elements (REQUIRED - 1-2 EFFECTS):**
+               - "Particles of dust floating in volumetric light beams"
+               - "Gentle falling cherry blossoms"
+               - "Steam rising from subway grates"
+               - "Lens flare from the setting sun"
+               - "Ambient mist creating depth"
+               - "Subtle motion blur on moving elements"
+
+            5. **Lighting Style (REQUIRED - BE DESCRIPTIVE):**
+               - NOT: ❌ "Good lighting"
+               - SPECIFIC: ✅ "Warm golden hour sunlight casting long shadows, with cool blue ambient fill from the sky"
+               - Options: "Cyberpunk neon (magenta/cyan)", "Soft diffused overcast", "Dramatic rim lighting", "Volumetric god rays"
+
+            6. **Technical Quality (REQUIRED):**
+               - ALWAYS include: "Professional broadcast quality, 4k resolution, cinematic color grading, photorealistic rendering"
+
+            **EXAMPLE OUTPUTS (STUDY THESE):**
+
+            Example 1 (Tech News):
+            "Smooth tracking shot moving through a massive data center with rows of server racks extending into the distance. Blue LED indicator lights flicker across thousands of machines. Cooling mist rises from floor vents creating atmospheric depth. Holographic data streams float in the air. Cool cyan and white lighting with subtle lens flares. Professional broadcast quality, 4k resolution, cinematic color grading, photorealistic rendering."
+
+            Example 2 (Nature News):
+            "Gentle drone shot descending over a pristine mountain valley covered in dense pine forest. Morning mist flows through the valleys like a river. Golden hour sunlight breaks through gaps in the forest canopy creating dramatic god rays. A crystal-clear lake reflects the surrounding peaks in the distance. Warm amber and deep green color palette. Professional broadcast quality, 4k resolution, cinematic color grading, photorealistic rendering."
+
+            Example 3 (Business News):
+            "Slow pan across a modern corporate headquarters lobby with floor-to-ceiling glass walls. Sleek marble floors reflect the ambient lighting. Business professionals move in subtle motion blur in the background. Large LED stock ticker displays line the walls showing market data. Cool blue and warm amber accent lighting creating depth. Professional broadcast quality, 4k resolution, cinematic color grading, photorealistic rendering."
+
+            **AVOID:**
+            - Generic descriptions: ❌ "A nice city"
+            - Person-focused: ❌ "A person talking about technology" (presenter is separate)
+            - Static/boring: ❌ "A room with computers"
+            - Text/UI elements: ❌ "With Korean subtitles" (added separately)
+
+            **LENGTH:** Each visual_description should be 150-250 characters for optimal detail without excess.
+
+            ---
+
+            **MOTION INSTRUCTION (For Veo Animation):**
+
+            The motion_instruction describes HOW the background scene animates. Focus on BACKGROUND MOTION, not presenter motion.
+
+            **STRUCTURE:** `[Camera Movement] + [Background Elements Animation] + [Atmospheric Effects]`
+
+            **COMPONENTS:**
+
+            1. **Camera Movement:**
+               - "Camera slowly tracks forward"
+               - "Drone descends smoothly"
+               - "Gentle pan from left to right"
+               - "Gradual zoom revealing details"
+
+            2. **Background Elements:**
+               - "Clouds drift across the sky"
+               - "LED lights flicker and pulse rhythmically"
+               - "Water ripples gently"
+               - "Leaves sway in the breeze"
+               - "Traffic moves in the distance"
+               - "Holographic displays animate with data"
+
+            3. **Atmospheric Effects:**
+               - "Mist swirls around objects"
+               - "Dust particles float in light beams"
+               - "Steam rises gently"
+               - "Lens flares shift subtly"
+
+            **EXAMPLES:**
+            - "Camera pushes forward through the corridor. LED indicators pulse. Cooling mist rises and swirls around equipment."
+            - "Drone descends revealing the landscape. Wind ripples through grass fields. Clouds cast moving shadows."
+            - "Slow pan across the cityscape. Neon signs flicker. Steam vents release periodic bursts. Traffic flows in the distance."
+
+            **IMPORTANT:** Motion should be SUBTLE and CINEMATIC, not chaotic. The presenter in the corner has separate minimal motion.
             """
         else: # image mode
             visual_instruction = """
@@ -338,10 +427,17 @@ class ScriptPlanner:
             "scenes": [
                 {{
                     "scene_number": 1,
-                    "visual_description": "A futuristic city background with neon lights.",
-                    "motion_instruction": "The character talks while looking at the camera, gesturing with hands occasionally. Background lights flicker.",
-                    "script_text": "...",
-                    "duration_seconds": 5.0
+                    "visual_description": "Smooth tracking shot moving through a massive server room with towering racks of blinking equipment extending into the distance. Cool blue LED lights pulse rhythmically across thousands of machines. Transparent holographic displays float showing data streams. Cooling mist rises from floor vents creating atmospheric depth and volumetric lighting effects. Cyberpunk aesthetic with cyan and magenta accent lighting. Professional broadcast quality, 4k resolution, cinematic color grading.",
+                    "motion_instruction": "Camera slowly pushes forward through the server corridor. LED lights flicker and pulse. Holographic displays animate with flowing data. Mist swirls gently around the equipment.",
+                    "script_text": "요즘 AI 데이터센터가 엄청난 전기를 소비하고 있다는 사실, 알고 계셨나요?",
+                    "duration_seconds": 6.0
+                }},
+                {{
+                    "scene_number": 2,
+                    "visual_description": "Aerial drone shot descending over a vast solar panel farm stretching to the horizon under golden hour sunlight. Thousands of panels glisten with reflections creating a sea of geometric patterns. Gentle wind causes subtle ripples across the installation. Distant mountains frame the background. Warm amber and orange tones dominate the color palette. Professional broadcast quality, 4k resolution, cinematic color grading.",
+                    "motion_instruction": "Drone descends smoothly revealing the scale of the solar farm. Panels subtly shift tracking the sun. Camera rotates slightly showing the mountain backdrop.",
+                    "script_text": "하지만 동시에 재생에너지 투자도 역대 최고치를 기록했습니다.",
+                    "duration_seconds": 6.0
                 }}
             ]
         }}
