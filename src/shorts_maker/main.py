@@ -6,9 +6,18 @@ from shorts_maker.planner.script_planner import ScriptPlanner
 from shorts_maker.generator.video_generator import VideoGenerator
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.uploader.youtube_uploader import YouTubeUploader
+from shorts_maker.utils.logger import setup_file_logging
 
 # Load environment variables
 load_dotenv()
+
+# Set up file logging with rotation
+setup_file_logging(
+    log_dir="logs",
+    log_file="shorts_maker.log",
+    max_bytes=10 * 1024 * 1024,  # 10MB per file
+    backup_count=5  # Keep 5 backup files
+)
 
 @task(name="1. 주제 기획 및 스크립트 작성", retries=2, retry_delay_seconds=2)
 async def task_plan_content(mode: str):

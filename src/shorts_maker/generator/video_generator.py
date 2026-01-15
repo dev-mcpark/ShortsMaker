@@ -4,25 +4,27 @@ import asyncio
 from typing import List
 from google import genai
 from google.genai import types
+from shorts_maker.utils.logger import get_logger
 
 class VideoGenerator:
     def __init__(self, mode: str = "image"):
+        self.logger = get_logger(__name__)
         self.mode = mode
         self.project_id = os.getenv("GCP_PROJECT_ID")
         self.location = os.getenv("GCP_LOCATION", "us-central1")
-        
+
         # Ensure service account is set for auth
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "service_account.json"
-        
+
         try:
             self.client = genai.Client(
                 vertexai=True,
                 project=self.project_id,
                 location=self.location
             )
-            print(f"✅ Google GenAI Client initialized (Mode: {mode})")
+            self.logger.info(f"✅ Google GenAI Client initialized (Mode: {mode})")
         except Exception as e:
-            print(f"❌ Failed to init GenAI Client: {e}")
+            self.logger.error(f"❌ Failed to init GenAI Client: {e}")
             self.client = None
 
     async def generate_clips(self, script) -> List[str]:
@@ -30,7 +32,7 @@ class VideoGenerator:
         for scene in script.scenes:
             if self.mode == "video":
                 # [Two-Stage Generation Pipeline]
-                print(f"\n🎥 === Processing Scene {scene.scene_number} (Two-Stage) ===")
+                self.logger.info(f"\n🎥 === Processing Scene {scene.scene_number} (Two-Stage) ===")
                 
                 # Stage 1: Generate Base Image (Character + Background)
                 base_image_path = await self._generate_base_image(scene)
@@ -55,16 +57,16 @@ class VideoGenerator:
         output_path = f"temp/base_scene_{scene.scene_number}.png"
         ref_path = "assets/character_ref.png"
 
-        print(f"🎨 [Stage 1] Generating Base Image with Imagen 3 for Scene {scene.scene_number}...", flush=True)
+        self.logger.info(f"🎨 [Stage 1] Generating Base Image with Imagen 3 for Scene {scene.scene_number}...")
 
         if not self.client:
-            print(f"    ⚠️ No GenAI client, creating mock image", flush=True)
+            self.logger.warning(f"    ⚠️ No GenAI client, creating mock image")
             self._create_mock_image(output_path)
             return output_path
 
         # Check if reference image exists
         if not os.path.exists(ref_path):
-            print(f"    ⚠️ Reference image not found at {ref_path}, creating mock", flush=True)
+            self.logger.warning(f"    ⚠️ Reference image not found at {ref_path}, creating mock")
             self._create_mock_image(output_path)
             return output_path
 
@@ -79,10 +81,10 @@ class VideoGenerator:
             )
 
             if os.path.exists(output_path):
-                print(f"    ✅ Base image generated: {output_path}", flush=True)
+                self.logger.info(f"    ✅ Base image generated: {output_path}")
                 return output_path
         except Exception as e:
-            print(f"    ❌ Imagen Error: {e}", flush=True)
+            self.logger.error(f"    ❌ Imagen Error: {e}")
 
         # Fallback to mock if generation fails
         self._create_mock_image(output_path)
@@ -98,25 +100,25 @@ class VideoGenerator:
             return self._create_mock_video(output_path, scene.duration_seconds)
 
         model_id = os.getenv("VEO_MODEL_ID", "veo-2.0-generate-001")
-        print(f"🎬 [Stage 2] Animating with Veo ({model_id})...", flush=True)
+        self.logger.info(f"🎬 [Stage 2] Animating with Veo ({model_id})...")
         
         try:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self._run_veo_generation_logic, model_id, scene, output_path, base_image_path)
             
             if os.path.exists(output_path):
-                print(f"    ✅ Video generation complete: {output_path}", flush=True)
+                self.logger.info(f"    ✅ Video generation complete: {output_path}")
                 return output_path
         except Exception as e:
-            print(f"    ❌ Veo Animation Error: {e}", flush=True)
+            self.logger.error(f"    ❌ Veo Animation Error: {e}")
             
         return self._create_mock_video(output_path, scene.duration_seconds)
 
     def _run_veo_generation_logic(self, model_id, scene, output_path, image_input_path):
-        print(f"--> Entered _run_veo_generation_logic for Scene {scene.scene_number}", flush=True)
-        
+        self.logger.info(f"--> Entered _run_veo_generation_logic for Scene {scene.scene_number}")
+
         has_ref = os.path.exists(image_input_path)
-        print(f"    Input Image: {image_input_path}, Exists? {has_ref}", flush=True)
+        self.logger.info(f"    Input Image: {image_input_path}, Exists? {has_ref}")
 
         original_prompt = scene.visual_description
         motion_desc = getattr(scene, 'motion_instruction', "The character speaks and moves naturally.")
@@ -142,15 +144,15 @@ class VideoGenerator:
                     image_bytes = f.read()
                 if image_bytes:
                     image_input = types.Image(image_bytes=image_bytes, mime_type='image/png')
-                    print("    ✅ Image object loaded for animation.", flush=True)
+                    self.logger.info("    ✅ Image object loaded for animation.")
             except Exception as e:
-                print(f"    ⚠️ Failed to load image input: {e}", flush=True)
+                self.logger.warning(f"    ⚠️ Failed to load image input: {e}")
 
         # Retry Logic for Safety and Internal Errors
         max_attempts = 4
         for attempt in range(max_attempts):
             try:
-                print(f"    Generating (Attempt {attempt+1}/{max_attempts})...", flush=True)
+                self.logger.info(f"    Generating (Attempt {attempt+1}/{max_attempts})...")
                 
                 kwargs = {
                     "model": model_id,
@@ -166,8 +168,8 @@ class VideoGenerator:
                 while not operation.done:
                     time.sleep(10)
                     operation = self.client.operations.get(operation)
-                    print(".", end="", flush=True)
-                print(" Done!", flush=True)
+                    self.logger.debug(".", extra={"end": ""})
+                self.logger.info(" Done!")
 
                 response = operation.result
                 if response and response.generated_videos:
@@ -182,15 +184,15 @@ class VideoGenerator:
                 
                 # Case 1: Internal Error (Transient)
                 if "internal error" in err_str or "500" in err_str or "try again later" in err_str:
-                    print(f"    ⚠️ Server Error. Waiting 30s before retry...", flush=True)
+                    self.logger.warning(f"    ⚠️ Server Error. Waiting 30s before retry...")
                     time.sleep(30)
                     continue 
                 
                 # Case 2: Safety Violation
                 if "violate" in err_str or "code': 3" in err_str:
-                    print(f"    ⚠️ Safety Violation.", flush=True)
+                    self.logger.warning(f"    ⚠️ Safety Violation.")
                     if attempt < max_attempts - 1:
-                        print("    ♻️ Retrying safely (background scene only, no person)...", flush=True)
+                        self.logger.info("    ♻️ Retrying safely (background scene only, no person)...")
                         # Remove person/character references to avoid safety filters
                         # Focus 100% on the background scene animation
                         current_prompt = (
@@ -200,8 +202,8 @@ class VideoGenerator:
                         )
                         image_input = None
                         continue
-                
-                print(f"    ❌ Error: {e}", flush=True)
+
+                self.logger.error(f"    ❌ Error: {e}")
                 if attempt == max_attempts - 1:
                     raise e
                 time.sleep(10)
@@ -213,14 +215,14 @@ class VideoGenerator:
         if not self.client:
             return self._create_mock_image(output_path)
 
-        print(f"🎨 Requesting Imagen 3 for scene {scene.scene_number}...", flush=True)
+        self.logger.info(f"🎨 Requesting Imagen 3 for scene {scene.scene_number}...")
         try:
             model_id = "imagen-3.0-generate-001"
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self._run_imagen_generation, model_id, scene, output_path)
             return output_path
         except Exception as e:
-            print(f"❌ Imagen Generation Error: {e}", flush=True)
+            self.logger.error(f"❌ Imagen Generation Error: {e}")
         return self._create_mock_image(output_path)
 
     def _run_imagen_generation(self, model_id, scene, output_path):
@@ -246,7 +248,7 @@ class VideoGenerator:
         Generates a background-focused image with the character positioned small in the corner.
         The main focus is the news scene (background), with the presenter as a secondary element.
         """
-        print(f"    📸 Reference image: {ref_image_path}", flush=True)
+        self.logger.info(f"    📸 Reference image: {ref_image_path}")
 
         try:
             # Background-focused composition prompt
@@ -260,7 +262,7 @@ class VideoGenerator:
                 f"9:16 aspect ratio, photorealistic, professional news broadcast style, cinematic lighting, 4k quality."
             )
 
-            print(f"    🎨 Generating background-focused composition: {composition_prompt[:120]}...", flush=True)
+            self.logger.info(f"    🎨 Generating background-focused composition: {composition_prompt[:120]}...")
 
             # Use generate_images (not edit_image) to have full control over composition
             response = self.client.models.generate_images(
@@ -275,16 +277,16 @@ class VideoGenerator:
 
             if response and response.generated_images:
                 response.generated_images[0].image.save(output_path)
-                print(f"    ✅ Background-focused image generated successfully", flush=True)
+                self.logger.info(f"    ✅ Background-focused image generated successfully")
             else:
                 raise Exception("No image returned from generate_images")
 
         except Exception as e:
             error_msg = str(e)
-            print(f"    ❌ Imagen generation failed: {error_msg}", flush=True)
+            self.logger.error(f"    ❌ Imagen generation failed: {error_msg}")
 
             # Fallback: Generate without person reference
-            print(f"    ⚙️ Falling back to background-only generation", flush=True)
+            self.logger.info(f"    ⚙️ Falling back to background-only generation")
             try:
                 fallback_prompt = (
                     f"A cinematic broadcast scene showing: {scene.visual_description}. "
@@ -302,15 +304,15 @@ class VideoGenerator:
 
                 if response and response.generated_images:
                     response.generated_images[0].image.save(output_path)
-                    print(f"    ⚠️ Generated background-only (no presenter in frame)", flush=True)
+                    self.logger.warning(f"    ⚠️ Generated background-only (no presenter in frame)")
                     return
             except Exception as fallback_error:
-                print(f"    ❌ Fallback also failed: {fallback_error}", flush=True)
+                self.logger.error(f"    ❌ Fallback also failed: {fallback_error}")
 
             raise e
 
     def _create_mock_video(self, path, duration):
-        print(f"⚠️ Creating mock video for: {path}", flush=True)
+        self.logger.warning(f"⚠️ Creating mock video for: {path}")
         from moviepy import ColorClip
 
         # Ensure directory exists
@@ -321,7 +323,7 @@ class VideoGenerator:
         return path
 
     def _create_mock_image(self, path):
-        print(f"⚠️ Creating mock image for: {path}", flush=True)
+        self.logger.warning(f"⚠️ Creating mock image for: {path}")
         from PIL import Image, ImageDraw
 
         # Ensure directory exists

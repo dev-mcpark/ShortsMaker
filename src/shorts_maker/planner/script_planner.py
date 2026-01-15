@@ -8,6 +8,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel
 from typing import List, Dict
 import trafilatura
+from shorts_maker.utils.logger import get_logger
 
 class VideoScene(BaseModel):
     scene_number: int
@@ -28,6 +29,7 @@ class ShortsScript(BaseModel):
 
 class ScriptPlanner:
     def __init__(self, generation_mode: str = "image"):
+        self.logger = get_logger(__name__)
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.history_file = "topic_history.json"
         self.url_history_file = "url_history.json"
@@ -137,7 +139,7 @@ class ScriptPlanner:
         # Shuffle to mix categories during fetch
         random.shuffle(selected_sources)
         
-        print(f"📡 Fetching feeds from {len(selected_sources)} sources...")
+        self.logger.info(f"📡 Fetching feeds from {len(selected_sources)} sources...")
         for category, url in selected_sources:
             try:
                 feed = feedparser.parse(url)
@@ -167,9 +169,9 @@ class ScriptPlanner:
                     # Increased limit: Collect up to 5 items per category
                     if len([p for p in posts if p['category'] == category]) >= 5: break
             except Exception as e:
-                print(f"Failed to fetch {url}: {e}")
+                self.logger.warning(f"Failed to fetch {url}: {e}")
                 continue
-        print(f"✅ Found {len(posts)} recent candidates.")
+        self.logger.info(f"✅ Found {len(posts)} recent candidates.")
         return posts
 
     async def _select_best_topic(self, candidates: List[Dict]) -> Dict:
@@ -228,16 +230,16 @@ class ScriptPlanner:
             candidates = [{'category': 'General', 'source': 'Fallback', 'title': 'AI Future', 'content': 'AI impact.', 'url': 'google.com'}]
 
         selection = await self._select_best_topic(candidates)
-        print(f"🔥 Selected Topic: {selection['title']} ({selection['category']})")
+        self.logger.info(f"🔥 Selected Topic: {selection['title']} ({selection['category']})")
         
         # 🚀 Fetch Full Content from URL
-        print(f"🕵️ Fetching full article from: {selection['url']}")
+        self.logger.info(f"🕵️ Fetching full article from: {selection['url']}")
         full_content = self._fetch_full_article(selection['url'])
         if full_content:
-            print(f"✅ Successfully extracted {len(full_content)} chars.")
+            self.logger.info(f"✅ Successfully extracted {len(full_content)} chars.")
             selection['content'] = full_content[:8000] # Limit to avoid context overflow
         else:
-            print("⚠️ Failed to extract content. Using summary.")
+            self.logger.warning("⚠️ Failed to extract content. Using summary.")
 
         self._save_history(selection['title'], selection['url'])
 
@@ -262,11 +264,11 @@ class ScriptPlanner:
                 return text
             return None
         except Exception as e:
-            print(f"Error fetching article: {e}")
+            self.logger.error(f"Error fetching article: {e}")
             return None
 
     async def _write_script(self, item: Dict) -> ShortsScript:
-        print(f"Writing script for: {item['title']} (Mode: {self.generation_mode})")
+        self.logger.info(f"Writing script for: {item['title']} (Mode: {self.generation_mode})")
         
         mood_list_str = ', '.join(self.allowed_moods)
         style = "The Info Curator"

@@ -5,9 +5,11 @@ from googleapiclient.http import MediaFileUpload
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.errors import HttpError
+from shorts_maker.utils.logger import get_logger
 
 class YouTubeUploader:
     def __init__(self):
+        self.logger = get_logger(__name__)
         self.scopes = ["https://www.googleapis.com/auth/youtube.upload"]
         self.api_service_name = "youtube"
         self.api_version = "v3"
@@ -40,7 +42,7 @@ class YouTubeUploader:
         return build(self.api_service_name, self.api_version, credentials=creds)
 
     async def upload(self, video_path: str, metadata: dict):
-        print(f"Starting upload to YouTube: {video_path}")
+        self.logger.info(f"Starting upload to YouTube: {video_path}")
         try:
             youtube = self.get_authenticated_service()
             
@@ -64,19 +66,19 @@ class YouTubeUploader:
                 media_body=media
             )
             
-            print("Uploading file...")
+            self.logger.info("Uploading file...")
             response = None
             while response is None:
                 status, response = request.next_chunk()
                 if status:
-                    print(f"Uploaded {int(status.progress() * 100)}%")
-            
-            print(f"Upload Successful! Video ID: {response.get('id')}")
-            print(f"Video URL: https://youtube.com/shorts/{response.get('id')}")
+                    self.logger.info(f"Uploaded {int(status.progress() * 100)}%")
+
+            self.logger.info(f"Upload Successful! Video ID: {response.get('id')}")
+            self.logger.info(f"Video URL: https://youtube.com/shorts/{response.get('id')}")
             return response.get('id')
 
         except HttpError as e:
-            print(f"An HTTP error occurred: {e.resp.status} - {e.content}")
+            self.logger.error(f"An HTTP error occurred: {e.resp.status} - {e.content}")
         except Exception as e:
-            print(f"An error occurred during upload: {e}")
+            self.logger.error(f"An error occurred during upload: {e}")
         return None
