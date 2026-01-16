@@ -7,15 +7,27 @@ from moviepy.video.fx import FadeIn
 from gtts import gTTS
 from openai import AsyncOpenAI
 from shorts_maker.utils.bgm_manager import BGMManager
+from shorts_maker.utils.logger import get_logger
+# [CRITICAL FIX] Manually set ImageMagick path for macOS Homebrew install
+if os.path.exists("/opt/homebrew/bin/magick"):
+    os.environ["IMAGEMAGICK_BINARY"] = "/opt/homebrew/bin/magick"
 
 class VideoEditor:
     def __init__(self):
+        self.logger = get_logger(__name__)
         self.bgm_manager = BGMManager()
         self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.voice_map = {
-            'mysterious': 'onyx', 'dramatic': 'onyx', 'dark': 'onyx',
-            'happy': 'nova', 'playful': 'nova', 'upbeat': 'nova',
-            'cinematic': 'alloy'
+            'suspense': 'onyx',
+            'sci-fi': 'onyx',
+            'mysterious': 'onyx',
+            'corporate': 'alloy',
+            'luxury': 'alloy',
+            'cinematic': 'alloy',
+            'emotional': 'nova',
+            'calm': 'nova',
+            'energetic': 'shimmer',
+            'upbeat': 'shimmer'
         }
 
     def _get_voice_for_mood(self, mood: str) -> str:
@@ -26,7 +38,7 @@ class VideoEditor:
         voice_name = self._get_voice_for_mood(getattr(script, 'mood', 'cinematic'))
         
         for i, (path, scene) in enumerate(zip(media_paths, script.scenes)):
-            print(f"Editing scene {scene.scene_number}...")
+            self.logger.info(f"Editing scene {scene.scene_number}...")
             
             # 1. TTS
             audio_path = await self._generate_tts(scene.script_text, i, voice_name)
@@ -38,9 +50,17 @@ class VideoEditor:
             clip = self._create_visual_clip(path, duration)
             clip = clip.with_audio(audio)
             
-            # 3. Subtitle
-            subtitle_clip = self._create_subtitle_clip(scene.script_text, duration)
-            final_scene_clip = CompositeVideoClip([clip, subtitle_clip])
+            # [FIX] Character is now integrated into the video via Veo.
+            # No need for manual overlay anymore.
+            layers = [clip]
+
+            # 3. Subtitle (Flattened structure)
+            subtitle_clips = self._create_subtitle_clips(scene.script_text, duration)
+            if subtitle_clips:
+                layers.extend(subtitle_clips)
+
+            # [FIX] Explicit duration for composite clip
+            final_scene_clip = CompositeVideoClip(layers).with_duration(duration)
             
             # Fade In
             if i > 0:
@@ -49,11 +69,25 @@ class VideoEditor:
             processed_clips.append(final_scene_clip)
 
         if not processed_clips:
-            print("No clips to compose.")
+            self.logger.warning("No clips to compose.")
             return ""
 
-        print("Concatenating all clips...")
+        self.logger.info("Concatenating all clips...")
         final_video = concatenate_videoclips(processed_clips, method="compose")
+        
+        # [CRITICAL] Enforce 59s Limit for Shorts
+        # If video is longer than 59s, speed it up to fit exactly into 58.5s (safety margin)
+        MAX_SHORTS_DURATION = 59.0
+        if final_video.duration > MAX_SHORTS_DURATION:
+            self.logger.warning(f"⚠️ Video duration ({final_video.duration}s) exceeds Shorts limit.")
+            self.logger.info("⚡ Speeding up video to fit 58.5s...")
+            
+            # Calculate speed factor (e.g., 65s / 58.5s = 1.11x speed)
+            target_duration = 58.5
+            speed_factor = final_video.duration / target_duration
+            
+            # Apply speed effect to both video and audio
+            final_video = final_video.with_effects([vfx.MultiplySpeed(speed_factor)])
         
         # 4. BGM
         try:
@@ -73,9 +107,10 @@ class VideoEditor:
                 bgm = bgm.with_volume_scaled(0.15)
                 final_video = final_video.with_audio(CompositeAudioClip([final_video.audio, bgm]))
         except Exception as e:
-            print(f"Error adding BGM: {e}")
+            self.logger.error(f"Error adding BGM: {e}")
 
         output_filename = f"outputs/final_shorts_{int(asyncio.get_event_loop().time())}.mp4"
+        os.makedirs("outputs", exist_ok=True)
         final_video.write_videofile(output_filename, fps=24, codec="libx264", audio_codec="aac")
         return output_filename
 
@@ -92,6 +127,7 @@ class VideoEditor:
             # VIDEO MODE
             elif path.endswith('.mp4'):
                 clip = VideoFileClip(path)
+                
                 # Loop if too short (MoviePy v2 fix)
                 if clip.duration < duration:
                     # clip = clip.loop(duration=duration) # OLD
@@ -107,33 +143,54 @@ class VideoEditor:
                 return clip.with_position('center')
                 
         except Exception as e:
-            print(f"Visual clip creation error: {e}")
+            self.logger.error(f"Visual clip creation error: {e}")
             from moviepy import ColorClip
             return ColorClip(size=(1080, 1920), color=(0,0,0), duration=duration)
 
-    def _create_subtitle_clip(self, text, duration):
+    def _create_subtitle_clips(self, text, duration) -> List:
+        """Returns a list of clips for clean subtitle rendering."""
         try:
+            # Main Text (Yellow + Clean Black Border)
+            font_name = 'AppleGothic'
+
             txt_clip = TextClip(
                 text=text,
-                font_size=60, 
-                color='white', 
-                font='AppleGothic', 
-                method='caption', 
-                size=(850, None), 
+                font_size=60,
+                color='#FFD700',  # Golden yellow
+                font=font_name,
+                method='caption',
+                size=(900, None),
                 text_align='center',
                 stroke_color='black',
-                stroke_width=4
-            ).with_duration(duration).with_position(('center', 1440))
-            return txt_clip
+                stroke_width=3  # Slightly thicker for better readability
+            ).with_position(('center', 1300)).with_duration(duration)
+
+            # No shadow - clean border is sufficient for readability
+            return [txt_clip]
+            
         except Exception as e:
-            print(f"Subtitle creation error: {e}")
-            from moviepy import ColorClip
-            return ColorClip(size=(10, 10), color=(0,0,0,0), duration=duration)
+            self.logger.error(f"❌ Subtitle error: {e}")
+            try:
+                # Fallback
+                fallback = TextClip(
+                    text=text, 
+                    font_size=50, 
+                    color='white', 
+                    font='Arial',
+                    method='caption',
+                    size=(900, None),
+                    stroke_color='black', 
+                    stroke_width=1
+                ).with_position(('center', 1300)).with_duration(duration)
+                return [fallback]
+            except:
+                return []
 
     async def _generate_tts(self, text: str, scene_idx: int, voice: str) -> str:
         output_path = f"temp/audio_{scene_idx}_{int(asyncio.get_event_loop().time())}.mp3"
-        print(f"Generating OpenAI TTS ({voice}) for scene {scene_idx}...")
-        
+        os.makedirs("temp", exist_ok=True)
+        self.logger.info(f"Generating OpenAI TTS ({voice}) for scene {scene_idx}...")
+
         max_retries = 3
         retry_delay = 5
         
@@ -147,12 +204,12 @@ class VideoEditor:
                 response.stream_to_file(output_path)
                 return output_path
             except Exception as e:
-                print(f"⚠️ OpenAI TTS Attempt {attempt+1} Failed ({e}).")
+                self.logger.warning(f"⚠️ OpenAI TTS Attempt {attempt+1} Failed ({e}).")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(retry_delay)
                     retry_delay *= 2
                 else:
-                    print("Switching to gTTS fallback...")
+                    self.logger.info("Switching to gTTS fallback...")
                     loop = asyncio.get_running_loop()
                     await loop.run_in_executor(None, self._run_gtts, text, output_path)
                     return output_path
