@@ -54,7 +54,9 @@ class ScriptPlanner:
 
         self.rss_sources = {
             "Tech_IT": [
-                "https://news.hada.io/rss/news",
+                "https://news.hada.io/rss/news",  # Korean tech/startup news
+                "https://seoulz.com/feed/",  # Korea's leading digital media for startup community
+                "https://kedglobal.com/newsRss",  # Korean companies & industries news
                 "http://www.theverge.com/rss/full.xml",
                 "https://techcrunch.com/feed/",
                 "https://feeds.feedburner.com/TechCrunch/",
@@ -62,9 +64,10 @@ class ScriptPlanner:
             ],
             "Business": [
                 "https://www.cnbc.com/id/10001147/device/rss/rss.html", # CNBC Business
-                "https://feeds.contenthub.gerben.nl/economist/business", # The Economist
+                "https://www.economist.com/business/rss.xml", # The Economist Official Business Feed
                 "http://feeds.marketwatch.com/marketwatch/topstories/",
-                "https://www.investing.com/rss/news.rss"
+                "https://www.investing.com/rss/news.rss",
+                "https://businesskorea.co.kr/rss/allEnglish.xml"  # Korean business news
             ],
             "Entertainment": [
                 "https://variety.com/feed/",
@@ -78,7 +81,6 @@ class ScriptPlanner:
             ],
             "Gaming_Esports": [
                 "http://feeds.ign.com/ign/games-all",
-                "https://www.polygon.com/rss/index.xml",
                 "https://kotaku.com/rss/index.xml"
             ],
             "Life_Tips": [

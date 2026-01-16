@@ -129,9 +129,9 @@ class VideoGenerator:
             f"Animate this news broadcast scene where the MAIN FOCUS is the background: {original_prompt}. "
             f"Motion in the scene: {motion_desc}. "
             f"The large background scene is animated with cinematic camera movement and atmospheric effects. "
-            f"In the small corner window (bottom-right, 15-20% of frame), a news presenter speaks to camera with subtle gestures. "
-            f"The presenter's motion is minimal and natural - slight head movements, small hand gestures, facial expressions. "
-            f"The presenter stays within their small corner frame throughout the video. "
+            f"In the small corner window (bottom-right, 15-20% of frame), the character speaks to camera with subtle gestures. "
+            f"the character's motion is minimal and natural - slight head movements, small hand gestures, facial expressions. "
+            f"the character stays within their small corner frame throughout the video. "
             f"The background scene animation is the PRIMARY focus - detailed, dynamic, and cinematic. "
             f"Professional news broadcast quality, 4k resolution, smooth motion, broadcast-style composition."
         )
@@ -245,52 +245,76 @@ class VideoGenerator:
 
     def _run_imagen_with_reference(self, scene, ref_image_path, output_path):
         """
-        Generates a background-focused image with the character positioned small in the corner.
-        The main focus is the news scene (background), with the presenter as a secondary element.
+        Stage 1: Compose character + background using edit_image with reference.
+
+        This preserves character consistency by:
+        1. Loading character_ref.png as RawReferenceImage
+        2. Using MASK_MODE_BACKGROUND to replace only the background
+        3. Keeping the character consistent across all scenes
         """
         self.logger.info(f"    📸 Reference image: {ref_image_path}")
 
         try:
-            # Background-focused composition prompt
-            # The key is to make the SCENE the main subject, not the person
+            from google.genai.types import RawReferenceImage, MaskReferenceImage
+
+            # Background-focused prompt (80-85% background, 15-20% presenter in corner)
             composition_prompt = (
-                f"A cinematic news broadcast scene showing: {scene.visual_description}. "
-                f"In the bottom-right corner, there is a small news presenter/reporter (taking up only 15-20% of the frame). "
-                f"The presenter is positioned in a circular or rounded-rectangle frame/window in the corner. "
-                f"The main focus of the image is the background scene, not the person. "
-                f"The background scene is large, detailed, and occupies 80-85% of the frame. "
-                f"9:16 aspect ratio, photorealistic, professional news broadcast style, cinematic lighting, 4k quality."
+                f"A cinematic news broadcast background scene: {scene.visual_description}. "
+                f"The main subject is the large, detailed background (80-85% of frame). "
+                f"In the bottom-right corner, position the presenter in a small rounded window (15-20% of frame). "
+                f"Professional news broadcast style, 9:16 aspect ratio, photorealistic, cinematic lighting, 4k quality."
             )
 
-            self.logger.info(f"    🎨 Generating background-focused composition: {composition_prompt[:120]}...")
+            self.logger.info(f"    🎨 Composing with character reference: {composition_prompt[:100]}...")
 
-            # Use generate_images (not edit_image) to have full control over composition
-            response = self.client.models.generate_images(
-                model="imagen-3.0-generate-001",
+            # 1. Load character reference image
+            with open(ref_image_path, "rb") as f:
+                image_bytes = f.read()
+
+            raw_ref_image = RawReferenceImage(
+                reference_id=1,
+                reference_image=types.Image(image_bytes=image_bytes, mime_type='image/png'),
+            )
+
+            # 2. Mask the background (keep character, replace background)
+            mask_ref_image = MaskReferenceImage(
+                reference_id=2,
+                config=types.MaskReferenceConfig(
+                    mask_mode="MASK_MODE_BACKGROUND",  # Only replace background
+                    mask_dilation=0.0,
+                ),
+            )
+
+            # 3. Edit image: keep character, replace background
+            response = self.client.models.edit_image(
+                model="imagen-3.0-capability-001",  # Must use capability model for reference images
                 prompt=composition_prompt,
-                config=types.GenerateImagesConfig(
+                reference_images=[raw_ref_image, mask_ref_image],
+                config=types.EditImageConfig(
+                    edit_mode="EDIT_MODE_INPAINT_INSERTION",
                     number_of_images=1,
-                    aspect_ratio="9:16",
-                    include_rai_reason=True
+                    include_rai_reason=True,
+                    output_mime_type='image/png',
                 )
             )
 
             if response and response.generated_images:
                 response.generated_images[0].image.save(output_path)
-                self.logger.info(f"    ✅ Background-focused image generated successfully")
+                self.logger.info(f"    ✅ Character + background composed successfully")
             else:
-                raise Exception("No image returned from generate_images")
+                raise Exception("No image returned from edit_image")
 
         except Exception as e:
             error_msg = str(e)
-            self.logger.error(f"    ❌ Imagen generation failed: {error_msg}")
+            self.logger.error(f"    ❌ Character composition failed: {error_msg}")
 
-            # Fallback: Generate without person reference
-            self.logger.info(f"    ⚙️ Falling back to background-only generation")
+            # Fallback 1: Try without reference image (text-only generation)
+            self.logger.info(f"    ⚙️ Fallback: Generating with text prompt only (no character reference)")
             try:
                 fallback_prompt = (
-                    f"A cinematic broadcast scene showing: {scene.visual_description}. "
-                    f"Professional news broadcast style, 9:16 aspect ratio, photorealistic, 4k quality."
+                    f"A cinematic news broadcast scene: {scene.visual_description}. "
+                    f"In the bottom-right corner, a small news presenter in a rounded window (15-20% of frame). "
+                    f"Professional broadcast style, 9:16 aspect ratio, photorealistic, 4k quality."
                 )
 
                 response = self.client.models.generate_images(
@@ -304,10 +328,10 @@ class VideoGenerator:
 
                 if response and response.generated_images:
                     response.generated_images[0].image.save(output_path)
-                    self.logger.warning(f"    ⚠️ Generated background-only (no presenter in frame)")
+                    self.logger.warning(f"    ⚠️ Generated without character reference (consistency may vary)")
                     return
             except Exception as fallback_error:
-                self.logger.error(f"    ❌ Fallback also failed: {fallback_error}")
+                self.logger.error(f"    ❌ Fallback generation also failed: {fallback_error}")
 
             raise e
 
