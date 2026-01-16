@@ -6,9 +6,10 @@ from datetime import datetime, timedelta
 import time
 from openai import AsyncOpenAI
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List, Dict, Optional
 import trafilatura
 from shorts_maker.utils.logger import get_logger
+from shorts_maker.planner.script_validator import ScriptValidator
 
 class VideoScene(BaseModel):
     scene_number: int
@@ -23,6 +24,7 @@ class ShortsScript(BaseModel):
     tags: List[str]
     mood: str
     style: str
+    source_name: str
     source_url: str
     generation_mode: str # New: Tracks whether this script is for 'image' or 'video'
     scenes: List[VideoScene]
@@ -51,6 +53,9 @@ class ScriptPlanner:
         # [NEW] Character Persona for Consistency
         # You can change this description to whatever character you want to appear IN the video.
         self.character_profile = "A futuristic cute robot with glowing blue eyes and a white sleek body"
+        
+        # Validator
+        self.validator = ScriptValidator()
 
         self.rss_sources = {
             "Tech_IT": [
@@ -69,19 +74,9 @@ class ScriptPlanner:
                 "https://www.investing.com/rss/news.rss",
                 "https://businesskorea.co.kr/rss/allEnglish.xml"  # Korean business news
             ],
-            "Entertainment": [
-                "https://variety.com/feed/",
-                "https://deadline.com/feed/",
-                "https://www.hollywoodreporter.com/feed/",
-                "https://www.cinema-life.net/feed/"
-            ],
             "Finance_Economy": [
                 "https://www.cnbc.com/id/10000664/device/rss/rss.html",
                 "https://rss.hankyung.com/feed/market.xml"
-            ],
-            "Gaming_Esports": [
-                "http://feeds.ign.com/ign/games-all",
-                "https://kotaku.com/rss/index.xml"
             ],
             "Life_Tips": [
                 "https://lifehacker.com/rss",
@@ -216,7 +211,7 @@ class ScriptPlanner:
         """
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=10
             )
@@ -231,21 +226,61 @@ class ScriptPlanner:
         if not candidates:
             candidates = [{'category': 'General', 'source': 'Fallback', 'title': 'AI Future', 'content': 'AI impact.', 'url': 'google.com'}]
 
-        selection = await self._select_best_topic(candidates)
-        self.logger.info(f"🔥 Selected Topic: {selection['title']} ({selection['category']})")
-        
-        # 🚀 Fetch Full Content from URL
-        self.logger.info(f"🕵️ Fetching full article from: {selection['url']}")
-        full_content = self._fetch_full_article(selection['url'])
-        if full_content:
-            self.logger.info(f"✅ Successfully extracted {len(full_content)} chars.")
-            selection['content'] = full_content[:8000] # Limit to avoid context overflow
-        else:
-            self.logger.warning("⚠️ Failed to extract content. Using summary.")
+        max_topic_retries = 5
+        script = None
 
-        self._save_history(selection['title'], selection['url'])
+        for attempt in range(max_topic_retries):
+            if not candidates:
+                self.logger.warning("No more candidates available for selection.")
+                break
 
-        script = await self._write_script(selection)
+            # 1. Select Topic
+            selection = await self._select_best_topic(candidates)
+            self.logger.info(f"🔥 Selected Topic (Attempt {attempt+1}): {selection['title']} ({selection['category']})")
+            
+            # 2. Fetch Full Content
+            self.logger.info(f"🕵️ Fetching full article from: {selection['url']}")
+            full_content = self._fetch_full_article(selection['url'])
+            if full_content:
+                self.logger.info(f"✅ Successfully extracted {len(full_content)} chars.")
+                selection['content'] = full_content[:8000] 
+            else:
+                self.logger.warning("⚠️ Failed to extract content. Using summary.")
+
+            self._save_history(selection['title'], selection['url'])
+
+            # 3. Write Script
+            # We pass None for feedback because if we fail, we change the topic entirely.
+            # If you wanted to try fixing the SAME topic, you'd need an inner loop here.
+            # But the requirement is "restart from topic selection".
+            try:
+                script = await self._write_script(selection)
+                
+                # 4. Validate
+                validation = await self.validator.validate_script(script)
+                
+                if validation.is_valid:
+                    self.logger.info(f"🎉 Script Validated on attempt {attempt+1}!")
+                    break # Success!
+                
+                # 5. Handle Failure
+                self.logger.warning(f"❌ Script rejected for topic '{selection['title']}'. Reason: {validation.reason}")
+                self.logger.info(f"Validation Feedback: {validation.feedback}")
+                self.logger.info("🔄 Discarding this topic and selecting a NEW one...")
+                
+                # Remove the failed candidate from the list so it's not picked again
+                candidates = [c for c in candidates if c['url'] != selection['url']]
+                script = None # Reset script to ensure we don't return a bad one if loop finishes
+
+            except Exception as e:
+                self.logger.error(f"Error during script generation loop: {e}")
+                # Remove failed candidate and continue
+                candidates = [c for c in candidates if c['url'] != selection['url']]
+                continue
+
+        if not script:
+            self.logger.error("Failed to generate a valid script after retries.")
+            return None
         
         try:
             import re
@@ -269,8 +304,10 @@ class ScriptPlanner:
             self.logger.error(f"Error fetching article: {e}")
             return None
 
-    async def _write_script(self, item: Dict) -> ShortsScript:
+    async def _write_script(self, item: Dict, feedback: Optional[str] = None) -> ShortsScript:
         self.logger.info(f"Writing script for: {item['title']} (Mode: {self.generation_mode})")
+        if feedback:
+            self.logger.info(f"♻️ Rewriting based on feedback: {feedback}")
         
         mood_list_str = ', '.join(self.allowed_moods)
         style = "The Info Curator"
@@ -391,10 +428,20 @@ class ScriptPlanner:
             - NO verbs implying complex motion (e.g., "explode" is bad for static, "explosion frozen in time" is good).
             """
 
+        feedback_instruction = ""
+        if feedback:
+            feedback_instruction = f"""
+            **⚠️ CRITICAL CORRECTION REQUIRED:**
+            The previous script was rejected by the editor. You MUST fix the following issues:
+            "{feedback}"
+            """
+
         prompt = f"""
         Act as a professional **Content Creator**.
         Create a **comprehensive and engaging** YouTube Shorts script (approx. 55-60s) based on this news.
         
+        {feedback_instruction}
+
         **SOURCE MATERIAL:**
         Category: {item['category']}
         Title: {item['title']}
@@ -426,6 +473,7 @@ class ScriptPlanner:
             "tags": ["category_name", "shorts", "trend"],
             "mood": "upbeat",
             "style": "The Info Curator",
+            "source_name": "Source Name",
             "source_url": "https://example.com",
             "generation_mode": "{self.generation_mode}",
             "scenes": [
@@ -449,7 +497,7 @@ class ScriptPlanner:
         
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"}
             )
@@ -457,5 +505,8 @@ class ScriptPlanner:
             if data.get('mood') not in self.allowed_moods: data['mood'] = 'upbeat'
             # Ensure generation_mode is consistent
             data['generation_mode'] = self.generation_mode
+            # Inject source info from the item to ensure accuracy
+            data['source_name'] = item.get('source', 'Unknown Source')
+            data['source_url'] = item.get('url', '')
             return ShortsScript(**data)
         except Exception as e: raise e

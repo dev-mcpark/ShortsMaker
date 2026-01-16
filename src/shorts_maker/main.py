@@ -27,6 +27,9 @@ async def task_plan_content(mode: str):
     planner = ScriptPlanner(generation_mode=mode)
     script = await planner.plan_content()
     
+    if not script:
+        raise RuntimeError("Failed to generate a valid script after multiple attempts.")
+    
     logger.info(f"Planned Script Title: {script.title}")
     return script
 

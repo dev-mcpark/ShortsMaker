@@ -45,7 +45,7 @@ class VideoGenerator:
                 path = await self._generate_image_imagen(scene)
                 clips_paths.append(path)
             
-            time.sleep(2) # Buffer
+            time.sleep(10) # Buffer
             
         return clips_paths
 
