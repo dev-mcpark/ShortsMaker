@@ -1,11 +1,13 @@
 import os
-import pickle
+import json
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
 from shorts_maker.utils.logger import get_logger
+from shorts_maker.utils.config import settings
 
 class YouTubeUploader:
     def __init__(self):
@@ -13,16 +15,21 @@ class YouTubeUploader:
         self.scopes = ["https://www.googleapis.com/auth/youtube.upload"]
         self.api_service_name = "youtube"
         self.api_version = "v3"
-        self.client_secrets_file = "client_secrets.json"
-        self.token_file = "token.pickle"
+        self.client_secrets_file = str(settings.client_secrets_path)
+        self.token_file = str(settings.token_file_path)
 
     def get_authenticated_service(self):
         creds = None
-        # token.pickle 파일에 저장된 인증 정보가 있는지 확인
+        # token.json 파일에 저장된 인증 정보가 있는지 확인 (보안: JSON 형식 사용)
         if os.path.exists(self.token_file):
-            with open(self.token_file, 'rb') as token:
-                creds = pickle.load(token)
-        
+            try:
+                with open(self.token_file, 'r', encoding='utf-8') as token:
+                    token_data = json.load(token)
+                    creds = Credentials.from_authorized_user_info(token_data, self.scopes)
+            except (json.JSONDecodeError, ValueError) as e:
+                self.logger.warning(f"토큰 파일 손상됨, 재인증 필요: {e}")
+                creds = None
+
         # 인증 정보가 없거나 유효하지 않으면 로그인 시도
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
@@ -30,14 +37,14 @@ class YouTubeUploader:
             else:
                 if not os.path.exists(self.client_secrets_file):
                     raise FileNotFoundError(f"{self.client_secrets_file} 파일이 없습니다. Google Console에서 다운로드해주세요.")
-                
+
                 flow = InstalledAppFlow.from_client_secrets_file(
                     self.client_secrets_file, self.scopes)
                 creds = flow.run_local_server(port=0)
-            
-            # 인증 정보를 다음 실행을 위해 저장
-            with open(self.token_file, 'wb') as token:
-                pickle.dump(creds, token)
+
+            # 인증 정보를 JSON 형식으로 안전하게 저장
+            with open(self.token_file, 'w', encoding='utf-8') as token:
+                token.write(creds.to_json())
 
         return build(self.api_service_name, self.api_version, credentials=creds)
 

@@ -3,6 +3,18 @@ name = "shorts-maker"
 version = "0.1.0"
 description = "AI-powered YouTube Shorts automation pipeline using Veo3"
 requires-python = ">=3.12"
+authors = [
+    { name = "Ryan Park", email = "dev.mcpark@gmail.com" },
+]
+readme = "README.md"
+license = { text = "MIT" }
+keywords = ["youtube", "shorts", "automation", "ai", "veo3", "imagen3", "video-generation"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Video",
+]
 dependencies = [
     "google-cloud-aiplatform",
     "google-api-python-client",
@@ -16,13 +28,23 @@ dependencies = [
     "tqdm",
     "openai",
     "trafilatura",
-    "prefect",
     "feedparser",
     "gtts",
     "google-genai",
     "beautifulsoup4",
     "googlesearch-python",
+    "nicegui",
+    "watchdog",
+    "apscheduler>=3.10.0",
+    "lxml",
 ]
+
+[project.urls]
+Homepage = "https://github.com/dev-mcpark/ShortsMaker"
+Issues = "https://github.com/dev-mcpark/ShortsMaker/issues"
+
+[project.scripts]
+shorts-maker = "shorts_maker.gui:main"
 
 [build-system]
 requires = ["hatchling"]
