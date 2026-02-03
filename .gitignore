@@ -7,13 +7,20 @@ build/
 dist/
 *.egg-info/
 
-# Environment
+# Environment & Secrets
 .env
+config/.env
+
+# Credentials (루트 레벨 - 하위 호환)
 auth_token.json
 client_secrets.json
 service_account.json
 token.pickle
 token.json
+
+# Credentials (config/credentials/ 폴더)
+config/credentials/*.json
+!config/credentials/.gitkeep
 
 # Project specific
 outputs/

@@ -1,0 +1,30 @@
+{
+    "Tech_IT": [
+        "https://news.hada.io/rss/news",
+        "https://seoulz.com/feed/",
+        "https://kedglobal.com/newsRss",
+        "http://www.theverge.com/rss/full.xml",
+        "https://techcrunch.com/feed/",
+        "https://feeds.feedburner.com/TechCrunch/",
+        "http://news.mit.edu/rss/feed"
+    ],
+    "Business": [
+        "https://www.cnbc.com/id/10001147/device/rss/rss.html",
+        "https://www.economist.com/business/rss.xml",
+        "http://feeds.marketwatch.com/marketwatch/topstories/",
+        "https://www.investing.com/rss/news.rss",
+        "https://businesskorea.co.kr/rss/allEnglish.xml"
+    ],
+    "Finance_Economy": [
+        "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+        "https://rss.hankyung.com/feed/market.xml"
+    ],
+    "Life_Tips": [
+        "https://lifehacker.com/rss",
+        "https://www.psychologytoday.com/us/feed/index.rss"
+    ],
+    "Design_Culture": [
+        "https://www.designboom.com/feed/",
+        "https://hypebeast.kr/feed"
+    ]
+}

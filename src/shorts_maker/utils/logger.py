@@ -1,82 +1,66 @@
 """
 Logging configuration for ShortsMaker project.
-
-Integrates with Prefect logging and provides file rotation.
+Provides centralized logging with file rotation.
 """
 import os
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Optional
 
-def setup_file_logging(
+# Pre-defined logger name
+LOGGER_NAME = "shorts_maker"
+
+def setup_logging(
     log_dir: str = "logs",
     log_file: str = "shorts_maker.log",
-    max_bytes: int = 10 * 1024 * 1024,  # 10MB
-    backup_count: int = 5,
+    max_bytes: int = 5 * 1024 * 1024,  # 5MB
+    backup_count: int = 3,
     log_level: int = logging.INFO
 ):
     """
-    Set up file logging with rotation for the entire application.
-
-    Args:
-        log_dir: Directory to store log files
-        log_file: Name of the log file
-        max_bytes: Maximum size of log file before rotation (default: 10MB)
-        backup_count: Number of backup files to keep (default: 5)
-        log_level: Logging level (default: INFO)
+    Sets up the base logger with file rotation and console output.
     """
-    # Create logs directory if it doesn't exist
     log_path = Path(log_dir)
     log_path.mkdir(parents=True, exist_ok=True)
-
-    # Full path to log file
     log_file_path = log_path / log_file
 
-    # Create rotating file handler
-    file_handler = RotatingFileHandler(
-        filename=log_file_path,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding='utf-8'
-    )
+    logger = logging.getLogger(LOGGER_NAME)
+    logger.setLevel(log_level)
+    
+    # Avoid duplicate handlers
+    if not logger.handlers:
+        # Formatter
+        formatter = logging.Formatter(
+            fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
 
-    # Set format
-    formatter = logging.Formatter(
-        fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(log_level)
+        # 1. File Handler
+        file_handler = RotatingFileHandler(
+            filename=log_file_path,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding='utf-8'
+        )
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
 
-    # Add handler to root logger
-    root_logger = logging.getLogger()
-    root_logger.addHandler(file_handler)
-    root_logger.setLevel(log_level)
+        # 2. Console Handler (Optional, NiceGUI handles this too)
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
 
-    # Also configure Prefect logger to use the same handler
-    prefect_logger = logging.getLogger("prefect")
-    prefect_logger.addHandler(file_handler)
+    return logger
 
-    return file_handler
-
-
-def get_logger(name: str) -> logging.Logger:
+def get_logger(name: Optional[str] = None) -> logging.Logger:
     """
-    Get a logger instance for a module.
-
-    When running inside Prefect tasks/flows, this will automatically use
-    Prefect's logger. Otherwise, it uses standard Python logging.
-
-    Args:
-        name: Name of the logger (typically __name__)
-
-    Returns:
-        Logger instance
+    Get a logger instance. If name is provided, it returns a child logger.
     """
-    # Try to get Prefect logger if available (inside a task/flow)
-    try:
-        from prefect import get_run_logger
-        return get_run_logger()
-    except Exception:
-        # Fall back to standard Python logger
+    base_logger = logging.getLogger(LOGGER_NAME)
+    if name:
+        # Return a logger that inherits from the base 'shorts_maker' logger
+        if not name.startswith(f"{LOGGER_NAME}."):
+            return logging.getLogger(f"{LOGGER_NAME}.{name}")
         return logging.getLogger(name)
+    return base_logger

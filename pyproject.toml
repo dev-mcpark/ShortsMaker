@@ -16,12 +16,14 @@ dependencies = [
     "tqdm",
     "openai",
     "trafilatura",
-    "prefect",
     "feedparser",
     "gtts",
     "google-genai",
     "beautifulsoup4",
     "googlesearch-python",
+    "nicegui",
+    "watchdog",
+    "apscheduler>=3.10.0",
 ]
 
 [build-system]

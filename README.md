@@ -64,30 +64,34 @@ Required for uploading the final video to YouTube on your behalf.
 
 ---
 
-## 🚀 How to Run (Daily Routine)
+## 🚀 Usage
 
-We use **Prefect** to manage the pipeline. You don't need to run complex commands manually.
-
-### One-Click Start
-Simply run the helper script. This will start the Prefect Server & Worker and open the Dashboard.
-
+### 1. Run the ShortsMaker Studio
+Start the local desktop app:
 ```bash
-./start_services.sh
+python src/shorts_maker/gui.py
 ```
+This will launch a web interface at `http://localhost:8080`.
 
-### Manual Execution (If you prefer)
-1. **Start Server:** `prefect server start`
-2. **Start Worker:** `prefect worker start --pool "local-process-pool"`
+### 2. Workflow
+1.  **Planning Tab:**
+    *   Choose "Auto-Discovery" or enter a URL.
+    *   Click "Generate Script".
+    *   **Edit the JSON script** directly in the editor.
+    *   Click "Confirm & Save".
 
----
+2.  **Generation Tab:**
+    *   Click "Start Production".
+    *   Watch the live logs as the AI generates visuals and voiceovers.
+    *   The final video will appear in the Preview player.
 
-## 🖥️ Dashboard Usage
-Once the dashboard (`http://127.0.0.1:4200`) is open:
+3.  **Publishing Tab:**
+    *   Review/Edit metadata.
+    *   Click "Upload to YouTube".
 
-1. Go to **Deployments**.
-2. Find `Shorts Maker Pipeline / daily-shorts-maker`.
-3. Click **Run** (▶️ button) -> **Quick Run**.
-4. Watch the progress in the **Flow Runs** tab.
+## 🛠️ Configuration
+*   **API Keys:** Configure in the sidebar or via `.env`.
+*   **Mode:** Toggle between 'Video' (Veo) and 'Image' (Imagen) modes in the sidebar.
 
 ---
 
