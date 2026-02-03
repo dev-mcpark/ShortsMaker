@@ -61,6 +61,14 @@ class Settings:
     gcp_location: str = field(default_factory=lambda: os.getenv("GCP_LOCATION", "us-central1"))
     pixabay_api_key: str = field(default_factory=lambda: os.getenv("PIXABAY_API_KEY", ""))
 
+    # Character Assets
+    character_image_path: Path = field(
+        default_factory=lambda: Path(os.getenv("CHARACTER_IMAGE_PATH", str(PROJECT_ROOT / "assets" / "character_ref.png")))
+    )
+    character_video_path: Path = field(
+        default_factory=lambda: Path(os.getenv("CHARACTER_VIDEO_PATH", str(PROJECT_ROOT / "assets" / "character_video.mp4")))
+    )
+
     # Model IDs
     veo_model_id: str = field(default_factory=lambda: os.getenv("VEO_MODEL_ID", "veo-3.1-fast-generate-001"))
     imagen_model_id: str = "imagen-3.0-generate-001"

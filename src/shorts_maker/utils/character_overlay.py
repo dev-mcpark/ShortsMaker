@@ -27,6 +27,7 @@ from moviepy import (
     vfx
 )
 from shorts_maker.utils.logger import get_logger
+from shorts_maker.utils.config import settings
 
 
 class CharacterOverlay:
@@ -47,7 +48,7 @@ class CharacterOverlay:
 
     def __init__(
         self,
-        character_source: str = "assets/character_ref.png",
+        character_source: Optional[str] = None,
         position: str = "bottom_right",
         size_ratio: float = 0.25,  # 화면 대비 캐릭터 크기 비율
         corner_radius: int = 0,  # 0 = 둥근 모서리 없음 (자연스러운 합성)
@@ -72,14 +73,13 @@ class CharacterOverlay:
             chroma_key_threshold: 크로마키 민감도 (0.0~1.0)
         """
         self.logger = get_logger(__name__)
-        self.character_source = character_source
-        self.size_ratio = size_ratio
-        self.corner_radius = corner_radius
-        self.border_width = border_width
-        self.border_color = border_color
-        self.chroma_key_enabled = chroma_key_enabled
-        self.chroma_key_color = chroma_key_color
         self.chroma_key_threshold = chroma_key_threshold
+
+        # 기본 캐릭터 소스 설정
+        if character_source is None:
+            self.character_source = str(settings.character_image_path)
+        else:
+            self.character_source = character_source
 
         # 위치 설정
         if isinstance(position, str):
@@ -462,21 +462,18 @@ class CharacterOverlay:
 class CharacterOverlayConfig:
     """캐릭터 오버레이 설정"""
 
-    DEFAULT_CHARACTER_IMAGE_PATH = "assets/character_ref.png"
-    DEFAULT_CHARACTER_VIDEO_PATH = "assets/character_video.mp4"
-
     def __init__(self):
         self.enabled: bool = False
-        # 캐릭터 이미지: 기본 경로에 파일이 있으면 사용, 없으면 None
+        # 캐릭터 이미지: 설정에 정의된 경로에 파일이 있으면 사용, 없으면 None
         self.character_image: Optional[str] = (
-            self.DEFAULT_CHARACTER_IMAGE_PATH
-            if os.path.exists(self.DEFAULT_CHARACTER_IMAGE_PATH)
+            str(settings.character_image_path)
+            if settings.character_image_path.exists()
             else None
         )
-        # 캐릭터 영상: 기본 경로에 파일이 있으면 사용, 없으면 None
+        # 캐릭터 영상: 설정에 정의된 경로에 파일이 있으면 사용, 없으면 None
         self.character_video: Optional[str] = (
-            self.DEFAULT_CHARACTER_VIDEO_PATH
-            if os.path.exists(self.DEFAULT_CHARACTER_VIDEO_PATH)
+            str(settings.character_video_path)
+            if settings.character_video_path.exists()
             else None
         )
         self.position: str = "bottom_right"

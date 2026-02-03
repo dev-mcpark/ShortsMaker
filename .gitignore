@@ -29,6 +29,9 @@ temp/
 logs/
 .idea/
 .claude/
+# Data & History (Private)
+rss_sources.json
+schedules.json
 topic_history.json
 url_history.json
 bgm/*.mp3
