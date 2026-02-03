@@ -29,6 +29,7 @@ temp/
 logs/
 .idea/
 .claude/
+docs/
 # Data & History (Private)
 rss_sources.json
 schedules.json
