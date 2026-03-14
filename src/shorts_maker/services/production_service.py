@@ -312,12 +312,18 @@ class ProductionService:
             self._update_progress(ProductionPhase.FAILED, 0, f"오류: {e}")
             return None
 
-    async def produce_video(self, script: ShortsScript) -> ProductionResult:
+    async def produce_video(
+        self,
+        script: ShortsScript,
+        manual_clip_paths: Optional[Dict[int, str]] = None,
+    ) -> ProductionResult:
         """
         스크립트에서 비디오 생성
 
         Args:
             script: 비디오를 생성할 ShortsScript
+            manual_clip_paths: 수동 모드 시 {scene_number: file_path} 딕셔너리.
+                               None이면 VEO API를 통한 자동 생성.
 
         Returns:
             ProductionResult 객체
@@ -326,74 +332,89 @@ class ProductionService:
         clips = []
 
         try:
-            # Phase 1: Visual Generation (씬별 상세 진행)
+            # Phase 1: Visual Generation
             self._start_phase(ProductionPhase.GENERATING, num_scenes)
-            self._update_progress(ProductionPhase.GENERATING, 0,
-                                   f"비주얼 생성 시작 (0/{num_scenes})")
-
             generator = self._get_generator()
 
-            # 씬별 생성 with 진행률 업데이트
-            for i, scene in enumerate(script.scenes):
-                if self.is_cancelled():
-                    return ProductionResult(success=False, clips=clips, error="사용자에 의해 취소됨")
-
-                # 씬 처리 시작
-                self._update_scene_progress(i, "processing")
-                progress_pct = (i / num_scenes) * 100
+            if manual_clip_paths:
+                # ── 수동 모드: VEO API 호출 없이 업로드된 파일 사용 ──
                 self._update_progress(
-                    ProductionPhase.GENERATING,
-                    progress_pct,
-                    f"씬 {i + 1}/{num_scenes} 생성 중: {scene.visual_description[:30]}..."
+                    ProductionPhase.GENERATING, 0,
+                    f"수동 클립 로드 중 (0/{num_scenes})"
                 )
+                self._init_scene_progresses(num_scenes)
 
-                # 개별 씬 생성 (새로운 3단계 파이프라인 사용)
-                try:
-                    if self.mode == "video":
-                        # [NEW 3-Stage Pipeline] 배경 생성 → 캐릭터 합성
-                        # Stage 1: 배경 영상 생성 (캐릭터 없이)
-                        self._update_progress(
-                            ProductionPhase.GENERATING,
-                            progress_pct + (0.5 / num_scenes) * 100,
-                            f"씬 {i + 1}/{num_scenes}: 배경 영상 생성 중..."
+                for i, scene in enumerate(script.scenes):
+                    self._update_scene_progress(i, "processing")
+                    clip_path = manual_clip_paths.get(scene.scene_number)
+                    if not clip_path:
+                        return ProductionResult(
+                            success=False,
+                            error=f"씬 {scene.scene_number}의 클립 파일이 없습니다."
                         )
-                        bg_video_path = await generator._generate_background_video(scene)
-
-                        # Stage 2: 캐릭터 오버레이 합성
-                        if generator.character_overlay:
-                            self._update_progress(
-                                ProductionPhase.GENERATING,
-                                progress_pct + (0.8 / num_scenes) * 100,
-                                f"씬 {i + 1}/{num_scenes}: 캐릭터 합성 중..."
-                            )
-                            clip_path = await generator._composite_character_on_video(bg_video_path, scene)
-                        else:
-                            clip_path = bg_video_path
-                    else:
-                        # Image 모드
-                        clip_path = await generator._generate_image_imagen(scene)
-
-                        # 이미지 모드에서도 캐릭터 합성 적용
-                        if generator.character_overlay:
-                            clip_path = generator.character_overlay.composite_on_image(
-                                clip_path,
-                                clip_path.replace(".png", "_final.png")
-                            )
-
                     clips.append(clip_path)
                     self._update_scene_progress(i, "completed", thumbnail_path=clip_path)
+                    self._update_progress(
+                        ProductionPhase.GENERATING,
+                        (i + 1) / num_scenes * 100,
+                        f"씬 {i + 1}/{num_scenes} 클립 확인 완료"
+                    )
 
-                except Exception as scene_error:
-                    self.logger.error(f"씬 {i + 1} 생성 실패: {scene_error}")
-                    self._update_scene_progress(i, "failed", error=str(scene_error))
-                    # 실패해도 계속 진행 (mock 이미지 사용)
-                    mock_path = f"temp/error_scene_{i}.png"
-                    generator._create_mock_image(mock_path)
-                    clips.append(mock_path)
+            else:
+                # ── 자동 모드: VEO/Imagen API 호출 ──
+                self._update_progress(ProductionPhase.GENERATING, 0,
+                                       f"비주얼 생성 시작 (0/{num_scenes})")
 
-                # Rate limiting
-                import asyncio
-                await asyncio.sleep(2)
+                for i, scene in enumerate(script.scenes):
+                    if self.is_cancelled():
+                        return ProductionResult(success=False, clips=clips, error="사용자에 의해 취소됨")
+
+                    self._update_scene_progress(i, "processing")
+                    progress_pct = (i / num_scenes) * 100
+                    self._update_progress(
+                        ProductionPhase.GENERATING,
+                        progress_pct,
+                        f"씬 {i + 1}/{num_scenes} 생성 중: {scene.visual_description[:30]}..."
+                    )
+
+                    try:
+                        if self.mode == "video":
+                            self._update_progress(
+                                ProductionPhase.GENERATING,
+                                progress_pct + (0.5 / num_scenes) * 100,
+                                f"씬 {i + 1}/{num_scenes}: 배경 영상 생성 중..."
+                            )
+                            bg_video_path = await generator._generate_background_video(scene)
+
+                            if generator.character_overlay:
+                                self._update_progress(
+                                    ProductionPhase.GENERATING,
+                                    progress_pct + (0.8 / num_scenes) * 100,
+                                    f"씬 {i + 1}/{num_scenes}: 캐릭터 합성 중..."
+                                )
+                                clip_path = await generator._composite_character_on_video(bg_video_path, scene)
+                            else:
+                                clip_path = bg_video_path
+                        else:
+                            clip_path = await generator._generate_image_imagen(scene)
+                            if generator.character_overlay:
+                                clip_path = generator.character_overlay.composite_on_image(
+                                    clip_path,
+                                    clip_path.replace(".png", "_final.png")
+                                )
+
+                        clips.append(clip_path)
+                        self._update_scene_progress(i, "completed", thumbnail_path=clip_path)
+
+                    except Exception as scene_error:
+                        self.logger.error(f"씬 {i + 1} 생성 실패: {scene_error}")
+                        self._update_scene_progress(i, "failed", error=str(scene_error))
+                        mock_path = f"temp/error_scene_{i}.png"
+                        generator._create_mock_image(mock_path)
+                        clips.append(mock_path)
+
+                    import asyncio
+                    await asyncio.sleep(2)
 
             if not clips:
                 return ProductionResult(success=False, error="클립 생성 실패")
@@ -433,7 +454,7 @@ class ProductionService:
             if not video_path or not os.path.exists(video_path):
                 return ProductionResult(success=False, clips=clips, error="비디오 편집 실패")
 
-            self._update_progress(ProductionPhase.EDITING, 100, f"✓ 편집 완료")
+            self._update_progress(ProductionPhase.EDITING, 100, "✓ 편집 완료")
             self._update_progress(ProductionPhase.COMPLETED, 100,
                                    f"🎬 프로덕션 완료: {video_path}")
 

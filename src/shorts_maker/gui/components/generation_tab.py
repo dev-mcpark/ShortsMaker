@@ -7,10 +7,9 @@ from typing import TYPE_CHECKING
 from shorts_maker.gui.components.common.safe_ui import safe_notify
 from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.services.production_service import ProductionService, ProductionPhase, ProductionProgress
-from shorts_maker.gui.components.common.progress_utils import format_time, update_scene_grid
-from shorts_maker.generator.video_generator import VideoGenerator
-from shorts_maker.editor.video_editor import VideoEditor
+from shorts_maker.gui.components.common.progress_utils import update_scene_grid
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
+from shorts_maker.utils.veo_prompt_exporter import VeoPromptExporter
 from shorts_maker.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -19,9 +18,141 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
+                        start_edit_btn: ui.button,
+                        scene_cards_container: ui.column) -> None:
+    """씬별 VEO 프롬프트 + 파일 업로드 패널 렌더링 (Right Panel 영역)"""
+
+    if not state.script:
+        try:
+            scene_cards_container.clear()
+        except RuntimeError:
+            return
+        with scene_cards_container:
+            with ui.card().classes('w-full p-8 bg-slate-800/50 border border-dashed border-slate-600'):
+                with ui.column().classes('items-center gap-4'):
+                    ui.icon('description', size='xl').classes('text-slate-500')
+                    ui.label('스크립트를 먼저 로드해주세요').classes('text-lg text-slate-400')
+                    ui.label('Planning 탭에서 스크립트를 생성하거나 로드한 후 수동 모드를 사용하세요.').classes('text-sm text-slate-500 text-center')
+        return
+
+    # 스크립트 변경 시 script_id 초기화
+    if not state.manual_script_id:
+        state.manual_script_id = exporter.get_script_id(state.script)
+
+    scenes_status = exporter.get_scenes_status(state.script, state.manual_script_id)
+    ready_count = sum(1 for s in scenes_status if s["exists"])
+    total = len(scenes_status)
+
+    try:
+        scene_cards_container.clear()
+    except RuntimeError:
+        return
+
+    with scene_cards_container:
+        # 헤더: 진행 현황
+        with ui.card().classes('w-full p-3 bg-slate-800 border border-slate-600 mb-2'):
+            with ui.row().classes('w-full items-center justify-between'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.icon('video_library', size='sm').classes('text-purple-400')
+                    ui.label('VEO 프롬프트 & 영상 업로드').classes('text-sm font-bold text-purple-300')
+                ui.badge(f'{ready_count}/{total} 완료').classes(
+                    'bg-green-700 text-white' if ready_count == total else 'bg-slate-600 text-gray-300'
+                )
+
+            # JSON 전체 복사 버튼
+            def copy_all_json():
+                json_str = exporter.export_json(state.script, state.manual_script_id)
+                ui.run_javascript(
+                    f'navigator.clipboard.writeText({repr(json_str)})'
+                )
+                safe_notify('전체 프롬프트 JSON이 클립보드에 복사되었습니다.', type='positive')
+
+            ui.button(
+                '전체 JSON 복사', icon='content_copy', on_click=copy_all_json
+            ).classes('mt-2 w-full').props('flat dense color=purple-3 size=sm')
+
+        # 씬별 카드
+        for scene_info in scenes_status:
+            scene_num = scene_info["scene_number"]
+            exists = scene_info["exists"]
+            prompt = scene_info["prompt"]
+
+            with ui.card().classes(
+                'w-full p-3 border ' +
+                ('bg-slate-800/80 border-green-700' if exists else 'bg-slate-900/60 border-slate-600')
+            ):
+                # 씬 헤더
+                with ui.row().classes('w-full items-center justify-between mb-2'):
+                    with ui.row().classes('items-center gap-2'):
+                        ui.icon(
+                            'check_circle' if exists else 'hourglass_empty',
+                            size='xs'
+                        ).classes('text-green-400' if exists else 'text-gray-500')
+                        ui.label(f'씬 {scene_num}').classes('text-sm font-bold text-white')
+
+                    status_label = ui.badge(
+                        '✅ 업로드 완료' if exists else '⏳ 대기 중'
+                    ).classes(
+                        'bg-green-700 text-white text-xs' if exists
+                        else 'bg-slate-700 text-gray-400 text-xs'
+                    )
+
+                # 스크립트 텍스트 (참고용)
+                ui.label(scene_info["script_text"]).classes(
+                    'text-xs text-gray-400 mb-2 italic'
+                )
+
+                # 프롬프트 텍스트 + 복사 버튼
+                with ui.card().classes('w-full p-2 bg-black/40 border border-slate-700'):
+                    ui.label(prompt).classes('text-xs text-gray-300 leading-relaxed')
+
+                    def make_copy_fn(p=prompt):
+                        def copy_prompt():
+                            ui.run_javascript(f'navigator.clipboard.writeText({repr(p)})')
+                            safe_notify(f'씬 {scene_num} 프롬프트가 복사되었습니다.', type='info')
+                        return copy_prompt
+
+                    ui.button(
+                        '복사', icon='content_copy', on_click=make_copy_fn()
+                    ).classes('mt-1 self-end').props('flat dense color=grey-5 size=xs')
+
+                # 업로드 버튼
+                clip_path_display = ui.label(
+                    scene_info["clip_path"].split('/')[-1] if exists else ''
+                ).classes('text-xs text-green-400 mt-1')
+
+                def make_upload_handler(sn=scene_num, disp=clip_path_display,
+                                        stat=status_label):
+                    def handle_upload(e):
+                        try:
+                            saved_path = exporter.save_uploaded_clip(
+                                e.content.read(), state.manual_script_id, sn
+                            )
+                            state.manual_clip_paths[sn] = str(saved_path)
+                            disp.text = saved_path.name
+                            stat.text = '✅ 업로드 완료'
+                            stat.classes(replace='bg-green-700 text-white text-xs')
+                            safe_notify(f'씬 {sn} 영상 업로드 완료!', type='positive')
+                            # 전체 완료 여부 확인 후 버튼 활성화
+                            if len(state.manual_clip_paths) == len(state.script.scenes):
+                                start_edit_btn.enable()
+                        except Exception as err:
+                            safe_notify(f'씬 {sn} 업로드 실패: {err}', type='negative')
+                            logger.error(f'씬 {sn} 업로드 오류: {err}')
+                    return handle_upload
+
+                ui.upload(
+                    on_upload=make_upload_handler(),
+                    auto_upload=True,
+                    max_file_size=500_000_000,
+                ).props('accept=".mp4,.mov,.webm" flat dense color=purple').classes('mt-2 w-full')
+
+
 def render_generation_tab(state: 'AppState') -> None:
     """Video Generation 탭 렌더링"""
 
+    exporter = VeoPromptExporter()
     phase_labels = {}
     phases = ['ready', 'visuals', 'editing', 'complete']
 
@@ -60,6 +191,21 @@ def render_generation_tab(state: 'AppState') -> None:
                                 return 'VIDEO' if state.mode == 'video' else 'IMAGE'
                             ui.badge(get_mode_badge()).classes('bg-purple-600 text-white px-2')
 
+                    # ── 생성 방식 선택 ──
+                    with ui.card().classes('w-full p-3 bg-slate-900/60 border border-slate-600 mb-4'):
+                        ui.label('영상 생성 방식').classes('text-xs text-gray-400 uppercase tracking-wider mb-2')
+                        mode_toggle = ui.toggle(
+                            {False: '🤖 자동 (VEO API)', True: '✋ 수동 (직접 업로드)'},
+                            value=state.manual_video_mode,
+                        ).props('color=purple').classes('w-full')
+
+                        def on_mode_change(e):
+                            state.manual_video_mode = e.value
+                            state.reset_manual_mode()
+                            refresh_right_panel()
+
+                        mode_toggle.on_value_change(on_mode_change)
+
                     # Pipeline Status
                     ui.label('Pipeline Status').classes('text-xs text-gray-400 uppercase tracking-wider mb-3')
 
@@ -93,15 +239,11 @@ def render_generation_tab(state: 'AppState') -> None:
                     video_player = None
                     placeholder_content = None
 
-                    async def run_production():
+                    async def _run_production_core(manual_clip_paths=None):
+                        """공통 프로덕션 실행 로직 (자동/수동 모드 공유)"""
                         nonlocal video_player, placeholder_content
-
-                        if not state.script:
-                            safe_notify("Please load a script first!", type='warning')
-                            return
-
                         production_running = True
-                        
+
                         try:
                             gen_spinner.visible = True
                             scene_progress_container.visible = True
@@ -110,7 +252,6 @@ def render_generation_tab(state: 'AppState') -> None:
                             return
 
                         try:
-                            # Character Overlay Config 생성
                             char_config = None
                             if state.character_overlay_enabled:
                                 char_config = CharacterOverlayConfig()
@@ -128,13 +269,11 @@ def render_generation_tab(state: 'AppState') -> None:
                                 char_config.chroma_key_color = state.chroma_key_color
                                 char_config.chroma_key_threshold = state.chroma_key_threshold
 
-                            # ProductionService 생성
                             service = ProductionService(
                                 mode=state.mode,
                                 character_overlay_config=char_config
                             )
 
-                            # Progress callback 설정
                             def on_progress(progress: ProductionProgress):
                                 state.pipeline_phase = progress.phase
                                 state.pipeline_progress = progress.progress_percent
@@ -147,63 +286,56 @@ def render_generation_tab(state: 'AppState') -> None:
 
                             service.set_progress_callback(on_progress)
 
-                            # Monitor task for real-time UI updates
                             async def monitor_progress():
                                 while production_running:
                                     progress = service.progress
-                                    
-                                    # Update scene grid
                                     try:
                                         update_scene_grid(progress.scene_progresses, scene_progress_container)
                                     except RuntimeError:
                                         pass
-                                    
-                                    # Update phase labels
                                     try:
                                         phase_map = {
                                             ProductionPhase.GENERATING: 'visuals',
                                             ProductionPhase.EDITING: 'editing',
                                             ProductionPhase.COMPLETED: 'complete'
                                         }
-                                        
                                         if progress.phase in phase_map:
                                             update_progress_ui(phase_map[progress.phase], progress.progress_percent)
                                     except (RuntimeError, KeyError):
                                         pass
-                                    
-                                    # Break on completion or failure
                                     if progress.phase in [ProductionPhase.COMPLETED, ProductionPhase.FAILED]:
                                         break
-                                        
                                     await asyncio.sleep(0.3)
 
-                            # Start monitor task
                             monitor_task = asyncio.create_task(monitor_progress())
 
-                            # Run production
-                            logger.info("=== Starting Production with ProductionService ===")
-                            result = await service.produce_video(state.script)
+                            logger.info("=== Starting Production ===")
+                            result = await service.produce_video(
+                                state.script,
+                                manual_clip_paths=manual_clip_paths
+                            )
 
-                            # Stop monitoring
                             production_running = False
                             await monitor_task
 
                             if result.success:
                                 state.final_video_path = result.video_path
                                 state.generated_clips = result.clips
-                                
                                 update_progress_ui('complete', 100)
-                                safe_notify("🎬 Production Complete!", type='positive')
-                                
+                                safe_notify("🎬 편집 완료!", type='positive')
                                 if video_player and state.final_video_path:
                                     try:
                                         video_player.set_source(state.final_video_path)
                                         video_player.visible = True
                                         if placeholder_content:
                                             placeholder_content.visible = False
+                                        # 수동 모드: 오른쪽 패널 복원
+                                        if right_manual_panel:
+                                            right_manual_panel.visible = False
+                                        if right_preview_panel:
+                                            right_preview_panel.visible = True
                                     except RuntimeError:
                                         pass
-
                                 logger.info(f"Video saved to: {state.final_video_path}")
                             else:
                                 safe_notify(f"Production failed: {result.error}", type='negative')
@@ -219,10 +351,48 @@ def render_generation_tab(state: 'AppState') -> None:
                             except RuntimeError:
                                 pass
 
-                    ui.button(
+                    async def run_production():
+                        if not state.script:
+                            safe_notify("스크립트를 먼저 로드해주세요.", type='warning')
+                            return
+                        await _run_production_core(manual_clip_paths=None)
+
+                    async def run_production_with_clips(clips: dict):
+                        if not state.script:
+                            safe_notify("스크립트를 먼저 로드해주세요.", type='warning')
+                            return
+                        # 수동 모드에서 편집 시작 시 오른쪽 패널 전환
+                        try:
+                            if right_manual_panel:
+                                right_manual_panel.visible = False
+                            if right_preview_panel:
+                                right_preview_panel.visible = True
+                        except RuntimeError:
+                            pass
+                        await _run_production_core(manual_clip_paths=clips)
+
+                    # 자동 모드 버튼
+                    auto_btn = ui.button(
                         'Start Production',
                         on_click=run_production
                     ).classes('w-full').props('color=teal unelevated size=lg icon=rocket_launch')
+
+                    # 수동 모드 버튼 (초기 비활성)
+                    async def run_manual_production():
+                        if not state.script or not state.manual_clip_paths:
+                            safe_notify('먼저 모든 씬의 영상을 업로드해주세요.', type='warning')
+                            return
+                        await run_production_with_clips(state.manual_clip_paths)
+
+                    manual_btn = ui.button(
+                        '편집 시작',
+                        on_click=run_manual_production
+                    ).classes('w-full').props('color=purple unelevated size=lg icon=movie_edit')
+                    manual_btn.disable()
+
+                    # 초기 표시 상태
+                    auto_btn.visible = not state.manual_video_mode
+                    manual_btn.visible = state.manual_video_mode
 
             # === Quick Settings ===
             with ui.card().classes('w-full p-4 bg-slate-700 border border-slate-600'):
@@ -333,9 +503,14 @@ def render_generation_tab(state: 'AppState') -> None:
                             ).props('outlined dense dark').classes('w-24')
                             chroma_color_select.bind_value(state, 'chroma_key_color')
 
-        # === Right Panel: Preview Monitor ===
-        with ui.column().classes('flex-grow h-full'):
-            with ui.card().classes('w-full h-full p-0 bg-black rounded-xl border-4 border-slate-800 shadow-2xl overflow-hidden'):
+        # === Right Panel: Preview Monitor / Manual Panel ===
+        right_preview_panel = None
+        right_manual_panel = None
+
+        with ui.column().classes('flex-grow h-full gap-0'):
+
+            # ── 프리뷰 패널 (자동 모드 / 편집 완료 후) ──
+            with ui.card().classes('w-full h-full p-0 bg-black rounded-xl border-4 border-slate-800 shadow-2xl overflow-hidden') as right_preview_panel:
                 with ui.element('div').classes('w-full h-8 bg-gradient-to-b from-slate-700 to-slate-800 flex items-center px-3 gap-2'):
                     ui.element('div').classes('w-3 h-3 rounded-full bg-red-500')
                     ui.element('div').classes('w-3 h-3 rounded-full bg-yellow-500')
@@ -362,3 +537,27 @@ def render_generation_tab(state: 'AppState') -> None:
 
                     video_player = ui.video('').classes('max-h-full max-w-full')
                     video_player.visible = False
+
+            # ── 수동 모드 패널 ──
+            with ui.scroll_area().classes('w-full h-full') as right_manual_panel:
+                scene_cards_container = ui.column().classes('w-full gap-3 p-2')
+
+            # 초기 패널 표시 상태
+            right_preview_panel.visible = not state.manual_video_mode
+            right_manual_panel.visible = state.manual_video_mode
+
+            def refresh_right_panel():
+                """모드 전환 시 Right Panel 업데이트"""
+                try:
+                    right_preview_panel.visible = not state.manual_video_mode
+                    right_manual_panel.visible = state.manual_video_mode
+                    auto_btn.visible = not state.manual_video_mode
+                    manual_btn.visible = state.manual_video_mode
+                    if state.manual_video_mode and state.script:
+                        render_manual_panel(state, exporter, manual_btn, scene_cards_container)
+                except RuntimeError:
+                    pass
+
+            # 초기 수동 패널 렌더링 (수동 모드 기본값이면)
+            if state.manual_video_mode and state.script:
+                render_manual_panel(state, exporter, manual_btn, scene_cards_container)

@@ -73,6 +73,11 @@ class AppState:
     chroma_key_color: str = "green"
     chroma_key_threshold: float = 0.3
 
+    # 수동 생성 모드
+    manual_video_mode: bool = False
+    manual_script_id: str = ""                                    # 현재 스크립트 ID (clips 폴더명)
+    manual_clip_paths: Dict[int, str] = field(default_factory=dict)  # {scene_number: file_path}
+
     def reset_pipeline(self) -> None:
         """파이프라인 상태 초기화"""
         self.pipeline_running = False
@@ -86,6 +91,11 @@ class AppState:
         self.elapsed_seconds = 0.0
         self.estimated_seconds = 0.0
         self.last_error = None
+
+    def reset_manual_mode(self) -> None:
+        """수동 모드 상태 초기화 (스크립트 변경 시 호출)"""
+        self.manual_script_id = ""
+        self.manual_clip_paths.clear()
 
     def add_to_history(self, title: str, success: bool) -> None:
         """실행 이력에 추가"""

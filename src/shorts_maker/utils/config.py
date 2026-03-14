@@ -85,6 +85,7 @@ class Settings:
     temp_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "temp")
     output_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "outputs")
     scripts_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "outputs" / "scripts")
+    clips_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "outputs" / "clips")
     bgm_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "bgm")
     logs_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "logs")
     assets_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "assets")
@@ -118,8 +119,8 @@ class Settings:
         """디렉토리 자동 생성 및 환경변수 설정"""
         # 디렉토리 생성
         for dir_path in [self.temp_dir, self.output_dir, self.scripts_dir,
-                         self.bgm_dir, self.logs_dir, self.config_dir,
-                         self.credentials_dir]:
+                         self.clips_dir, self.bgm_dir, self.logs_dir,
+                         self.config_dir, self.credentials_dir]:
             dir_path.mkdir(parents=True, exist_ok=True)
 
         # Google Cloud 인증 환경변수 자동 설정

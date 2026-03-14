@@ -6,7 +6,7 @@ from google import genai
 from google.genai import types
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
-from shorts_maker.utils.character_overlay import CharacterOverlay, CharacterOverlayConfig
+from shorts_maker.utils.character_overlay import CharacterOverlayConfig
 
 
 class VideoGenerator:
@@ -44,6 +44,28 @@ class VideoGenerator:
             self.logger.error(f"❌ Failed to init GenAI Client: {e}")
             self.client = None
 
+    async def load_manual_clips(
+        self, script, clip_paths: dict
+    ) -> List[str]:
+        """
+        수동 업로드된 클립 경로를 generate_clips()와 동일한 형식으로 반환.
+
+        Args:
+            script: ShortsScript 객체
+            clip_paths: {scene_number: file_path} 딕셔너리
+
+        Returns:
+            씬 순서대로 정렬된 클립 파일 경로 목록
+        """
+        clips = []
+        for scene in script.scenes:
+            path = clip_paths.get(scene.scene_number)
+            if not path:
+                raise ValueError(f"씬 {scene.scene_number}의 클립 파일이 없습니다.")
+            clips.append(path)
+            self.logger.info(f"✅ 수동 클립 로드 - 씬 {scene.scene_number}: {path}")
+        return clips
+
     async def generate_clips(self, script, parallel: bool = False) -> List[str]:
         """
         스크립트의 모든 씬에 대해 클립 생성
@@ -70,16 +92,16 @@ class VideoGenerator:
                 self.logger.info(f"\n🎥 === Processing Scene {scene.scene_number} (Three-Stage Pipeline) ===")
 
                 # Stage 1: Generate Background-Only Video with Veo
-                self.logger.info(f"    📍 Stage 1: Generating background video (no character)")
+                self.logger.info("    📍 Stage 1: Generating background video (no character)")
                 bg_video_path = await self._generate_background_video(scene)
 
                 # Stage 2: Composite Character Overlay
                 if self.character_overlay:
-                    self.logger.info(f"    📍 Stage 2: Compositing character overlay")
+                    self.logger.info("    📍 Stage 2: Compositing character overlay")
                     final_video_path = await self._composite_character_on_video(bg_video_path, scene)
                     clips_paths.append(final_video_path)
                 else:
-                    self.logger.info(f"    ⚠️ Character overlay disabled, using background only")
+                    self.logger.info("    ⚠️ Character overlay disabled, using background only")
                     clips_paths.append(bg_video_path)
             else:
                 # Image Mode (Legacy/Simple)
@@ -123,7 +145,7 @@ class VideoGenerator:
             else:
                 # 예외 발생 시 mock 이미지 생성
                 self.logger.error(f"병렬 처리 중 오류: {result}")
-                mock_path = f"temp/error_scene.png"
+                mock_path = "temp/error_scene.png"
                 self._create_mock_image(mock_path)
                 clips_paths.append(mock_path)
 
@@ -253,12 +275,12 @@ class VideoGenerator:
                 err_str = str(e).lower()
 
                 if "internal error" in err_str or "500" in err_str:
-                    self.logger.warning(f"    ⚠️ Server error, retrying in 30s...")
+                    self.logger.warning("    ⚠️ Server error, retrying in 30s...")
                     time.sleep(30)
                     continue
 
                 if "violate" in err_str:
-                    self.logger.warning(f"    ⚠️ Safety violation, simplifying prompt...")
+                    self.logger.warning("    ⚠️ Safety violation, simplifying prompt...")
                     # 더 단순한 프롬프트로 재시도
                     background_prompt = (
                         f"A cinematic establishing shot: {original_prompt}. "
@@ -286,7 +308,7 @@ class VideoGenerator:
         self.logger.info(f"🎨 [Legacy Stage 1] Generating Base Image with Imagen 3 for Scene {scene.scene_number}...")
 
         if not self.client:
-            self.logger.warning(f"    ⚠️ No GenAI client, creating mock image")
+            self.logger.warning("    ⚠️ No GenAI client, creating mock image")
             self._create_mock_image(output_path)
             return output_path
 
@@ -411,13 +433,13 @@ class VideoGenerator:
                 
                 # Case 1: Internal Error (Transient)
                 if "internal error" in err_str or "500" in err_str or "try again later" in err_str:
-                    self.logger.warning(f"    ⚠️ Server Error. Waiting 30s before retry...")
+                    self.logger.warning("    ⚠️ Server Error. Waiting 30s before retry...")
                     time.sleep(30)
                     continue 
                 
                 # Case 2: Safety Violation
                 if "violate" in err_str or "code': 3" in err_str:
-                    self.logger.warning(f"    ⚠️ Safety Violation.")
+                    self.logger.warning("    ⚠️ Safety Violation.")
                     if attempt < max_attempts - 1:
                         self.logger.info("    ♻️ Retrying safely (background scene only, no person)...")
                         # Remove person/character references to avoid safety filters
@@ -527,7 +549,7 @@ class VideoGenerator:
 
             if response and response.generated_images:
                 response.generated_images[0].image.save(output_path)
-                self.logger.info(f"    ✅ Character + background composed successfully")
+                self.logger.info("    ✅ Character + background composed successfully")
             else:
                 raise Exception("No image returned from edit_image")
 
@@ -536,7 +558,7 @@ class VideoGenerator:
             self.logger.error(f"    ❌ Character composition failed: {error_msg}")
 
             # Fallback 1: Try without reference image (text-only generation)
-            self.logger.info(f"    ⚙️ Fallback: Generating with text prompt only (no character reference)")
+            self.logger.info("    ⚙️ Fallback: Generating with text prompt only (no character reference)")
             try:
                 fallback_prompt = (
                     f"A cinematic news broadcast scene: {scene.visual_description}. "
@@ -555,7 +577,7 @@ class VideoGenerator:
 
                 if response and response.generated_images:
                     response.generated_images[0].image.save(output_path)
-                    self.logger.warning(f"    ⚠️ Generated without character reference (consistency may vary)")
+                    self.logger.warning("    ⚠️ Generated without character reference (consistency may vary)")
                     return
             except Exception as fallback_error:
                 self.logger.error(f"    ❌ Fallback generation also failed: {fallback_error}")
