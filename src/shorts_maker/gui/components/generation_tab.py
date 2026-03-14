@@ -292,7 +292,7 @@ def render_generation_tab(state: 'AppState') -> None:
                         ui.label('Video Path').classes('text-xs text-gray-500')
                         char_video_input = ui.input(
                             value=state.character_video_path,
-                            placeholder=str(settings.character_video_path)
+                            placeholder='Path to character video file'
                         ).props('outlined dense dark').classes('w-full')
                         char_video_input.bind_value(state, 'character_video_path')
 

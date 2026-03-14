@@ -41,8 +41,8 @@ def update_scene_grid(scene_progresses: List, scene_grid: ui.element) -> None:
                 return
 
             for i, scene_prog in enumerate(scene_progresses):
-                progress = scene_prog.get('progress', 0)
-                status = scene_prog.get('status', 'pending')
+                status = getattr(scene_prog, 'status', 'pending')
+                progress = 100 if status == 'completed' else (50 if status == 'processing' else 0)
                 gradient = SCENE_GRADIENTS[i % len(SCENE_GRADIENTS)]
 
                 # 상태별 아이콘 및 색상

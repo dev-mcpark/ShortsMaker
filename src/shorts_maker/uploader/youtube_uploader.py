@@ -33,8 +33,14 @@ class YouTubeUploader:
         # 인증 정보가 없거나 유효하지 않으면 로그인 시도
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
+                try:
+                    creds.refresh(Request())
+                except Exception as e:
+                    self.logger.warning(f"토큰 갱신 실패, 재인증 진행: {e}")
+                    os.remove(self.token_file)
+                    creds = None
+
+            if creds is None:
                 if not os.path.exists(self.client_secrets_file):
                     raise FileNotFoundError(f"{self.client_secrets_file} 파일이 없습니다. Google Console에서 다운로드해주세요.")
 
