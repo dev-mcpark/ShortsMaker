@@ -6,7 +6,6 @@ import json
 from typing import TYPE_CHECKING
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify
-from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.gui.config.constants import SCENE_COST_MULTIPLIER
 from shorts_maker.gui.config.ui_theme import SCENE_GRADIENTS
 from shorts_maker.planner.script_planner import ScriptPlanner, ShortsScript
@@ -18,16 +17,22 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+ACCENT_COLORS = [
+    ('from-pink-500', 'to-rose-600', 'border-pink-500/50', 'text-pink-300'),
+    ('from-purple-500', 'to-violet-600', 'border-purple-500/50', 'text-purple-300'),
+    ('from-indigo-500', 'to-blue-600', 'border-indigo-500/50', 'text-indigo-300'),
+    ('from-teal-500', 'to-cyan-600', 'border-teal-500/50', 'text-teal-300'),
+    ('from-amber-500', 'to-orange-600', 'border-amber-500/50', 'text-amber-300'),
+]
+
 
 def render_planning_tab(state: 'AppState') -> None:
     """Script Planning 탭 렌더링"""
 
-    # 스크립트 프리뷰 컨테이너 (나중에 참조)
     script_preview_container = None
     editor_area = None
 
     def update_script_preview():
-        """스크립트 내용을 시각적 카드로 표시"""
         try:
             script_preview_container.clear()
         except RuntimeError:
@@ -35,205 +40,198 @@ def render_planning_tab(state: 'AppState') -> None:
 
         if not state.script:
             with script_preview_container:
-                with ui.card().classes('w-full p-8 bg-slate-800/50 border border-dashed border-slate-600'):
+                with ui.element('div').classes('w-full h-full flex items-center justify-center py-20'):
                     with ui.column().classes('items-center gap-4'):
-                        ui.icon('description', size='xl').classes('text-slate-500')
-                        ui.label('No Script Generated').classes('text-xl text-slate-400')
-                        ui.label('Generate a script from RSS or URL to get started').classes('text-sm text-slate-500')
+                        ui.icon('auto_stories', size='xl').classes('text-slate-600')
+                        ui.label('각본이 없습니다').classes('text-xl font-bold text-slate-500')
+                        ui.label('왼쪽에서 RSS 또는 URL로 각본을 생성하세요').classes('text-sm text-slate-600')
             return
 
         script = state.script
+        total_duration = sum(s.duration_seconds for s in script.scenes) if script.scenes else 0
 
         with script_preview_container:
-            # === 스크립트 메타 정보 카드 ===
-            with ui.card().classes('w-full p-5 bg-gradient-to-r from-pink-900/30 to-purple-900/30 border border-pink-500/30 mb-4'):
-                with ui.row().classes('w-full items-start justify-between mb-3'):
-                    with ui.column().classes('gap-1 flex-grow'):
+            # ── 각본 헤더 ──────────────────────────────────────
+            with ui.element('div').classes('w-full p-5 rounded-xl bg-gradient-to-r from-pink-900/40 to-purple-900/40 border border-pink-500/30 mb-5'):
+                with ui.row().classes('w-full items-start justify-between mb-2'):
+                    with ui.column().classes('gap-1 flex-grow mr-4'):
                         ui.label(script.title).classes('text-xl font-bold text-white leading-tight')
-                        ui.label(script.description).classes('text-sm text-gray-400 mt-1')
+                        ui.label(script.description).classes('text-sm text-gray-400 leading-relaxed mt-1')
 
                     mode_color = 'bg-purple-600' if getattr(script, 'generation_mode', 'image') == 'video' else 'bg-blue-600'
                     mode_text = 'VIDEO' if getattr(script, 'generation_mode', 'image') == 'video' else 'IMAGE'
-                    ui.badge(mode_text).classes(f'{mode_color} text-white px-2 py-1')
+                    ui.badge(mode_text).classes(f'{mode_color} text-white text-xs px-3 py-1 rounded-full shrink-0')
 
-                ui.separator().classes('bg-slate-600/50 my-3')
+                ui.separator().classes('bg-pink-500/20 my-3')
 
-                # 메타 정보
-                with ui.row().classes('w-full gap-4 flex-wrap'):
-                    if hasattr(script, 'source_name') and script.source_name:
-                        with ui.element('div').classes('flex items-center gap-2 bg-slate-800/50 rounded-full px-3 py-1'):
-                            ui.icon('link', size='xs').classes('text-pink-400')
-                            source_text = script.source_name[:25] + '...' if len(script.source_name) > 25 else script.source_name
-                            ui.label(source_text).classes('text-xs text-gray-300')
+                with ui.row().classes('w-full gap-6 flex-wrap'):
+                    with ui.row().classes('items-center gap-2'):
+                        ui.icon('theaters', size='xs').classes('text-pink-400')
+                        ui.label(f'{len(script.scenes)} 씬').classes('text-sm font-bold text-white')
+
+                    with ui.row().classes('items-center gap-2'):
+                        ui.icon('timer', size='xs').classes('text-teal-400')
+                        ui.label(f'{total_duration:.0f}초 ({total_duration/60:.1f}분)').classes('text-sm font-bold text-teal-300')
 
                     if script.tags:
-                        tag_colors = ['bg-pink-600/50 text-pink-200', 'bg-purple-600/50 text-purple-200',
-                                      'bg-indigo-600/50 text-indigo-200', 'bg-teal-600/50 text-teal-200']
-                        for idx, tag in enumerate(script.tags[:4]):
-                            with ui.element('div').classes(f'flex items-center gap-1 {tag_colors[idx % len(tag_colors)]} rounded-full px-3 py-1'):
-                                ui.icon('tag', size='xs')
-                                ui.label(tag).classes('text-xs font-medium')
+                        for tag in script.tags[:3]:
+                            ui.badge(f'#{tag}').classes('bg-slate-700 text-gray-300 text-xs px-2')
 
-                    total_duration = sum(s.duration_seconds for s in script.scenes)
-                    with ui.element('div').classes('flex items-center gap-2 bg-teal-600/30 rounded-full px-3 py-1'):
-                        ui.icon('timer', size='xs').classes('text-teal-300')
-                        ui.label(f'{total_duration:.0f}초 ({total_duration/60:.1f}분)').classes('text-xs text-teal-200 font-medium')
+            # ── 씬 타임라인 바 ──────────────────────────────────
+            with ui.element('div').classes('w-full mb-4'):
+                with ui.row().classes('w-full items-center gap-1 mb-1'):
+                    ui.label('타임라인').classes('text-xs text-gray-500 uppercase tracking-wider')
+                    ui.label(f'{len(script.scenes)} 씬').classes('text-xs text-gray-600 ml-1')
 
-            # === 씬 타임라인 ===
-            total_duration = sum(s.duration_seconds for s in script.scenes) if script.scenes else 1
-
-            with ui.row().classes('w-full items-center justify-between mb-3'):
-                ui.label('Scene Timeline').classes('text-sm font-bold text-gray-400 uppercase tracking-wider')
-                with ui.row().classes('items-center gap-1'):
+                with ui.row().classes('w-full items-center gap-1'):
                     for i, s in enumerate(script.scenes):
-                        progress_width = max(20, int(s.duration_seconds / total_duration * 200))
-                        colors = ['bg-pink-500', 'bg-purple-500', 'bg-indigo-500', 'bg-blue-500', 'bg-teal-500']
-                        ui.element('div').classes(f'h-2 rounded-full {colors[i % len(colors)]}').style(f'width: {progress_width}px')
+                        pct = max(4, int(s.duration_seconds / max(total_duration, 1) * 100))
+                        grad = SCENE_GRADIENTS[i % len(SCENE_GRADIENTS)]
+                        with ui.element('div').style(f'flex: {pct}').classes(f'h-2 rounded-full bg-gradient-to-r {grad} relative group'):
+                            with ui.element('div').classes('absolute bottom-4 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-1 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none'):
+                                ui.label(f'씬{s.scene_number} {s.duration_seconds:.0f}s')
 
-            # 씬 카드들
+            # ── 씬 카드들 ──────────────────────────────────────
             for i, scene in enumerate(script.scenes):
-                scene_num = scene.scene_number
+                from_c, to_c, border_c, label_c = ACCENT_COLORS[i % len(ACCENT_COLORS)]
                 duration = scene.duration_seconds
-                progress_pct = (duration / total_duration * 100) if total_duration > 0 else 0
 
-                with ui.card().classes('w-full p-0 bg-slate-800 border border-slate-700 hover:border-pink-500/50 transition-all duration-300 mb-3 overflow-hidden'):
-                    with ui.element('div').classes('w-full h-1 bg-slate-700'):
-                        gradient = SCENE_GRADIENTS[i % len(SCENE_GRADIENTS)]
-                        ui.element('div').classes(f'h-full bg-gradient-to-r {gradient}').style(f'width: {progress_pct}%')
+                with ui.element('div').classes(f'w-full rounded-xl border {border_c} bg-slate-800/60 overflow-hidden mb-4'):
+                    # 씬 번호 헤더
+                    with ui.element('div').classes(f'w-full px-4 py-3 bg-gradient-to-r {from_c} {to_c} bg-opacity-20'):
+                        with ui.row().classes('w-full items-center justify-between'):
+                            with ui.row().classes('items-center gap-3'):
+                                with ui.element('div').classes(f'w-8 h-8 rounded-lg bg-gradient-to-br {from_c} {to_c} flex items-center justify-center shadow'):
+                                    ui.label(str(scene.scene_number)).classes('text-sm font-bold text-white')
+                                ui.label(f'씬 {scene.scene_number}').classes(f'text-sm font-bold {label_c}')
+                            with ui.row().classes('items-center gap-2'):
+                                ui.icon('timer', size='xs').classes('text-gray-400')
+                                ui.label(f'{duration:.0f}초').classes('text-xs text-gray-400')
 
-                    with ui.element('div').classes('p-4'):
-                        with ui.row().classes('w-full gap-4'):
-                            # 씬 번호
-                            with ui.column().classes('items-center justify-center'):
-                                gradient = SCENE_GRADIENTS[i % len(SCENE_GRADIENTS)]
-                                with ui.element('div').classes(f'w-14 h-14 rounded-xl bg-gradient-to-br {gradient} flex items-center justify-center shadow-lg'):
-                                    ui.label(str(scene_num)).classes('text-xl font-bold text-white')
-                                with ui.element('div').classes('mt-2 px-2 py-1 rounded-full bg-slate-700/80 text-center'):
-                                    ui.label(f'{duration:.0f}s').classes('text-xs text-gray-300 font-medium')
+                    with ui.element('div').classes('p-4 flex flex-col gap-3'):
+                        # 나레이션 (대사)
+                        with ui.element('div').classes('w-full rounded-lg bg-amber-900/20 border border-amber-500/30 p-3'):
+                            with ui.row().classes('items-start gap-2 mb-1'):
+                                ui.icon('record_voice_over', size='xs').classes('text-amber-400 mt-0.5 shrink-0')
+                                ui.label('나레이션').classes('text-xs font-bold text-amber-400 uppercase tracking-wider')
+                            ui.label(scene.script_text).classes('text-sm text-white leading-relaxed pl-1')
 
-                            # 씬 내용
-                            with ui.column().classes('flex-grow gap-3'):
-                                with ui.element('div').classes('bg-slate-700/30 rounded-lg p-3 border-l-4 border-amber-500'):
-                                    with ui.row().classes('items-start gap-2'):
-                                        ui.icon('record_voice_over', size='sm').classes('text-amber-400')
-                                        ui.label(scene.script_text).classes('text-sm text-white leading-relaxed font-medium')
+                        # 비주얼 묘사
+                        with ui.element('div').classes('w-full rounded-lg bg-blue-900/20 border border-blue-500/30 p-3'):
+                            with ui.row().classes('items-start gap-2 mb-1'):
+                                ui.icon('image', size='xs').classes('text-blue-400 mt-0.5 shrink-0')
+                                ui.label('비주얼').classes('text-xs font-bold text-blue-400 uppercase tracking-wider')
+                            ui.label(scene.visual_description).classes('text-sm text-gray-300 leading-relaxed pl-1')
 
-                                with ui.row().classes('w-full gap-3'):
-                                    with ui.expansion(text='Visual', icon='image').classes('flex-grow bg-slate-700/30 rounded-lg').props('dense header-class="text-xs text-gray-400 px-2"'):
-                                        ui.label(scene.visual_description).classes('text-xs text-gray-400 leading-relaxed p-3')
+                        # 모션 지시 (있을 때만)
+                        if hasattr(scene, 'motion_instruction') and scene.motion_instruction:
+                            with ui.element('div').classes('w-full rounded-lg bg-teal-900/20 border border-teal-500/30 p-3'):
+                                with ui.row().classes('items-start gap-2 mb-1'):
+                                    ui.icon('animation', size='xs').classes('text-teal-400 mt-0.5 shrink-0')
+                                    ui.label('모션').classes('text-xs font-bold text-teal-400 uppercase tracking-wider')
+                                ui.label(scene.motion_instruction).classes('text-sm text-gray-300 leading-relaxed pl-1')
 
-                                    if hasattr(scene, 'motion_instruction') and scene.motion_instruction:
-                                        with ui.expansion(text='Motion', icon='animation').classes('flex-grow bg-slate-700/30 rounded-lg').props('dense header-class="text-xs text-teal-400 px-2"'):
-                                            ui.label(scene.motion_instruction).classes('text-xs text-gray-400 leading-relaxed p-3')
-
-            # === 총 요약 카드 ===
-            with ui.card().classes('w-full p-4 bg-gradient-to-r from-slate-800 to-slate-700 border border-slate-600 mt-4'):
+            # ── 요약 카드 ──────────────────────────────────────
+            with ui.element('div').classes('w-full rounded-xl bg-slate-800 border border-slate-600 p-4 mt-2'):
                 with ui.row().classes('w-full justify-around items-center'):
-                    with ui.column().classes('items-center'):
-                        ui.label(f'{len(script.scenes)}').classes('text-2xl font-bold text-white')
-                        ui.label('Scenes').classes('text-xs text-gray-400 uppercase tracking-wider')
+                    for val, label, color in [
+                        (str(len(script.scenes)), '씬', 'text-white'),
+                        (f'{total_duration:.0f}', '초', 'text-teal-400'),
+                        (f'{total_duration/60:.1f}', '분', 'text-pink-400'),
+                        (f'${len(script.scenes) * SCENE_COST_MULTIPLIER:.2f}', '예상 비용', 'text-amber-400'),
+                    ]:
+                        with ui.column().classes('items-center gap-1'):
+                            ui.label(val).classes(f'text-2xl font-bold {color}')
+                            ui.label(label).classes('text-xs text-gray-500 uppercase tracking-wider')
+                        if label != '예상 비용':
+                            ui.element('div').classes('w-px h-8 bg-slate-600')
 
-                    ui.element('div').classes('w-px h-10 bg-slate-600')
+    # ── 메인 레이아웃 ────────────────────────────────────────
+    with ui.row().classes('w-full h-full gap-0 overflow-hidden'):
 
-                    with ui.column().classes('items-center'):
-                        ui.label(f'{total_duration:.0f}').classes('text-2xl font-bold text-teal-400')
-                        ui.label('Seconds').classes('text-xs text-gray-400 uppercase tracking-wider')
+        # === Left Panel: 각본 생성 컨트롤 ===
+        with ui.column().classes('w-72 min-w-[288px] bg-slate-800/50 border-r border-slate-700 p-4 gap-4 h-full overflow-y-auto shrink-0'):
 
-                    ui.element('div').classes('w-px h-10 bg-slate-600')
+            # 타이틀
+            with ui.row().classes('items-center gap-2 mb-2'):
+                ui.icon('psychology', size='sm').classes('text-pink-400')
+                ui.label('각본 생성').classes('text-base font-bold text-pink-300')
 
-                    with ui.column().classes('items-center'):
-                        ui.label(f'{total_duration/60:.1f}').classes('text-2xl font-bold text-pink-400')
-                        ui.label('Minutes').classes('text-xs text-gray-400 uppercase tracking-wider')
+            # 소스 선택
+            with ui.element('div').classes('w-full rounded-xl bg-slate-900/60 border border-slate-600 p-4'):
+                ui.label('소스 방식').classes('text-xs text-gray-500 uppercase tracking-wider mb-3')
 
-                    ui.element('div').classes('w-px h-10 bg-slate-600')
+                source_mode = ui.radio(
+                    ['RSS 자동 발견', '직접 URL 입력'],
+                    value='RSS 자동 발견'
+                ).props('color=pink dense').classes('w-full mb-3')
 
-                    with ui.column().classes('items-center'):
-                        estimated_cost = len(script.scenes) * SCENE_COST_MULTIPLIER
-                        ui.label(f'${estimated_cost:.2f}').classes('text-2xl font-bold text-amber-400')
-                        ui.label('Est. Cost').classes('text-xs text-gray-400 uppercase tracking-wider')
+                url_input = ui.input(
+                    '기사 URL',
+                    placeholder='https://example.com/article'
+                ).bind_visibility_from(
+                    source_mode, 'value', value='직접 URL 입력'
+                ).props('outlined dense dark').classes('w-full mb-2')
 
-    # === Main Layout ===
-    with ui.row().classes('w-full h-full gap-6'):
-        # === Left Panel: Controls ===
-        with ui.column().classes('w-80 min-w-[320px] h-full gap-4'):
-            # Topic Discovery Card
-            with card_with_header('Topic Discovery', 'explore', 'secondary'):
-                with ui.element('div').classes('p-5'):
-                    source_mode = ui.radio(
-                        ['Auto-Discovery (RSS)', 'Direct URL'],
-                        value='Auto-Discovery (RSS)'
-                    ).props('color=pink dense').classes('mb-4')
+                topic_input = ui.input(
+                    '키워드 (선택)',
+                    placeholder='예: AI, 기술, 과학'
+                ).bind_visibility_from(
+                    source_mode, 'value', value='RSS 자동 발견'
+                ).props('outlined dense dark').classes('w-full mb-2')
 
-                    url_input = ui.input(
-                        'Article URL',
-                        placeholder='https://example.com/article'
-                    ).bind_visibility_from(source_mode, 'value', value='Direct URL').props('outlined dense dark').classes('w-full mb-2')
+                spinner = ui.spinner(size='sm').props('color=pink').classes('self-center my-2')
+                spinner.visible = False
 
-                    topic_input = ui.input(
-                        'Manual Keyword',
-                        placeholder='(Optional) e.g., AI, Technology'
-                    ).bind_visibility_from(source_mode, 'value', value='Auto-Discovery (RSS)').props('outlined dense dark').classes('w-full mb-4')
-
-                    ui.separator().classes('bg-slate-600 mb-4')
-
-                    spinner = ui.spinner(size='md').props('color=pink').classes('self-center')
-                    spinner.visible = False
-
-                    async def generate_script():
-                        if source_mode.value == 'Direct URL' and not url_input.value:
-                            safe_notify('Please enter a URL', type='negative')
-                            return
-
-                        try:
-                            spinner.visible = True
-                        except RuntimeError:
-                            return
-
-                        try:
-                            if state.openai_key or state.gcp_project:
-                                settings.update_api_keys(
-                                    openai_key=state.openai_key,
-                                    gcp_project=state.gcp_project
-                                )
-
-                            logger.info(f"Starting Plan: Mode={source_mode.value}")
-                            planner = ScriptPlanner(generation_mode=state.mode)
-
-                            script = await planner.plan_content(
-                                topic=topic_input.value,
-                                direct_url=url_input.value if source_mode.value == 'Direct URL' else None
+                async def generate_script():
+                    if source_mode.value == '직접 URL 입력' and not url_input.value:
+                        safe_notify('URL을 입력해주세요', type='negative')
+                        return
+                    try:
+                        spinner.visible = True
+                    except RuntimeError:
+                        return
+                    try:
+                        if state.openai_key or state.gcp_project:
+                            settings.update_api_keys(
+                                openai_key=state.openai_key,
+                                gcp_project=state.gcp_project
                             )
-
-                            if script:
-                                state.script = script
-                                update_script_preview()
-                                try:
-                                    editor_area.value = script.model_dump_json(indent=2)
-                                    safe_notify(f"Script generated: {script.title}", type='positive')
-                                except RuntimeError:
-                                    pass
-                            else:
-                                safe_notify("Failed to generate script", type='negative')
-
-                        except Exception as e:
-                            safe_notify(f"Error: {str(e)}", type='negative')
-                            logger.error(f"Plan Error: {e}")
-                        finally:
+                        logger.info(f"Starting Plan: Mode={source_mode.value}")
+                        planner = ScriptPlanner(generation_mode=state.mode)
+                        script = await planner.plan_content(
+                            topic=topic_input.value,
+                            direct_url=url_input.value if source_mode.value == '직접 URL 입력' else None
+                        )
+                        if script:
+                            state.script = script
+                            update_script_preview()
                             try:
-                                spinner.visible = False
+                                editor_area.value = script.model_dump_json(indent=2)
+                                safe_notify(f'각본 생성 완료: {script.title}', type='positive')
                             except RuntimeError:
                                 pass
+                        else:
+                            safe_notify('각본 생성 실패', type='negative')
+                    except Exception as e:
+                        safe_notify(f'오류: {str(e)}', type='negative')
+                        logger.error(f"Plan Error: {e}")
+                    finally:
+                        try:
+                            spinner.visible = False
+                        except RuntimeError:
+                            pass
 
-                    ui.button(
-                        'Generate Script',
-                        on_click=generate_script
-                    ).classes('w-full').props('color=pink unelevated icon=psychology size=lg')
+                ui.button(
+                    '각본 생성하기',
+                    on_click=generate_script
+                ).classes('w-full mt-2').props('color=pink unelevated icon=auto_awesome size=md')
 
-            # Load Saved Script Card
-            with ui.card().classes('w-full p-4 bg-slate-700 border border-slate-600'):
+            # 저장된 각본 불러오기
+            with ui.element('div').classes('w-full rounded-xl bg-slate-900/60 border border-slate-600 p-4'):
                 with ui.row().classes('items-center gap-2 mb-3'):
-                    ui.icon('folder_open', size='sm').classes('text-amber-400')
-                    ui.label('Load Saved Script').classes('text-sm font-bold text-amber-300')
+                    ui.icon('folder_open', size='xs').classes('text-amber-400')
+                    ui.label('저장된 각본').classes('text-xs font-bold text-amber-300 uppercase tracking-wider')
 
                 script_dir = "outputs/scripts"
                 if os.path.exists(script_dir):
@@ -244,8 +242,8 @@ def render_planning_tab(state: 'AppState') -> None:
 
                     if script_files:
                         script_select = ui.select(
-                            options={f: f.replace('script_', '').replace('.json', '').replace('_', ' ')[:30] for f in script_files},
-                            label='Recent Scripts'
+                            options={f: f.replace('script_', '').replace('.json', '').replace('_', ' ')[:28] for f in script_files},
+                            label='최근 각본'
                         ).props('outlined dense dark').classes('w-full mb-2')
 
                         async def load_selected_script():
@@ -256,51 +254,62 @@ def render_planning_tab(state: 'AppState') -> None:
                                     state.script = ShortsScript.model_validate(data)
                                     update_script_preview()
                                     editor_area.value = json.dumps(data, indent=2, ensure_ascii=False)
-                                    safe_notify(f"Loaded: {state.script.title}", type='positive')
+                                    safe_notify(f'불러옴: {state.script.title}', type='positive')
                                 except Exception as e:
-                                    safe_notify(f"Load error: {e}", type='negative')
+                                    safe_notify(f'로드 오류: {e}', type='negative')
 
-                        ui.button('Load', on_click=load_selected_script).props('flat color=amber icon=download').classes('w-full')
+                        ui.button('불러오기', on_click=load_selected_script).props('flat color=amber icon=download dense').classes('w-full')
                     else:
-                        ui.label('No saved scripts').classes('text-xs text-gray-500')
+                        ui.label('저장된 각본 없음').classes('text-xs text-gray-600')
                 else:
-                    ui.label('Scripts folder not found').classes('text-xs text-gray-500')
+                    ui.label('outputs/scripts 폴더 없음').classes('text-xs text-gray-600')
 
-            # JSON Editor (Advanced)
-            with ui.expansion('Advanced: JSON Editor', icon='code').classes('w-full bg-slate-700 border border-slate-600').props('header-class="text-sm text-gray-400"'):
-                editor_area = ui.textarea().classes('w-full h-64 font-mono text-xs bg-slate-900 text-green-300 p-2 rounded').props('outlined')
+            # JSON 편집기 (고급)
+            with ui.expansion('JSON 편집기', icon='code').classes('w-full').props('header-class="text-xs text-gray-500 px-0"'):
+                editor_area = ui.textarea().classes('w-full font-mono text-xs bg-slate-900 text-green-300 p-2 rounded').props('outlined rows=10')
 
                 def save_script():
                     try:
                         data = json.loads(editor_area.value)
                         state.script = ShortsScript(**data)
                         update_script_preview()
-                        safe_notify("Script saved!", type='positive')
+                        safe_notify('각본 적용됨!', type='positive')
                     except Exception as e:
-                        safe_notify(f"Invalid JSON: {e}", type='negative')
+                        safe_notify(f'JSON 오류: {e}', type='negative')
 
-                ui.button('Apply Changes', on_click=save_script).props('flat color=green icon=save dense').classes('w-full mt-2')
+                ui.button('적용', on_click=save_script).props('flat color=green icon=save dense').classes('w-full mt-1')
 
-        # === Right Panel: Script Preview ===
-        with ui.column().classes('flex-grow h-full'):
-            with ui.row().classes('w-full items-center justify-between mb-4'):
-                with ui.row().classes('items-center gap-2'):
-                    ui.icon('auto_stories', size='sm').classes('text-purple-400')
-                    ui.label('Script Preview').classes('text-lg font-bold text-purple-300')
-
-                ui.button(icon='refresh', on_click=update_script_preview).props('flat round color=gray')
-
-            with ui.scroll_area().classes('w-full flex-grow'):
-                script_preview_container = ui.column().classes('w-full gap-4 pr-2')
-
-            update_script_preview()
-
-            with ui.row().classes('w-full gap-4 mt-4'):
+            # 확인 및 이동 버튼
+            with ui.element('div').classes('w-full mt-auto pt-4'):
                 def confirm_script():
                     if state.script:
-                        safe_notify("Script confirmed! Go to Generation tab.", type='positive')
+                        safe_notify('✅ 각본 확인 완료! Generation 탭으로 이동하세요.', type='positive')
                         logger.info(f"Script confirmed: {state.script.title}")
                     else:
-                        safe_notify("No script to confirm", type='warning')
+                        safe_notify('생성된 각본이 없습니다', type='warning')
 
-                ui.button('Confirm Script', on_click=confirm_script).classes('flex-grow').props('color=green unelevated icon=check_circle size=lg')
+                ui.button(
+                    '각본 확인 완료 →',
+                    on_click=confirm_script
+                ).classes('w-full').props('color=green unelevated icon=check_circle size=md')
+
+        # === Right Panel: 각본 미리보기 ===
+        with ui.column().classes('flex-grow h-full overflow-hidden flex flex-col'):
+
+            # 미리보기 헤더
+            with ui.element('div').classes('w-full px-6 py-3 border-b border-slate-700 bg-slate-800/30 flex items-center justify-between shrink-0'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.icon('auto_stories', size='xs').classes('text-purple-400')
+                    ui.label('각본 미리보기').classes('text-sm font-bold text-purple-300')
+
+                    status_dot_class = 'w-2 h-2 rounded-full bg-green-400' if state.script else 'w-2 h-2 rounded-full bg-gray-600'
+                    ui.element('div').classes(status_dot_class)
+
+                ui.button(icon='refresh', on_click=update_script_preview).props('flat round color=gray dense size=sm')
+
+            # 미리보기 스크롤 영역 — flex-grow로 남은 높이 모두 차지
+            with ui.scroll_area().classes('w-full flex-grow'):
+                with ui.element('div').classes('p-6'):
+                    script_preview_container = ui.column().classes('w-full gap-0')
+
+            update_script_preview()

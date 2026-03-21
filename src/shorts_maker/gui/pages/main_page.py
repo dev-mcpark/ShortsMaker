@@ -90,7 +90,7 @@ def render_main_page() -> None:
     # Step indicators for header
     step_indicators = []
 
-    with ui.column().classes('w-full min-h-screen bg-slate-900'):
+    with ui.column().classes('w-full h-screen bg-slate-900 overflow-hidden flex flex-col'):
         # === Header ===
         with ui.element('header').classes('w-full bg-slate-800 border-b border-slate-700 sticky top-0 z-50'):
             with ui.row().classes('w-full max-w-screen-2xl mx-auto px-6 py-3 items-center justify-between'):
@@ -170,8 +170,8 @@ def render_main_page() -> None:
                     ui.button(icon='settings', on_click=settings_dialog.open).props('flat round color=gray')
 
         # === Main Content with Tabs ===
-        with ui.element('main').classes('w-full flex-grow'):
-            with ui.tabs().classes('w-full bg-slate-800 border-b border-slate-700') as tabs:
+        with ui.element('main').classes('w-full flex-grow flex flex-col overflow-hidden'):
+            with ui.tabs().classes('w-full bg-slate-800 border-b border-slate-700 shrink-0') as tabs:
                 pipeline_tab = ui.tab('Pipeline', icon='rocket_launch').classes('text-teal-400')
                 sources_tab = ui.tab('Sources', icon='rss_feed').classes('text-orange-400')
                 planning_tab = ui.tab('Planning', icon='psychology').classes('text-pink-400')
@@ -179,27 +179,27 @@ def render_main_page() -> None:
                 publishing_tab = ui.tab('Publishing', icon='cloud_upload').classes('text-red-400')
                 scheduling_tab = ui.tab('Scheduling', icon='schedule').classes('text-amber-400')
 
-            with ui.tab_panels(tabs, value=pipeline_tab).classes('w-full flex-grow bg-slate-900'):
-                with ui.tab_panel(pipeline_tab).classes('p-6'):
+            with ui.tab_panels(tabs, value=pipeline_tab).classes('w-full flex-grow bg-slate-900 overflow-hidden'):
+                with ui.tab_panel(pipeline_tab).classes('p-6 h-full overflow-auto'):
                     render_pipeline_tab(
                         state,
                         step_indicators=step_indicators,
                         update_step_indicators_fn=update_step_indicators
                     )
 
-                with ui.tab_panel(sources_tab).classes('p-6'):
+                with ui.tab_panel(sources_tab).classes('p-6 h-full overflow-auto'):
                     render_sources_tab(state)
 
-                with ui.tab_panel(planning_tab).classes('p-6'):
+                with ui.tab_panel(planning_tab).classes('p-0 h-full overflow-hidden'):
                     render_planning_tab(state)
 
-                with ui.tab_panel(generation_tab).classes('p-6'):
+                with ui.tab_panel(generation_tab).classes('p-0 h-full overflow-hidden'):
                     render_generation_tab(state)
 
-                with ui.tab_panel(publishing_tab).classes('p-6'):
+                with ui.tab_panel(publishing_tab).classes('p-6 h-full overflow-auto'):
                     render_publishing_tab(state)
 
-                with ui.tab_panel(scheduling_tab).classes('p-6'):
+                with ui.tab_panel(scheduling_tab).classes('p-6 h-full overflow-auto'):
                     render_scheduling_tab(state)
 
         # === Footer ===
