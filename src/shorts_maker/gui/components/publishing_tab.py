@@ -68,10 +68,22 @@ def render_publishing_tab(state: 'AppState') -> None:
                         safe_notify(f"Error: {e}", type='negative')
                         logger.error(f"Upload error: {e}")
 
-                ui.button(
+                # 영상 경로 표시
+                with ui.row().classes('w-full items-center gap-2 mb-4 p-3 rounded-lg bg-slate-900/60 border border-slate-700'):
+                    ui.icon('movie', size='xs').classes('text-gray-500')
+                    video_path_label = ui.label(
+                        state.final_video_path or '영상 없음 — Pipeline 또는 Generation 탭에서 먼저 생성하세요'
+                    ).classes('text-xs text-gray-400 truncate flex-grow')
+                    video_path_label.bind_text_from(
+                        state, 'final_video_path',
+                        backward=lambda p: p if p else '영상 없음 — Pipeline 또는 Generation 탭에서 먼저 생성하세요'
+                    )
+
+                upload_btn = ui.button(
                     'Upload to YouTube',
                     on_click=upload_video
                 ).classes('w-full').props('color=red unelevated size=lg icon=cloud_upload')
+                upload_btn.bind_enabled_from(state, 'final_video_path', backward=lambda p: bool(p))
 
         # 업로드 상태 정보
         with ui.card().classes('w-full p-4 bg-slate-800 border border-slate-700 mt-4'):
@@ -80,6 +92,6 @@ def render_publishing_tab(state: 'AppState') -> None:
                 ui.label('Upload Requirements').classes('text-sm font-bold text-blue-300')
 
             with ui.column().classes('gap-2'):
-                ui.label('• YouTube OAuth credentials required (service_account.json)').classes('text-xs text-gray-400')
+                ui.label('• YouTube OAuth credentials required (client_secrets.json)').classes('text-xs text-gray-400')
                 ui.label('• Video must be generated first in Pipeline or Generation tab').classes('text-xs text-gray-400')
                 ui.label('• Max duration for Shorts: 60 seconds').classes('text-xs text-gray-400')
