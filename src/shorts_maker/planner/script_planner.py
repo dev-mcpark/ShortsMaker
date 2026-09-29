@@ -3,9 +3,9 @@ import json
 import random
 import re
 import ipaddress
-import hashlib
 import feedparser
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime
 import time
 from urllib.parse import urlparse
 from openai import AsyncOpenAI
@@ -14,58 +14,20 @@ from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.planner.script_validator import ScriptValidator
 from shorts_maker.utils.source_manager import SourceManager
-from shorts_maker.planner.models import VideoScene, ShortsScript, ArticleContent, ContentAnalysis
+from shorts_maker.planner.models import VideoScene, ShortsScript, ArticleContent, ContentAnalysis, TopicCandidate, ScriptGenerationContext
 from shorts_maker.planner.content_extractor import ContentExtractor
 from shorts_maker.planner.content_analyzer import ContentAnalyzer
 from shorts_maker.planner.content_enricher import ContentEnricher
+from shorts_maker.utils.rss_cache import RSSCache
 
 
-class RSSCache:
-    """RSS 피드 캐싱 클래스 (TTL 기반)"""
+@dataclass
+class _FeedEntryProxy:
+    """feedparser Entry를 모방하는 최소 프록시 — _is_recent() 호환용"""
+    published_parsed: Optional[time.struct_time] = None
 
-    def __init__(self, ttl_minutes: int = 30):
-        self._cache: Dict[str, Tuple[List[Dict], datetime]] = {}
-        self._ttl = timedelta(minutes=ttl_minutes)
-        self.logger = get_logger(__name__)
 
-    def _get_key(self, url: str) -> str:
-        """URL을 해시 키로 변환 (SHA256 사용)"""
-        return hashlib.sha256(url.encode()).hexdigest()
-
-    def get(self, url: str) -> Optional[List[Dict]]:
-        """캐시에서 데이터 조회"""
-        key = self._get_key(url)
-        if key in self._cache:
-            data, timestamp = self._cache[key]
-            if datetime.now() - timestamp < self._ttl:
-                self.logger.debug(f"캐시 히트: {url[:50]}...")
-                return data
-            else:
-                # 만료된 캐시 삭제
-                del self._cache[key]
-        return None
-
-    def set(self, url: str, data: List[Dict]):
-        """캐시에 데이터 저장"""
-        key = self._get_key(url)
-        self._cache[key] = (data, datetime.now())
-        self.logger.debug(f"캐시 저장: {url[:50]}... ({len(data)}개 항목)")
-
-    def clear(self):
-        """캐시 전체 삭제"""
-        self._cache.clear()
-
-    def clear_expired(self):
-        """만료된 캐시 항목만 삭제"""
-        now = datetime.now()
-        expired_keys = [
-            key for key, (_, timestamp) in self._cache.items()
-            if now - timestamp >= self._ttl
-        ]
-        for key in expired_keys:
-            del self._cache[key]
-
-# VideoScene과 ShortsScript는 models.py로 이동
+# RSSCache → shorts_maker/utils/rss_cache.py로 이동
 
 class ScriptPlanner:
     def __init__(self, generation_mode: str = "image"):
@@ -79,11 +41,11 @@ class ScriptPlanner:
             )
 
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)
-        self.history_file = "topic_history.json"
-        self.url_history_file = "url_history.json"
-        self.script_output_dir = "outputs/scripts"
+        self.history_file = str(settings.topic_history_file)
+        self.url_history_file = str(settings.url_history_file)
+        self.script_output_dir = str(settings.scripts_dir)
         self.generation_mode = generation_mode # 'image' or 'video'
-        
+
         # Expanded Moods for diverse storytelling
         self.allowed_moods = [
             'suspense',   # For shocking news, warnings, mysteries
@@ -99,23 +61,23 @@ class ScriptPlanner:
         # [NEW] Character Persona for Consistency
         # You can change this description to whatever character you want to appear IN the video.
         self.character_profile = "A futuristic cute robot with glowing blue eyes and a white sleek body"
-        
+
         # Validator
         self.validator = ScriptValidator()
 
         # RSS Cache (30분 TTL)
-        self.rss_cache = RSSCache(ttl_minutes=30)
+        self.rss_cache = RSSCache(ttl_minutes=settings.rss_cache_ttl_minutes)
 
         # Load RSS Sources from JSON config
         self.source_manager = SourceManager()
         self.rss_sources = self.source_manager.load_sources()
-        
+
         # ContentExtractor for enhanced article extraction
         self.content_extractor = ContentExtractor()
 
         # ContentAnalyzer for deep semantic analysis
         self.content_analyzer = ContentAnalyzer()
-        
+
         # ContentEnricher for multi-source supplementary information
         self.content_enricher = ContentEnricher()
 
@@ -272,12 +234,7 @@ class ScriptPlanner:
                     if entry['link'] in url_history:
                         continue
 
-                    # _is_recent 호환을 위한 간단한 객체 생성
-                    class SimpleEntry:
-                        def __init__(self, data):
-                            self.published_parsed = data.get('published_parsed')
-
-                    if not self._is_recent(SimpleEntry(entry)):
+                    if not self._is_recent(_FeedEntryProxy(entry.get('published_parsed'))):
                         continue
 
                     content = entry.get('summary') or entry.get('description') or entry.get('title', '')
@@ -304,59 +261,100 @@ class ScriptPlanner:
         self.logger.info(f"✅ Found {len(posts)} recent candidates (캐시: {cache_hits}히트/{cache_misses}미스)")
         return posts
 
-    async def _select_best_topic(self, candidates: List[Dict]) -> Dict:
+    async def _score_topics(self, candidates: List[Dict]) -> List[TopicCandidate]:
+        """각 후보에 점수(1-10)와 선택 이유를 부여. 점수 높은 순으로 정렬하여 반환."""
         candidates_text = ""
         for i, item in enumerate(candidates):
-            candidates_text += f"{i+1}. [{item['category']}] {item['title']}\n"
-            
+            candidates_text += f"{i}: [{item['category']}] {item['title']}\n"
+
         # Load recent history to avoid repetition
         recent_topics = []
         try:
             if os.path.exists(self.history_file):
                 with open(self.history_file, 'r', encoding='utf-8') as f:
                     history = json.load(f)
-                    # Assuming history is list of dicts, take last 5 titles
                     recent_topics = [h.get('title', '') for h in history[-5:]]
         except (json.JSONDecodeError, IOError) as e:
             self.logger.debug(f"최근 토픽 로드 실패: {e}")
-        
+
         recent_context = ""
         if recent_topics:
             recent_context = "**AVOID these recently covered topics (Find something different):**\n" + "\n".join([f"- {t}" for t in recent_topics])
 
         prompt = f"""
         You are a **Trend Hunter** looking for **'Blue Ocean' content** across various fields.
-        
-        **Selection Criteria (Balance is Key):**
+
+        **Scoring Criteria:**
         1. **Unexpected Insight:** Something counter-intuitive or surprising. ("Did you know?" factor)
-        2. **Specific Value:**
-           - **Tech/Science:** New mechanism, hidden discovery.
-           - **Biz/Finance:** Money-making opportunity, market shift.
-           - **Culture/Life:** Psychological hack, hidden trend, emotional resonance.
-        3. **Niche over Generic:** Avoid broad headlines like "Market is up" or "New Movie Released". Look for the *specific reason* or *untold story*.
-        
+        2. **Specific Value:** New mechanism, hidden discovery, money opportunity, psychological hack.
+        3. **Niche over Generic:** Avoid broad headlines. Look for the *specific reason* or *untold story*.
+
         {recent_context}
-        
+
         **Candidates:**
         {candidates_text}
-        
-        Select the ONE article that is most interesting, regardless of category.
-        Output ONLY the index number (e.g., '1').
+
+        Score EACH candidate from 1-10 and give a brief reason in Korean (1-2 sentences).
+        Mark selected=true for the ONE best candidate.
+
+        Output a JSON object:
+        {{"candidates": [
+          {{"index": 0, "score": 7, "reason": "흥미로운 기술 트렌드지만 최근 유사 주제 다룸", "selected": false}},
+          {{"index": 1, "score": 9, "reason": "역설적인 통계로 강한 후크 가능. 구체적 메커니즘 설명 가능", "selected": true}}
+        ]}}
         """
         try:
             response = await self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=10
+                response_format={"type": "json_object"}
             )
-            match = re.search(r'\d+', response.choices[0].message.content)
-            idx = int(match.group()) - 1 if match else 0
-            return candidates[idx] if 0 <= idx < len(candidates) else candidates[0]
-        except Exception as e:
-            self.logger.warning(f"토픽 선택 실패, 랜덤 선택: {e}")
-            return random.choice(candidates)
+            content = response.choices[0].message.content
+            data = json.loads(content)
+            # GPT가 {"candidates": [...]} 또는 {"results": [...]} 등으로 감쌀 수 있음
+            if isinstance(data, dict):
+                scores_list = next((v for v in data.values() if isinstance(v, list)), [])
+                if not scores_list:
+                    self.logger.debug(f"_score_topics: GPT 응답 키 = {list(data.keys())}")
+            else:
+                scores_list = data
 
-    async def plan_content(self, topic: str = None, direct_url: str = None) -> ShortsScript:
+            result = []
+            for entry in scores_list:
+                idx = entry.get("index", 0)
+                if 0 <= idx < len(candidates):
+                    result.append(TopicCandidate(
+                        item=candidates[idx],
+                        score=int(entry.get("score", 5)),
+                        reason=entry.get("reason", ""),
+                        selected=bool(entry.get("selected", False))
+                    ))
+
+            # selected가 없으면 가장 높은 점수에 selected 설정
+            if result and not any(c.selected for c in result):
+                result.sort(key=lambda c: c.score, reverse=True)
+                result[0].selected = True
+
+            # 빈 결과 fallback (GPT 응답이 파싱됐지만 유효한 항목이 없는 경우)
+            if not result:
+                self.logger.warning(
+                    f"토픽 점수화 결과가 비어 있음 (scores_list={len(scores_list)}개, "
+                    f"candidates={len(candidates)}개). 랜덤 선택."
+                )
+                chosen = random.choice(candidates)
+                return [TopicCandidate(item=chosen, score=5, reason="자동 선택 (빈 결과)", selected=True)]
+
+            return result
+        except Exception as e:
+            self.logger.warning(f"토픽 점수화 실패, 랜덤 선택: {e}")
+            chosen = random.choice(candidates)
+            return [TopicCandidate(item=chosen, score=5, reason="자동 선택 (점수화 실패)", selected=True)]
+
+    async def plan_content(
+        self,
+        topic: str = None,
+        direct_url: str = None
+    ) -> Tuple[Optional[ShortsScript], Optional[ScriptGenerationContext]]:
         # [Mode 1: Direct URL]
         if direct_url:
             # URL 검증 (SSRF 방지)
@@ -367,19 +365,19 @@ class ScriptPlanner:
 
             self.logger.info(f"🔗 Planning content from Direct URL: {direct_url}")
             article_content = self.content_extractor.fetch_enhanced_article(direct_url)
-            
+
             if not article_content or article_content.word_count < 100:
                 error_msg = "추출된 본문 내용이 너무 적거나 URL에서 내용을 가져올 수 없습니다. 다른 URL을 시도해주세요."
                 self.logger.error(f"❌ {error_msg}")
                 raise ValueError(error_msg)
-            
+
             # 2. Analyze Content Depth [PHASE 2]
             self.logger.info("🔍 Analyzing content depth...")
             analysis = await self.content_analyzer.analyze_content(article_content)
-            
+
             if not analysis:
                 self.logger.warning("⚠️ Deep analysis failed. Falling back to basic content.")
-            
+
             # 3. Enrich Content [PHASE 3]
             enriched_info = []
             if analysis:
@@ -389,55 +387,58 @@ class ScriptPlanner:
                     core_message=analysis.core_message,
                     visual_keywords=analysis.visual_keywords
                 )
-            
+
             # Create a synthetic candidate item with enhanced info & analysis & enrichment
             selection = {
                 'category': 'Custom',
                 'source': 'Direct URL',
-                'title': topic if topic else article_content.title, 
+                'title': topic if topic else article_content.title,
                 'content': article_content.main_text[:8000],
                 'url': direct_url,
                 'quotes': article_content.quotes,
                 'headings': article_content.headings,
                 'captions': article_content.captions,
                 'analysis': analysis,
-                'enriched_info': enriched_info  # [NEW] 외부 보강 정보 포함
+                'enriched_info': enriched_info
             }
-            # Skip loop for direct URL (Single attempt, or could loop if we want re-generation)
             script = await self._write_script(selection)
-            return await self._validate_and_save(script, selection)
+            final_script = await self._validate_and_save(script, selection)
+            context = ScriptGenerationContext(source_item=selection)
+            return final_script, context
 
         # [Mode 2: RSS Discovery]
         candidates = self._fetch_rss_feeds()
         if not candidates:
             candidates = [{'category': 'General', 'source': 'Fallback', 'title': 'AI Future', 'content': 'AI impact.', 'url': 'google.com'}]
 
-        max_topic_retries = 5
+        max_topic_retries = settings.max_topic_retries
         script = None
+        scored: List[TopicCandidate] = []
 
         for attempt in range(max_topic_retries):
             if not candidates:
                 self.logger.warning("No more candidates available for selection.")
                 break
 
-            # 1. Select Topic
-            # If a manual topic is provided in RSS mode, filter candidates or use it as a keyword?
-            # For now, let's keep the trend hunter logic but maybe prioritize the topic if feasible.
-            # (Simple version: Trend hunter just runs as is)
-            selection = await self._select_best_topic(candidates)
-            self.logger.info(f"🔥 Selected Topic (Attempt {attempt+1}): {selection['title']} ({selection['category']})")
-            
+            # 1. Score Topics
+            scored = await self._score_topics(candidates)
+            selected_candidate = next((c for c in scored if c.selected), scored[0] if scored else None)
+            if not selected_candidate:
+                self.logger.warning(f"Attempt {attempt+1}: 선택 가능한 후보 없음. 종료.")
+                break
+
+            selection = selected_candidate.item
+            self.logger.info(f"🔥 Selected Topic (Attempt {attempt+1}): {selection['title']} ({selection['category']}) [score={selected_candidate.score}]")
+
             # 2. Fetch Full Content
             self.logger.info(f"🕵️ Fetching enhanced article from: {selection['url']}")
             article_content = self.content_extractor.fetch_enhanced_article(selection['url'])
             if article_content:
                 self.logger.info(f"✅ Successfully extracted {article_content.word_count} words.")
-                
-                # 심층 분석 수행 [PHASE 2]
+
                 self.logger.info("🔍 Analyzing content depth...")
                 analysis = await self.content_analyzer.analyze_content(article_content)
-                
-                # 콘텐츠 보강 수행 [PHASE 3]
+
                 enriched_info = []
                 if analysis:
                     self.logger.info("🌐 Searching for supplementary info...")
@@ -446,13 +447,13 @@ class ScriptPlanner:
                         core_message=analysis.core_message,
                         visual_keywords=analysis.visual_keywords
                     )
-                
+
                 selection['content'] = article_content.main_text[:8000]
                 selection['quotes'] = article_content.quotes
                 selection['headings'] = article_content.headings
                 selection['captions'] = article_content.captions
                 selection['analysis'] = analysis
-                selection['enriched_info'] = enriched_info  # [NEW] 외부 보강 정보 포함
+                selection['enriched_info'] = enriched_info
             else:
                 self.logger.warning("⚠️ Failed to extract enhanced content. Using summary.")
                 selection['analysis'] = None
@@ -462,36 +463,35 @@ class ScriptPlanner:
             # 3. Write & Validate
             script = await self._write_script(selection)
             final_script = await self._validate_and_save(script, selection)
-            
+
             if final_script:
-                return final_script
-            
-            # If validation failed (returned None), remove candidate and retry
+                context = ScriptGenerationContext(source_item=selection, candidates=scored)
+                return final_script, context
+
+            # Validation failed → remove candidate and retry
             self.logger.info("🔄 Discarding this topic and selecting a NEW one...")
             candidates = [c for c in candidates if c['url'] != selection['url']]
 
-        if not script:
-            self.logger.error("Failed to generate a valid script after retries.")
-            return None
-        return script
+        self.logger.error("Failed to generate a valid script after retries.")
+        return None, None
 
     async def _validate_and_save(self, script: ShortsScript, selection: Dict) -> Optional[ShortsScript]:
         """Helper to validate script and save to disk if valid."""
         # Validate
         validation = await self.validator.validate_script(script)
-        
+
         # Simple Retry Loop for the SAME topic if validation fails (Optional optimization)
         # For now, if invalid, we return None to trigger topic switch in RSS mode.
         # In Direct URL mode, we might want to retry generation on the same URL?
         # Let's keep it simple: Single validation check.
-        
+
         if not validation.is_valid:
             self.logger.warning(f"❌ Script rejected. Reason: {validation.reason}")
             self.logger.info(f"Validation Feedback: {validation.feedback}")
             return None
 
         self.logger.info(f"🎉 Script Validated!")
-        
+
         # Save to file
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -503,21 +503,32 @@ class ScriptPlanner:
             self.logger.info(f"📄 스크립트 저장됨: {filepath}")
         except IOError as e:
             self.logger.warning(f"스크립트 저장 실패: {e}")
-        
+
         return script
+
+    async def regenerate(
+        self,
+        source_item: Dict,
+        feedback: str,
+    ) -> Optional[ShortsScript]:
+        """피드백을 반영하여 동일 소스 데이터로 스크립트를 재생성하는 public API."""
+        script = await self._write_script(source_item, feedback=feedback)
+        if not script:
+            return None
+        return await self._validate_and_save(script, source_item)
 
     async def _write_script(self, item: Dict, feedback: Optional[str] = None) -> ShortsScript:
         self.logger.info(f"Writing script for: {item['title']} (Mode: {self.generation_mode})")
         if feedback:
             self.logger.info(f"♻️ Rewriting based on feedback: {feedback}")
-        
+
         mood_list_str = ', '.join(self.allowed_moods)
         style = "The Info Curator"
-        
+
         # Enhanced information 및 Deep Analysis를 프롬프트에 포함
         enhanced_context = ""
         analysis = item.get('analysis')
-        
+
         if analysis:
             # Phase 2: Deep Analysis 결과 활용
             enhanced_context += f"""
@@ -529,16 +540,16 @@ class ScriptPlanner:
             - **Key Data Points:** {', '.join(analysis.numbers_data)}
             - **Expert Perspective:** {', '.join(analysis.expert_insights)}
             - **Future Outlook:** {analysis.future_impact}
-            
+
             ### SUGGESTED STORY STRUCTURE:
             1. **Opening:** {analysis.story_structure.get('opening')}
             2. **Mystery:** {analysis.story_structure.get('mystery')}
             3. **Secret:** {analysis.story_structure.get('secret')}
             4. **Impact:** {analysis.story_structure.get('impact')}
-            
+
             ### VISUAL THEMES: {', '.join(analysis.visual_keywords)}
             """
-            
+
             # Phase 3: Enriched Info 추가
             enriched_info = item.get('enriched_info')
             if enriched_info:
@@ -552,12 +563,12 @@ class ScriptPlanner:
                 enhanced_context += f"\n**Important Quotes:**\n"
                 for q in item['quotes'][:3]:
                     enhanced_context += f"- \"{q}\"\n"
-            
+
             if item.get('headings'):
                 enhanced_context += f"\n**Article Structure:**\n"
                 for h in item['headings'][:5]:
                     enhanced_context += h + "\n"
-            
+
             if item.get('captions'):
                 enhanced_context += f"\n**Visual Context:**\n"
                 for c in item['captions'][:3]:
@@ -690,16 +701,16 @@ class ScriptPlanner:
         prompt = f"""
         Act as a professional **Content Creator**.
         Create a **comprehensive and engaging** YouTube Shorts script (approx. 55-60s) based on this news.
-        
+
         {feedback_instruction}
 
         **SOURCE MATERIAL:**
         Category: {item['category']}
         Title: {item['title']}
         Content: {item['content']}
-        
+
         {enhanced_context}
-        
+
         **INSTRUCTION:**
         - **Language:** **KOREAN ONLY** (For Script, Title, and Description).
         - **Title:** Create a **Viral/Clickbait Korean Title** (Max 40 chars). Do NOT use the English source title directly.
@@ -714,11 +725,11 @@ class ScriptPlanner:
           4. **Impact (35-50s):** A sharp, non-obvious conclusion.
         - **Scenes:** Generate **6 to 10 scenes** to ensure fast pacing and retention.
         - **Duration:** Each scene should be **5 to 8 seconds** (We will trim the start, so make it longer).
-        
+
         {visual_instruction}
-        
+
         **Mood:** Choose best from [{mood_list_str}].
-        
+
         Output JSON:
         {{
             "title": "호기심을 자극하는 한글 제목 (이모지 포함 가능)",
@@ -747,7 +758,7 @@ class ScriptPlanner:
             ]
         }}
         """
-        
+
         try:
             response = await self.client.chat.completions.create(
                 model="gpt-4o",

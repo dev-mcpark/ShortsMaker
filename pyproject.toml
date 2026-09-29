@@ -44,7 +44,7 @@ Homepage = "https://github.com/dev-mcpark/ShortsMaker"
 Issues = "https://github.com/dev-mcpark/ShortsMaker/issues"
 
 [project.scripts]
-shorts-maker = "shorts_maker.gui:main"
+shorts-maker = "shorts_maker.gui.__main__:run"
 
 [build-system]
 requires = ["hatchling"]

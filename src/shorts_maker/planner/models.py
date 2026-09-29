@@ -1,7 +1,26 @@
 """Pydantic models for script planning"""
 
+from dataclasses import dataclass, field
 from pydantic import BaseModel
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
+
+
+@dataclass
+class TopicCandidate:
+    """주제 후보 항목 - 선택 점수와 이유 포함"""
+    item: Dict[str, Any]
+    score: int
+    reason: str
+    selected: bool = False
+
+
+@dataclass
+class ScriptGenerationContext:
+    """스크립트 생성 컨텍스트 - 재생성 시 재사용"""
+    source_item: Dict[str, Any]
+    candidates: List[TopicCandidate] = field(default_factory=list)
+    attempt_count: int = 0
+    max_attempts: int = 3
 
 
 class VideoScene(BaseModel):
@@ -33,13 +52,13 @@ class ArticleContent(BaseModel):
     main_text: str
     author: Optional[str] = None
     published_date: Optional[str] = None
-    
+
     # Enhanced fields - 추가 정보
     captions: List[str] = []  # 이미지 캡션
     quotes: List[str] = []  # 인용문
     headings: List[str] = []  # 서브헤딩
     links: List[str] = []  # 관련 링크
-    
+
     # 메타 정보
     word_count: int = 0
     estimated_read_time_seconds: int = 0
@@ -55,7 +74,7 @@ class ContentAnalysis(BaseModel):
     expert_insights: List[str] = [] # 전문가의 견해나 인용구 강조점
     future_impact: str         # 미래에 미칠 영향이나 결론
     visual_keywords: List[str] = [] # 시각적 묘사를 위한 키워드 (오브젝트, 환경 등)
-    
+
     # 쇼츠 기획을 위한 세부 구성 (필수 4단계)
     story_structure: Dict[str, str] = {
         "opening": "",

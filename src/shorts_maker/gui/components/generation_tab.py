@@ -1,14 +1,11 @@
-"""Video Generation 탭 컴포넌트"""
+"""Video Generation 탭 컴포넌트 - Google AI Studio 스타일 중앙 융합 개편"""
 import asyncio
-
 from nicegui import ui
 from typing import TYPE_CHECKING
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify
-from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.services.production_service import ProductionService, ProductionPhase, ProductionProgress
 from shorts_maker.gui.components.common.progress_utils import update_scene_grid
-from shorts_maker.utils.character_overlay import CharacterOverlayConfig
 from shorts_maker.utils.veo_prompt_exporter import VeoPromptExporter
 from shorts_maker.utils.logger import get_logger
 
@@ -18,32 +15,32 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 SCENE_ACCENT = [
-    ('from-pink-500', 'to-rose-500', 'border-pink-500/40', 'bg-pink-900/20', 'text-pink-300'),
-    ('from-purple-500', 'to-violet-500', 'border-purple-500/40', 'bg-purple-900/20', 'text-purple-300'),
-    ('from-indigo-500', 'to-blue-500', 'border-indigo-500/40', 'bg-indigo-900/20', 'text-indigo-300'),
-    ('from-teal-500', 'to-cyan-500', 'border-teal-500/40', 'bg-teal-900/20', 'text-teal-300'),
-    ('from-amber-500', 'to-orange-500', 'border-amber-500/40', 'bg-amber-900/20', 'text-amber-300'),
+    ('from-violet-600', 'to-indigo-600', 'border-violet-500/30', 'bg-violet-950/20', 'text-violet-300'),
+    ('from-indigo-600', 'to-blue-600', 'border-indigo-500/30', 'bg-indigo-950/20', 'text-indigo-300'),
+    ('from-purple-600', 'to-pink-600', 'border-purple-500/30', 'bg-purple-950/20', 'text-purple-300'),
+    ('from-teal-600', 'to-emerald-600', 'border-teal-500/30', 'bg-teal-950/20', 'text-teal-300'),
+    ('from-fuchsia-600', 'to-rose-600', 'border-fuchsia-500/30', 'bg-fuchsia-950/20', 'text-fuchsia-300'),
 ]
 
 
 def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                         start_edit_btn: ui.button,
                         scene_cards_container: ui.element) -> None:
-    """수동 모드 전체 패널 렌더링"""
-
+    """수동 모드 격자 그리드 씬 업로드 패널 렌더링"""
     try:
         scene_cards_container.clear()
     except RuntimeError:
         return
 
-    # 스크립트 없을 때
+    # 스크립트 없을 때 처리
     if not state.script:
+        start_edit_btn.disable()
         with scene_cards_container:
-            with ui.element('div').classes('w-full h-full flex items-center justify-center py-20'):
+            with ui.element('div').classes('w-full h-96 flex items-center justify-center col-span-full'):
                 with ui.column().classes('items-center gap-4'):
                     ui.icon('description', size='xl').classes('text-slate-600')
-                    ui.label('각본을 먼저 로드해주세요').classes('text-xl font-bold text-slate-500')
-                    ui.label('Planning 탭에서 각본을 생성한 뒤 돌아오세요').classes('text-sm text-slate-600')
+                    ui.label('각본을 먼저 로드해주세요').classes('text-lg font-bold text-slate-400')
+                    ui.label('왼쪽 메뉴의 Studio -> 1. Script & Prompt Editor 에서 각본을 생성해주세요.').classes('text-xs text-slate-500')
         return
 
     if not state.manual_script_id:
@@ -52,50 +49,49 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
     scenes_status = exporter.get_scenes_status(state.script, state.manual_script_id)
     ready_count = sum(1 for s in scenes_status if s["exists"])
     total = len(scenes_status)
+    if total and ready_count == total:
+        start_edit_btn.enable()
+    else:
+        start_edit_btn.disable()
 
     with scene_cards_container:
-        # ── 상단 진행 헤더 ───────────────────────────────────
-        with ui.element('div').classes('w-full rounded-xl bg-slate-800 border border-slate-700 p-4 mb-4'):
+        # ── 상단 진행 정보 (Grid의 가로 한 줄 전체 차지) ──
+        with ui.element('div').classes('col-span-full w-full rounded-xl bg-slate-900 border border-slate-800 p-5 mb-2'):
             with ui.row().classes('w-full items-center justify-between mb-3'):
-                with ui.row().classes('items-center gap-2'):
-                    ui.icon('video_library', size='sm').classes('text-purple-400')
-                    ui.label('VEO 수동 생성 모드').classes('text-base font-bold text-purple-300')
+                with ui.row().classes('items-center gap-3'):
+                    ui.icon('video_library', size='sm').classes('text-violet-400')
+                    ui.label('수동 소스 매핑 및 영상 수집').classes('text-base font-bold text-white')
 
-                progress_badge_cls = 'bg-green-600 text-white font-bold px-3 py-1 rounded-full text-sm' \
-                    if ready_count == total else 'bg-slate-700 text-gray-300 font-bold px-3 py-1 rounded-full text-sm'
-                ui.badge(f'{ready_count} / {total} 씬 완료').classes(progress_badge_cls)
+                # 진행도 표시 뱃지
+                progress_badge_cls = 'bg-violet-600 text-white font-bold px-3 py-1 rounded-full text-xs' \
+                    if ready_count == total else 'bg-slate-800 text-slate-400 font-bold px-3 py-1 rounded-full text-xs border border-slate-700'
+                ui.badge(f'{ready_count} / {total} 씬 업로드 완료').classes(progress_badge_cls)
 
             # 전체 진행 바
-            with ui.element('div').classes('w-full h-2 rounded-full bg-slate-700 overflow-hidden mb-3'):
+            with ui.element('div').classes('w-full h-2 rounded-full bg-slate-800 overflow-hidden mb-4'):
                 pct = int(ready_count / max(total, 1) * 100)
-                bar_color = 'bg-green-500' if ready_count == total else 'bg-purple-500'
+                bar_color = 'bg-gradient-to-r from-violet-600 to-indigo-600' if ready_count == total else 'bg-violet-600'
                 ui.element('div').classes(f'h-full rounded-full {bar_color} transition-all').style(f'width: {pct}%')
 
-            # 안내 메시지
-            if ready_count == total and total > 0:
-                with ui.element('div').classes('w-full rounded-lg bg-green-900/30 border border-green-500/40 p-3'):
-                    with ui.row().classes('items-center gap-2'):
-                        ui.icon('check_circle', size='sm').classes('text-green-400')
-                        ui.label('모든 씬 업로드 완료! 아래 [편집 시작] 버튼을 눌러주세요.').classes('text-sm text-green-300 font-medium')
-            else:
-                with ui.element('div').classes('w-full rounded-lg bg-blue-900/20 border border-blue-500/30 p-3'):
-                    with ui.row().classes('items-start gap-2'):
-                        ui.icon('info', size='xs').classes('text-blue-400 mt-0.5 shrink-0')
-                        ui.label('각 씬의 프롬프트를 복사해 VEO 등 외부 AI 서비스에서 영상을 생성한 뒤, 해당 씬에 업로드하세요.').classes('text-xs text-blue-300 leading-relaxed')
+            # 안내 가이드 및 일괄 다운로드/복사 도구
+            with ui.row().classes('w-full items-stretch gap-4'):
+                with ui.element('div').classes('flex-grow rounded-lg bg-violet-950/20 border border-violet-500/20 p-3 flex items-start gap-2'):
+                    ui.icon('info', size='xs').classes('text-violet-400 mt-0.5 shrink-0')
+                    ui.label('각 씬의 프롬프트를 복사하여 Veo 3.1이나 외부 AI Studio에서 생성한 후, 씬 카드 내에 업로드해주십시오. 모든 씬 영상이 로드되면 인코딩 및 자막 믹싱을 시작할 수 있습니다.').classes('text-xs text-slate-300 leading-relaxed')
 
-            # 전체 JSON 복사 버튼
-            def copy_all_json():
-                json_str = exporter.export_json(state.script, state.manual_script_id)
-                ui.run_javascript(f'navigator.clipboard.writeText({repr(json_str)})')
-                safe_notify('전체 프롬프트 JSON이 클립보드에 복사되었습니다.', type='positive')
+                with ui.column().classes('justify-center gap-2 min-w-[240px] border-l border-slate-800 pl-4'):
+                    def copy_all_json():
+                        json_str = exporter.export_json(state.script, state.manual_script_id)
+                        ui.run_javascript(f'navigator.clipboard.writeText({repr(json_str)})')
+                        safe_notify('전체 프롬프트 JSON이 클립보드에 복사되었습니다.', type='positive')
 
-            ui.button(
-                '전체 프롬프트 JSON 복사',
-                icon='content_copy',
-                on_click=copy_all_json
-            ).classes('w-full mt-2').props('flat dense color=purple size=sm')
+                    ui.button(
+                        '전체 프롬프트 JSON 복사',
+                        icon='content_copy',
+                        on_click=copy_all_json
+                    ).classes('w-full py-1 text-xs').props('outline color=violet dense size=sm')
 
-        # ── 씬별 카드 ────────────────────────────────────────
+        # ── 씬별 카드 (Grid 구조로 각 씬이 격자 배치됨) ──
         for idx, scene_info in enumerate(scenes_status):
             scene_num = scene_info["scene_number"]
             exists = scene_info["exists"]
@@ -103,157 +99,96 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
             script_text = scene_info["script_text"]
 
             from_c, to_c, border_c, bg_c, label_c = SCENE_ACCENT[idx % len(SCENE_ACCENT)]
-            card_border = 'border-green-500/60' if exists else border_c
-            card_bg = 'bg-slate-800/80' if exists else 'bg-slate-900/50'
+            card_border = 'border-violet-500/50' if exists else 'border-slate-800 hover:border-slate-700'
+            card_bg = 'bg-slate-900/80 shadow-md' if exists else 'bg-slate-900/40 hover:bg-slate-900/60'
 
-            with ui.element('div').classes(f'w-full rounded-xl border {card_border} {card_bg} overflow-hidden mb-4'):
+            with ui.element('div').classes(f'rounded-xl border {card_border} {card_bg} overflow-hidden flex flex-col justify-between transition-all duration-300'):
 
-                # 씬 헤더 바
-                with ui.element('div').classes(f'w-full px-4 py-3 bg-gradient-to-r {from_c} {to_c} opacity-90'):
-                    with ui.row().classes('w-full items-center justify-between'):
-                        with ui.row().classes('items-center gap-3'):
-                            with ui.element('div').classes('w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center'):
-                                ui.label(str(scene_num)).classes('text-sm font-bold text-white')
-                            ui.label(f'씬 {scene_num}').classes('text-sm font-bold text-white')
+                # 씬 헤더
+                with ui.element('div').classes(f'w-full px-4 py-2.5 bg-gradient-to-r {from_c} {to_c} opacity-90 flex items-center justify-between shrink-0'):
+                    with ui.row().classes('items-center gap-2'):
+                        with ui.element('div').classes('w-6 h-6 rounded bg-white/20 flex items-center justify-center'):
+                            ui.label(str(scene_num)).classes('text-xs font-bold text-white')
+                        ui.label(f'씬 {scene_num}').classes('text-xs font-bold text-white')
 
-                        if exists:
-                            with ui.row().classes('items-center gap-1 bg-green-500/30 rounded-full px-3 py-1'):
-                                ui.icon('check_circle', size='xs').classes('text-green-300')
-                                ui.label('업로드 완료').classes('text-xs text-green-200 font-medium')
-                        else:
-                            with ui.element('div').classes('bg-white/20 rounded-full px-3 py-1'):
-                                ui.label('대기 중').classes('text-xs text-white/80')
+                    if exists:
+                        with ui.row().classes('items-center gap-1 bg-white/20 rounded-full px-2 py-0.5'):
+                            ui.icon('check', size='xs').classes('text-white')
+                            ui.label('완료').classes('text-[10px] text-white font-semibold')
+                    else:
+                        ui.label('대기').classes('text-[10px] text-white/70 font-semibold bg-white/10 px-2 py-0.5 rounded-full')
 
-                with ui.element('div').classes('p-4 flex flex-col gap-3'):
+                # 카드 바디
+                with ui.column().classes('p-4 gap-3 flex-grow'):
+                    # 1. 오디오 자막 (내레이션)
+                    with ui.column().classes('w-full gap-1'):
+                        ui.label('나레이션').classes('text-[10px] text-slate-500 font-bold uppercase tracking-wider')
+                        with ui.element('div').classes('w-full rounded-lg bg-slate-950/60 border border-slate-800/80 px-3 py-2 min-h-[50px]'):
+                            ui.label(script_text).classes('text-xs text-slate-300 leading-relaxed italic')
 
-                    # STEP 1: 나레이션 확인
-                    with ui.element('div').classes('w-full'):
-                        with ui.row().classes('items-center gap-2 mb-2'):
-                            with ui.element('div').classes('w-5 h-5 rounded-full bg-amber-500/30 border border-amber-500/50 flex items-center justify-center shrink-0'):
-                                ui.label('1').classes('text-xs font-bold text-amber-400')
-                            ui.label('나레이션 (참고용)').classes('text-xs font-bold text-amber-400 uppercase tracking-wider')
-
-                        with ui.element('div').classes('w-full rounded-lg bg-amber-900/20 border border-amber-500/20 px-3 py-2'):
-                            ui.label(script_text).classes('text-sm text-gray-200 leading-relaxed italic')
-
-                    # STEP 2: VEO 프롬프트 복사
-                    with ui.element('div').classes('w-full'):
-                        with ui.row().classes('items-center gap-2 mb-2'):
-                            with ui.element('div').classes('w-5 h-5 rounded-full bg-purple-500/30 border border-purple-500/50 flex items-center justify-center shrink-0'):
-                                ui.label('2').classes('text-xs font-bold text-purple-400')
-                            ui.label('VEO 프롬프트 복사').classes('text-xs font-bold text-purple-400 uppercase tracking-wider')
-
-                        with ui.element('div').classes('w-full rounded-lg bg-slate-950/60 border border-slate-600 p-3'):
-                            ui.label(prompt).classes('text-sm text-gray-200 leading-relaxed font-mono')
+                    # 2. 비주얼 프롬프트 복사
+                    with ui.column().classes('w-full gap-1'):
+                        ui.label('비주얼 프롬프트').classes('text-[10px] text-slate-500 font-bold uppercase tracking-wider')
+                        with ui.element('div').classes('w-full rounded-lg bg-slate-950/80 border border-slate-800 p-2.5 min-h-[60px] max-h-[100px] overflow-y-auto font-mono'):
+                            ui.label(prompt).classes('text-[11px] text-slate-400 leading-normal')
 
                         def make_copy_fn(p=prompt, sn=scene_num):
                             def copy_prompt():
                                 ui.run_javascript(f'navigator.clipboard.writeText({repr(p)})')
-                                safe_notify(f'씬 {sn} 프롬프트 복사됨', type='info')
+                                safe_notify(f'씬 {sn} 프롬프트 복사 완료!', type='info')
                             return copy_prompt
 
                         ui.button(
-                            '이 씬 프롬프트 복사',
+                            '프롬프트 복사',
                             icon='content_copy',
                             on_click=make_copy_fn()
-                        ).classes('w-full mt-2').props('color=purple unelevated size=sm icon=content_copy')
+                        ).classes('w-full py-0.5 text-xs mt-1').props('flat dense color=violet size=xs')
 
-                    # STEP 3: 영상 업로드
-                    with ui.element('div').classes('w-full'):
-                        with ui.row().classes('items-center gap-2 mb-2'):
-                            with ui.element('div').classes(
-                                'w-5 h-5 rounded-full flex items-center justify-center shrink-0 ' +
-                                ('bg-green-500/30 border border-green-500/50' if exists else 'bg-teal-500/30 border border-teal-500/50')
-                            ):
-                                ui.label('3').classes('text-xs font-bold ' + ('text-green-400' if exists else 'text-teal-400'))
-                            ui.label('영상 업로드').classes('text-xs font-bold ' + ('text-green-400' if exists else 'text-teal-400') + ' uppercase tracking-wider')
+                    # 3. 비디오 클립 업로드
+                    with ui.column().classes('w-full gap-1 mt-1'):
+                        ui.label('비디오 파일 매핑').classes('text-[10px] text-slate-500 font-bold uppercase tracking-wider')
 
-                        # 업로드 완료 표시
-                        clip_path_display = ui.element('div').classes(
-                            'w-full rounded-lg border px-3 py-2 mb-2 flex items-center gap-2 ' +
-                            ('bg-green-900/30 border-green-500/40' if exists else 'hidden')
-                        )
-                        with clip_path_display:
-                            ui.icon('video_file', size='xs').classes('text-green-400 shrink-0')
-                            clip_name = scene_info["clip_path"].split('/')[-1] if exists else ''
-                            clip_name_label = ui.label(clip_name).classes('text-xs text-green-300 truncate')
+                        # 업로드 완료된 클립명 표시
+                        if exists:
+                            clip_name = scene_info["clip_path"].split('/')[-1]
+                            with ui.element('div').classes('w-full rounded-lg bg-violet-950/20 border border-violet-500/20 px-2 py-1.5 flex items-center justify-between mb-1.5'):
+                                with ui.row().classes('items-center gap-1.5 overflow-hidden'):
+                                    ui.icon('video_file', size='xs').classes('text-violet-400 shrink-0')
+                                    ui.label(clip_name).classes('text-[11px] text-violet-300 truncate max-w-[180px]')
+                                ui.icon('check_circle', size='xs').classes('text-violet-400')
 
-                        # 업로드 영역
-                        upload_area = ui.element('div').classes(
-                            'w-full rounded-lg border-2 border-dashed p-4 text-center ' +
-                            ('border-green-500/40 bg-green-900/10' if exists else 'border-slate-600 bg-slate-800/30 hover:border-teal-500/50')
-                        )
-                        with upload_area:
-                            if exists:
-                                with ui.column().classes('items-center gap-1'):
-                                    ui.icon('check_circle', size='sm').classes('text-green-400')
-                                    ui.label('업로드 완료 (재업로드 가능)').classes('text-xs text-green-400')
-                            else:
-                                with ui.column().classes('items-center gap-1'):
-                                    ui.icon('cloud_upload', size='md').classes('text-slate-500')
-                                    ui.label('영상 파일을 업로드하세요').classes('text-sm text-slate-400')
-                                    ui.label('.mp4  .mov  .webm  (최대 500MB)').classes('text-xs text-slate-600')
-
-                        status_label = ui.element('div')  # 상태용 더미 (upload handler에서 참조)
-
-                        def make_upload_handler(sn=scene_num,
-                                                c_display=clip_path_display,
-                                                u_area=upload_area):
+                        # 업로드 컴포넌트
+                        def make_upload_handler(sn=scene_num):
                             async def handle_upload(e):
                                 try:
-                                    # NiceGUI 3.5+: e.file.read() (async)
                                     file_bytes = await e.file.read()
-                                    saved_path = exporter.save_uploaded_clip(
+                                    exporter.save_uploaded_clip(
                                         file_bytes, state.manual_script_id, sn
                                     )
-                                    state.manual_clip_paths[sn] = str(saved_path)
 
-                                    safe_notify(f'씬 {sn} 업로드 완료!', type='positive')
+                                    safe_notify(f'씬 {sn} 비디오 클립 업로드 완료!', type='positive')
 
-                                    if len(state.manual_clip_paths) == len(state.script.scenes):
-                                        start_edit_btn.enable()
-                                        safe_notify('🎉 모든 씬 업로드 완료! 편집을 시작할 수 있습니다.', type='positive')
-
-                                    # 패널 새로고침 (업로드 상태 반영)
-                                    render_manual_panel(state, exporter, start_edit_btn,
-                                                        scene_cards_container)
+                                    # 전체 패널 다시 그리기
+                                    render_manual_panel(state, exporter, start_edit_btn, scene_cards_container)
+                                    if exporter.all_clips_ready(state.script, state.manual_script_id):
+                                        safe_notify('🎉 모든 씬의 영상 매핑 완료! 상단의 [편집 및 자막 믹싱 시작]을 실행하십시오.', type='positive')
                                 except Exception as err:
-                                    safe_notify(f'씬 {sn} 업로드 실패: {err}', type='negative')
-                                    logger.error(f'씬 {sn} 업로드 오류: {err}')
+                                    safe_notify(f'업로드 실패: {err}', type='negative')
+                                    logger.error(f'씬 {sn} 수동 로드 오류: {err}')
                             return handle_upload
 
                         ui.upload(
                             on_upload=make_upload_handler(),
                             auto_upload=True,
                             max_file_size=500_000_000,
-                        ).props('accept=".mp4,.mov,.webm" flat color=teal').classes('w-full')
-
-        # ── 편집 시작 버튼 (하단 고정) ───────────────────────
-        with ui.element('div').classes('w-full pt-2 pb-2'):
-            ui.separator().classes('bg-slate-700 mb-4')
-            if ready_count == total and total > 0:
-                btn_props = 'color=green unelevated size=lg icon=movie_edit'
-                btn_text = f'✅ {total}개 씬 모두 준비됨 — 편집 시작'
-            else:
-                btn_props = 'color=purple unelevated size=lg icon=movie_edit'
-                btn_text = f'편집 시작 ({ready_count}/{total} 씬 준비됨)'
-
-            def _start_edit_click():
-                pass  # start_edit_btn 클릭은 외부에서 처리
-
-            bottom_start_btn = ui.button(btn_text).classes('w-full').props(btn_props)
-            bottom_start_btn.on('click', lambda: start_edit_btn.run_method('click'))
-            if ready_count < total:
-                bottom_start_btn.disable()
-
-        # scene_cards_container를 outer scope에서 접근하기 위해 저장
-        scene_cards_container._manual_panel_rendered = True
+                        ).props('accept=".mp4,.mov,.webm" flat color=violet dense label="비디오 선택 (mp4, mov)"').classes('w-full border border-dashed border-slate-700 rounded-lg hover:border-violet-500/50 bg-slate-950/20 py-1')
 
 
 def render_generation_tab(state: 'AppState') -> None:
-    """Video Generation 탭 렌더링"""
-
+    """Google AI Studio 스타일의 리팩토링된 Generation 탭 렌더링"""
     exporter = VeoPromptExporter()
+
+    # 세션 뷰에 필요한 헬퍼
     phase_labels = {}
     phases = ['ready', 'visuals', 'editing', 'complete']
 
@@ -261,367 +196,272 @@ def render_generation_tab(state: 'AppState') -> None:
         try:
             for p, label in phase_labels.items():
                 if p == phase:
-                    label.classes(replace='text-teal-400 font-bold')
+                    label.classes(replace='text-violet-400 font-bold')
                 elif phases.index(p) < phases.index(phase):
-                    label.classes(replace='text-green-400')
+                    label.classes(replace='text-emerald-400')
                 else:
-                    label.classes(replace='text-gray-500')
+                    label.classes(replace='text-slate-600')
         except (ValueError, RuntimeError) as e:
-            logger.debug(f"Phase label update skipped: {e}")
+            logger.debug(f"Progress UI sync skipped: {e}")
 
-    with ui.column().classes('w-full h-full gap-0'):
+    # 전체를 아우르는 반응형 컬럼 구조
+    with ui.column().classes('w-full h-full gap-0 overflow-hidden bg-slate-950'):
 
-        # ── 모드 선택 상단 바 ────────────────────────────────
-        with ui.element('div').classes('w-full px-6 py-3 bg-slate-800/80 border-b border-slate-700 flex items-center gap-6 shrink-0'):
-            # 각본 상태
-            with ui.row().classes('items-center gap-2'):
-                script_dot = 'bg-green-400' if state.script else 'bg-gray-600'
-                ui.element('div').classes(f'w-2 h-2 rounded-full {script_dot}')
-                ui.label().bind_text_from(
-                    state, 'script',
-                    backward=lambda s: s.title[:30] + ('...' if len(s.title) > 30 else '') if s else '각본 없음'
-                ).classes('text-sm text-gray-300')
+        # ── 1. TOP PIPELINE ACTION BAR ──
+        with ui.element('div').classes('w-full px-6 py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0 gap-4'):
+            with ui.row().classes('items-center gap-3'):
+                ui.icon('smart_display', size='sm').classes('text-violet-400')
+                with ui.column().classes('gap-0'):
+                    ui.label('영상 프로덕션 모니터').classes('text-sm font-bold text-white')
+                    source_label = '수동 업로드 모드' if state.manual_video_mode else 'Vertex AI API 자동 생성 모드'
+                    ui.label(f'Status: {source_label}').classes('text-[11px] text-slate-400 mt-0.5')
 
-            ui.element('div').classes('flex-grow')
+            # 파이프라인 진행 상태 (자동 / 수동 겸용 액션 바)
+            with ui.row().classes('items-center gap-4'):
 
-            # 모드 토글 (상단 중앙)
-            with ui.element('div').classes('flex items-center gap-3'):
-                ui.label('생성 방식:').classes('text-xs text-gray-500 uppercase tracking-wider')
-                mode_toggle = ui.toggle(
-                    {False: '🤖 자동 (VEO API)', True: '✋ 수동 (직접 업로드)'},
-                    value=state.manual_video_mode,
-                ).props('color=purple dense')
-
-        # ── 메인 콘텐츠 ─────────────────────────────────────
-        with ui.row().classes('w-full flex-grow gap-0 overflow-hidden'):
-
-            # === Left Panel: 설정 ===
-            with ui.column().classes('w-80 min-w-[320px] bg-slate-800/40 border-r border-slate-700 p-4 gap-4 overflow-y-auto'):
-
-                # Pipeline Status
-                with ui.element('div').classes('w-full rounded-xl bg-slate-900/60 border border-slate-600 p-4'):
-                    ui.label('파이프라인 상태').classes('text-xs text-gray-500 uppercase tracking-wider mb-3')
-
-                    with ui.row().classes('w-full items-center'):
-                        step_configs = [
-                            ('ready', 'hourglass_empty', 'Ready'),
-                            ('visuals', 'auto_awesome', 'Visuals'),
-                            ('editing', 'movie_edit', 'Editing'),
-                            ('complete', 'check_circle', 'Done')
-                        ]
-                        for i, (phase_id, icon, label_text) in enumerate(step_configs):
-                            with ui.column().classes('items-center gap-1'):
-                                icon_class = 'text-teal-400' if i == 0 else 'text-gray-500'
-                                with ui.element('div').classes('w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center border border-slate-600'):
-                                    ui.icon(icon, size='xs').classes(icon_class)
-                                phase_labels[phase_id] = ui.label(label_text).classes('text-xs text-gray-500')
-                            if i < len(step_configs) - 1:
-                                ui.element('div').classes('flex-grow h-px bg-slate-600 mb-4')
-
-                    scene_progress_container = ui.column().classes('w-full gap-2 mt-3')
-                    scene_progress_container.visible = False
-
-                    gen_spinner = ui.spinner(size='md').props('color=teal').classes('self-center my-3')
-                    gen_spinner.visible = False
-
-                # 자동 모드 실행 버튼
-                auto_btn = ui.button(
-                    'Start Production',
-                    on_click=lambda: asyncio.ensure_future(run_production())
-                ).classes('w-full').props('color=teal unelevated size=lg icon=rocket_launch')
-                auto_btn.visible = not state.manual_video_mode
-
-                # 수동 모드 편집 시작 버튼 (Left Panel용 - hidden, right panel의 bottom btn이 trigger)
+                # 수동 모드 전용 편집 시작 버튼
                 async def run_manual_production():
-                    if not state.script or not state.manual_clip_paths:
-                        safe_notify('먼저 모든 씬의 영상을 업로드해주세요.', type='warning')
+                    clip_paths = (
+                        exporter.get_ready_clip_paths(state.script, state.manual_script_id)
+                        if state.script else None
+                    )
+                    if not clip_paths:
+                        safe_notify('먼저 아래 격자 패널에서 모든 씬의 영상을 업로드해주십시오.', type='warning')
                         return
-                    await run_production_with_clips(state.manual_clip_paths)
+                    await run_production_with_clips(clip_paths)
 
                 manual_btn = ui.button(
-                    '편집 시작',
+                    '편집 및 자막 믹싱 시작',
                     on_click=run_manual_production
-                ).classes('w-full').props('color=purple unelevated size=lg icon=movie_edit')
-                manual_btn.disable()
+                ).classes('px-4 py-1.5 font-bold text-xs').props('color=violet unelevated size=sm icon=movie_edit')
                 manual_btn.visible = state.manual_video_mode
 
-                # Quick Settings
-                with ui.element('div').classes('w-full rounded-xl bg-slate-900/60 border border-slate-600 p-4'):
-                    with ui.row().classes('items-center gap-2 mb-3'):
-                        ui.icon('tune', size='xs').classes('text-amber-400')
-                        ui.label('빠른 설정').classes('text-xs font-bold text-amber-300 uppercase tracking-wider')
+                # 자동 모드 전용 Start Production 버튼
+                async def run_production_with_notification():
+                    if not state.script:
+                        safe_notify('로드된 각본이 없습니다. 스크립트 작성 후 실행해주십시오.', type='warning')
+                        return
+                    ui.notify('🎬 비디오 자동 생성을 구동합니다. Vertex AI 비용 모니터링을 진행하십시오...', type='info')
+                    await run_production()
 
-                    with ui.row().classes('w-full gap-3'):
-                        with ui.column().classes('flex-grow gap-1'):
-                            ui.label('목소리').classes('text-xs text-gray-500')
-                            voice_select = ui.select(
-                                options={'alloy': 'Alloy', 'nova': 'Nova ♀', 'onyx': 'Onyx ♂', 'shimmer': 'Shimmer ♀', 'echo': 'Echo ♂'},
-                                value=state.tts_voice
-                            ).props('outlined dense dark').classes('w-full')
-                            voice_select.bind_value(state, 'tts_voice')
+                auto_btn = ui.button(
+                    'Start Production',
+                    on_click=run_production_with_notification
+                ).classes('px-4 py-1.5 font-bold text-xs bg-gradient-to-r from-violet-600 to-indigo-600').props('color=violet unelevated size=sm icon=rocket_launch')
+                auto_btn.visible = not state.manual_video_mode
 
-                        with ui.column().classes('flex-grow gap-1'):
-                            ui.label('BGM').classes('text-xs text-gray-500')
-                            bgm_select = ui.select(
-                                options=['cinematic', 'upbeat', 'calm', 'mysterious', 'energetic', 'suspense'],
-                                value=state.bgm_mood
-                            ).props('outlined dense dark').classes('w-full')
-                            bgm_select.bind_value(state, 'bgm_mood')
+                # 상태 인디케이터 스피너
+                gen_spinner = ui.spinner(size='sm').props('color=violet').classes('my-1')
+                gen_spinner.visible = False
 
-                    with ui.row().classes('w-full items-center gap-2 mt-3'):
-                        ui.icon('volume_up', size='xs').classes('text-gray-500')
-                        bgm_volume_slider = ui.slider(min=0, max=50, value=int(state.bgm_volume * 100)).props('color=amber').classes('flex-grow')
-                        volume_label = ui.label(f'{int(state.bgm_volume * 100)}%').classes('text-xs text-gray-400 w-10')
+        # ── 2. MAIN PRODUCTION WORKSPACE ──
+        with ui.row().classes('w-full flex-grow overflow-hidden no-wrap gap-0'):
 
-                        def update_bgm_volume():
-                            state.bgm_volume = bgm_volume_slider.value / 100.0
-                            volume_label.text = f'{bgm_volume_slider.value}%'
-                        bgm_volume_slider.on('update:model-value', update_bgm_volume)
+            # --- 2A. LEFT SIDE: WIDE PREVIEW MONITOR (자동 모드 시 메인, 수동 모드 시 숨김/작게) ---
+            # 자동 모드와 수동 모드 모두의 통합 뷰어
+            with ui.column().classes('flex-grow h-full p-6 overflow-y-auto gap-5') as main_workspace_area:
 
-                # Advanced Options
-                with ui.expansion('고급 옵션', icon='settings').classes('w-full').props('header-class="text-xs text-gray-500 px-0"'):
-                    with ui.element('div').classes('flex flex-col gap-3 pt-2'):
-                        # 자막 설정
-                        with ui.element('div').classes('w-full rounded-lg bg-slate-900/40 border border-slate-700 p-3'):
-                            ui.label('자막').classes('text-xs text-gray-500 uppercase tracking-wider mb-2')
-                            with ui.row().classes('w-full gap-3'):
-                                with ui.column().classes('gap-1'):
-                                    ui.label('색상').classes('text-xs text-gray-600')
-                                    subtitle_color_input = ui.color_input(value=state.subtitle_color).classes('w-20')
-                                    subtitle_color_input.bind_value(state, 'subtitle_color')
-                                with ui.column().classes('flex-grow gap-1'):
-                                    ui.label('크기').classes('text-xs text-gray-600')
-                                    subtitle_size_slider = ui.slider(min=40, max=80, value=state.subtitle_size).props('label-always color=amber dense').classes('w-full')
-                                    subtitle_size_slider.bind_value(state, 'subtitle_size')
-                            with ui.column().classes('w-full gap-1 mt-2'):
-                                ui.label('Y 위치').classes('text-xs text-gray-600')
-                                subtitle_y_slider = ui.slider(min=1000, max=1600, value=state.subtitle_y_position).props('label-always color=amber dense').classes('w-full')
-                                subtitle_y_slider.bind_value(state, 'subtitle_y_position')
+                # ── 대형 프리뷰 모니터 카드 (자동 생성 시 혹은 수동 편집 완료 시 띄움) ──
+                with ui.element('div').classes('w-full rounded-xl bg-slate-900 border border-slate-800 overflow-hidden flex flex-col shadow-xl') as preview_monitor_card:
+                    # 모니터 타이틀 바
+                    with ui.element('div').classes('w-full bg-slate-900/90 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between'):
+                        with ui.row().classes('items-center gap-2'):
+                            ui.element('div').classes('w-2 h-2 rounded-full bg-rose-500 animate-pulse')
+                            ui.label('Premium Preview Monitor').classes('text-xs font-bold text-slate-300 font-mono')
 
-                        # 캐릭터 오버레이
-                        with ui.element('div').classes('w-full rounded-lg bg-slate-900/40 border border-slate-700 p-3'):
-                            with ui.row().classes('w-full items-center justify-between mb-2'):
-                                ui.label('캐릭터 오버레이').classes('text-xs text-gray-500 uppercase tracking-wider')
-                                char_enabled_switch = ui.switch(value=state.character_overlay_enabled).props('color=teal dense')
-                                char_enabled_switch.bind_value(state, 'character_overlay_enabled')
+                        # 해상도 정보 등 뱃지
+                        ui.badge('9:16 Vertical Shorts').classes('bg-slate-800 text-slate-400 text-[10px] px-2 py-0.5 border border-slate-700')
 
-                            char_video_input = ui.input(
-                                value=state.character_video_path,
-                                placeholder='캐릭터 영상 파일 경로'
-                            ).props('outlined dense dark').classes('w-full mb-2')
-                            char_video_input.bind_value(state, 'character_video_path')
-
-                            with ui.row().classes('w-full gap-3'):
-                                char_position_select = ui.select(
-                                    options={'bottom_right': '우하단', 'bottom_left': '좌하단', 'top_right': '우상단', 'top_left': '좌상단'},
-                                    value=state.character_position
-                                ).props('outlined dense dark').classes('flex-grow')
-                                char_position_select.bind_value(state, 'character_position')
-
-                                char_size_slider = ui.slider(min=10, max=40, value=int(state.character_size_ratio * 100)).props('color=teal dense').classes('w-20')
-                                def update_char_size():
-                                    state.character_size_ratio = char_size_slider.value / 100.0
-                                char_size_slider.on('update:model-value', update_char_size)
-
-                            with ui.row().classes('w-full items-center gap-2 mt-2'):
-                                ui.label('크로마키').classes('text-xs text-gray-600')
-                                chroma_enabled_switch = ui.switch(value=state.chroma_key_enabled).props('color=green dense')
-                                chroma_enabled_switch.bind_value(state, 'chroma_key_enabled')
-                                chroma_color_select = ui.select(
-                                    options={'green': '초록', 'blue': '파랑'},
-                                    value=state.chroma_key_color
-                                ).props('outlined dense dark').classes('w-20')
-                                chroma_color_select.bind_value(state, 'chroma_key_color')
-
-            # === Right Panel ===
-            right_preview_panel = None
-            right_manual_panel = None
-
-            with ui.column().classes('flex-grow h-full overflow-hidden'):
-
-                # ── 자동 모드: 프리뷰 모니터 ──
-                with ui.card().classes('w-full h-full p-0 bg-black rounded-none border-0 shadow-none overflow-hidden') as right_preview_panel:
-                    with ui.element('div').classes('w-full h-7 bg-slate-800 flex items-center px-3 gap-2 border-b border-slate-700'):
-                        ui.element('div').classes('w-2.5 h-2.5 rounded-full bg-red-500')
-                        ui.element('div').classes('w-2.5 h-2.5 rounded-full bg-yellow-500')
-                        ui.element('div').classes('w-2.5 h-2.5 rounded-full bg-green-500')
-                        ui.label('Preview Monitor').classes('text-xs text-gray-500 ml-3 font-mono')
-
-                    with ui.element('div').classes('w-full flex-grow flex items-center justify-center bg-gradient-to-b from-slate-900 to-black'):
+                    # 모니터 콘텐츠 본체
+                    with ui.element('div').classes('w-full h-[360px] flex items-center justify-center bg-black/80 relative overflow-hidden'):
                         video_player = None
                         placeholder_content = None
 
-                        with ui.column().classes('items-center gap-4') as placeholder_content:
-                            ui.icon('smart_display', size='xl').classes('text-slate-700')
-                            ui.label('영상 미리보기').classes('text-lg text-slate-600 font-medium')
-                            ui.label('Production을 시작하면 여기에 결과가 표시됩니다').classes('text-sm text-slate-700 text-center')
-                            with ui.element('div').classes('mt-4 rounded-xl bg-slate-800/50 border border-slate-700 p-4 max-w-xs'):
-                                ui.label('사용 방법').classes('text-xs text-gray-500 uppercase tracking-wider mb-2')
-                                for num, text in [('1', '왼쪽에서 각본 확인'), ('2', '설정 조정'), ('3', 'Start Production 클릭')]:
-                                    with ui.row().classes('items-center gap-2 mb-1'):
-                                        ui.badge(num).classes('bg-teal-600 text-white text-xs')
-                                        ui.label(text).classes('text-xs text-gray-400')
+                        # Gemini 풍의 유려한 그라데이션 광채 플레이스홀더
+                        with ui.column().classes('items-center gap-3 z-10 p-6 text-center') as placeholder_content:
+                            ui.icon('smart_display', size='lg').classes('text-violet-500/70')
+                            ui.label('Shorts Preview Area').classes('text-sm font-bold text-slate-300')
+                            ui.label('우측 패널에서 Veo 3.1 / Imagen 3 설정을 조정한 뒤, 상단의 생성을 구동하면 여기에 프리뷰가 재생됩니다.').classes('text-xs text-slate-500 max-w-md leading-relaxed')
 
-                        video_player = ui.video('').classes('max-h-full max-w-full')
+                            # 만약 API 요금 절감을 원할 시 수동 모드로 돌릴 것을 추천하는 뱃지
+                            with ui.row().classes('items-center gap-1.5 mt-2 bg-violet-950/30 rounded-lg border border-violet-500/20 px-3 py-1.5'):
+                                ui.icon('offline_bolt', size='xs').classes('text-violet-400')
+                            ui.label('API 비용 없이 제작하려면 Local File로 전환하고 씬별 영상을 업로드하세요.').classes('text-[10px] text-violet-300')
+
+                        # 실제 비디오 컴포넌트 (종횡비 9:16 대응)
+                        video_player = ui.video('').classes('max-h-full max-w-[200px] h-full shadow-lg border border-slate-800 rounded bg-slate-950')
                         video_player.visible = False
 
-                # ── 수동 모드: 씬별 업로드 패널 ──
-                with ui.scroll_area().classes('w-full h-full') as right_manual_panel:
-                    scene_cards_container = ui.column().classes('w-full gap-0 p-4')
+                        if state.final_video_path:
+                            video_player.set_source(state.final_video_path)
+                            video_player.visible = True
+                            placeholder_content.visible = False
 
-                # 초기 표시
-                right_preview_panel.visible = not state.manual_video_mode
-                right_manual_panel.visible = state.manual_video_mode
+                # ── 파이프라인 진행 상태 모니터 ──
+                with ui.element('div').classes('w-full rounded-xl bg-slate-900 border border-slate-800 p-5') as pipeline_status_card:
+                    with ui.row().classes('w-full items-center justify-between mb-4'):
+                        ui.label('파이프라인 진행 이력').classes('text-xs font-bold text-slate-400 uppercase tracking-widest')
+                        ui.label().bind_text_from(state, 'pipeline_message').classes('text-xs text-violet-400 font-semibold')
 
-                # ── 이벤트 핸들러 ──────────────────────────────
+                    # 파이프라인 단계 로드바
+                    with ui.row().classes('w-full justify-between items-center bg-slate-950/60 rounded-xl border border-slate-800/80 p-4 mb-4'):
+                        step_configs = [
+                            ('ready', 'hourglass_empty', 'Ready'),
+                            ('visuals', 'auto_awesome', 'Veo Visuals'),
+                            ('editing', 'movie_edit', 'FFmpeg Editing'),
+                            ('complete', 'check_circle', 'Finished')
+                        ]
+                        for i, (phase_id, icon, label_text) in enumerate(step_configs):
+                            with ui.column().classes('items-center gap-1.5 flex-grow'):
+                                icon_class = 'text-violet-400' if i == 0 else 'text-slate-600'
+                                with ui.element('div').classes('w-9 h-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center transition-all duration-300'):
+                                    ui.icon(icon, size='xs').classes(icon_class)
+                                phase_labels[phase_id] = ui.label(label_text).classes('text-[10px] text-slate-500 font-semibold uppercase tracking-wider')
 
-                async def _run_production_core(manual_clip_paths=None):
-                    nonlocal video_player, placeholder_content
-                    production_running = True
+                            if i < len(step_configs) - 1:
+                                ui.element('div').classes('h-px bg-slate-800 flex-grow max-w-[60px] mb-5')
 
-                    try:
-                        gen_spinner.visible = True
-                        scene_progress_container.visible = True
-                        scene_progress_container.clear()
-                    except RuntimeError:
-                        return
+                    # 실시간 생성 씬 격자 모니터 (비디오 생성 상태 확인)
+                    scene_progress_container = ui.column().classes('w-full gap-2 mt-2')
+                    scene_progress_container.visible = False
 
-                    try:
-                        char_config = None
-                        if state.character_overlay_enabled:
-                            char_config = CharacterOverlayConfig()
-                            char_config.enabled = True
-                            char_config.character_image = state.character_image_path
-                            char_config.character_video = state.character_video_path if state.character_video_path else None
-                            char_config.position = state.character_position
-                            char_config.size_ratio = state.character_size_ratio
-                            try:
-                                hex_color = state.character_border_color.lstrip('#')
-                                char_config.border_color = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-                            except (ValueError, IndexError):
-                                char_config.border_color = (255, 255, 255)
-                            char_config.chroma_key_enabled = state.chroma_key_enabled
-                            char_config.chroma_key_color = state.chroma_key_color
-                            char_config.chroma_key_threshold = state.chroma_key_threshold
+            # --- 2B. RIGHT SIDE: SCENE MANUAL GRID UPLOADER (수동 모드 시 화면 가득 활성화) ---
+            with ui.scroll_area().classes('flex-grow h-full bg-slate-950') as manual_uploader_area:
+                scene_cards_container = ui.grid(columns='repeat(auto-fill, minmax(320px, 1fr))').classes('w-full gap-4 p-6')
 
-                        service = ProductionService(
-                            mode=state.mode,
-                            character_overlay_config=char_config
-                        )
+        # ── 3. VISIBILITY SWITCHING LOGIC ──
+        def sync_layout_visibility():
+            """수동/자동 모드 설정값에 따른 가시성 조율"""
+            try:
+                # 자동 모드는 프리뷰, 수동 모드는 업로더를 표시
+                main_workspace_area.visible = not state.manual_video_mode
+                manual_uploader_area.visible = state.manual_video_mode
 
-                        def on_progress(progress: ProductionProgress):
-                            state.pipeline_phase = progress.phase
-                            state.pipeline_progress = progress.progress_percent
-                            state.pipeline_message = progress.message
-                            state.scene_progresses = progress.scene_progresses
-                            state.total_scenes = progress.total_scenes
-                            state.completed_scenes = progress.completed_scenes
-                            state.elapsed_seconds = progress.elapsed_seconds
-                            state.estimated_seconds = progress.remaining_seconds
+                auto_btn.visible = not state.manual_video_mode
+                manual_btn.visible = state.manual_video_mode
 
-                        service.set_progress_callback(on_progress)
-
-                        async def monitor_progress():
-                            while production_running:
-                                progress = service.progress
-                                try:
-                                    update_scene_grid(progress.scene_progresses, scene_progress_container)
-                                except RuntimeError:
-                                    pass
-                                try:
-                                    phase_map = {
-                                        ProductionPhase.GENERATING: 'visuals',
-                                        ProductionPhase.EDITING: 'editing',
-                                        ProductionPhase.COMPLETED: 'complete'
-                                    }
-                                    if progress.phase in phase_map:
-                                        update_progress_ui(phase_map[progress.phase], progress.progress_percent)
-                                except (RuntimeError, KeyError):
-                                    pass
-                                if progress.phase in [ProductionPhase.COMPLETED, ProductionPhase.FAILED]:
-                                    break
-                                await asyncio.sleep(0.3)
-
-                        monitor_task = asyncio.create_task(monitor_progress())
-
-                        logger.info("=== Starting Production ===")
-                        result = await service.produce_video(
-                            state.script,
-                            manual_clip_paths=manual_clip_paths
-                        )
-
-                        production_running = False
-                        await monitor_task
-
-                        if result.success:
-                            state.final_video_path = result.video_path
-                            state.generated_clips = result.clips
-                            update_progress_ui('complete', 100)
-                            safe_notify("🎬 편집 완료!", type='positive')
-                            if video_player and state.final_video_path:
-                                try:
-                                    video_player.set_source(state.final_video_path)
-                                    video_player.visible = True
-                                    if placeholder_content:
-                                        placeholder_content.visible = False
-                                    if right_manual_panel:
-                                        right_manual_panel.visible = False
-                                    if right_preview_panel:
-                                        right_preview_panel.visible = True
-                                except RuntimeError:
-                                    pass
-                            logger.info(f"Video saved to: {state.final_video_path}")
-                        else:
-                            safe_notify(f"Production failed: {result.error}", type='negative')
-                            logger.error(f"Production failed: {result.error}")
-
-                    except Exception as e:
-                        safe_notify(f"Production failed: {e}", type='negative')
-                        logger.error(f"Production Error: {e}")
-                    finally:
-                        production_running = False
-                        try:
-                            gen_spinner.visible = False
-                        except RuntimeError:
-                            pass
-
-                async def run_production():
-                    if not state.script:
-                        safe_notify("각본을 먼저 로드해주세요.", type='warning')
-                        return
-                    await _run_production_core(manual_clip_paths=None)
-
-                async def run_production_with_clips(clips: dict):
-                    if not state.script:
-                        safe_notify("각본을 먼저 로드해주세요.", type='warning')
-                        return
-                    try:
-                        if right_manual_panel:
-                            right_manual_panel.visible = False
-                        if right_preview_panel:
-                            right_preview_panel.visible = True
-                    except RuntimeError:
-                        pass
-                    await _run_production_core(manual_clip_paths=clips)
-
-                def refresh_right_panel():
-                    try:
-                        right_preview_panel.visible = not state.manual_video_mode
-                        right_manual_panel.visible = state.manual_video_mode
-                        auto_btn.visible = not state.manual_video_mode
-                        manual_btn.visible = state.manual_video_mode
-                        if state.manual_video_mode:
-                            render_manual_panel(state, exporter, manual_btn, scene_cards_container)
-                    except RuntimeError:
-                        pass
-
-                def on_mode_change(e):
-                    state.manual_video_mode = e.value
-                    state.reset_manual_mode()
-                    refresh_right_panel()
-
-                mode_toggle.on_value_change(on_mode_change)
-
-                # 초기 수동 패널 렌더링
                 if state.manual_video_mode:
                     render_manual_panel(state, exporter, manual_btn, scene_cards_container)
+            except RuntimeError:
+                pass
+
+        # 초기 동기화
+        sync_layout_visibility()
+
+        # ── 4. EVENT HANDLERS CORE (동적 렌더러 연동) ──
+        async def _run_production_core(manual_clip_paths=None):
+            nonlocal video_player, placeholder_content
+            production_running = True
+
+            try:
+                gen_spinner.visible = True
+                scene_progress_container.visible = True
+                scene_progress_container.clear()
+            except RuntimeError:
+                return
+
+            try:
+                # 상태 초기화
+                state.reset_pipeline()
+
+                char_config = state.build_character_overlay_config()
+                service = ProductionService(
+                    mode=state.mode,
+                    character_overlay_config=char_config
+                )
+
+                def on_progress(progress: ProductionProgress):
+                    state.sync_from_progress(progress)
+
+                service.set_progress_callback(on_progress)
+
+                async def monitor_progress():
+                    while production_running:
+                        progress = service.progress
+                        try:
+                            update_scene_grid(progress.scene_progresses, scene_progress_container)
+                        except RuntimeError:
+                            pass
+                        try:
+                            phase_map = {
+                                ProductionPhase.GENERATING: 'visuals',
+                                ProductionPhase.EDITING: 'editing',
+                                ProductionPhase.COMPLETED: 'complete'
+                            }
+                            if progress.phase in phase_map:
+                                update_progress_ui(phase_map[progress.phase], progress.progress_percent)
+                        except (RuntimeError, KeyError):
+                            pass
+                        if progress.phase in [ProductionPhase.COMPLETED, ProductionPhase.FAILED]:
+                            break
+                        await asyncio.sleep(0.3)
+
+                monitor_task = asyncio.create_task(monitor_progress())
+
+                logger.info("=== Production Pipeline Execution Triggered ===")
+                result = await service.produce_video(
+                    state.script,
+                    manual_clip_paths=manual_clip_paths
+                )
+
+                production_running = False
+                await monitor_task
+
+                if result.success:
+                    state.final_video_path = result.video_path
+                    state.generated_clips = result.clips
+                    update_progress_ui('complete', 100)
+                    safe_notify("🎉 영상 편집 및 프로덕션 완료!", type='positive')
+
+                    if video_player and state.final_video_path:
+                        try:
+                            # 믹싱 성공 시 항상 프리뷰 모니터 영역으로 유도하여 재생
+                            state.manual_video_mode = False
+                            sync_layout_visibility()
+
+                            video_player.set_source(state.final_video_path)
+                            video_player.visible = True
+                            if placeholder_content:
+                                placeholder_content.visible = False
+                        except RuntimeError:
+                            pass
+                    logger.info(f"Final output video available at: {state.final_video_path}")
+                else:
+                    safe_notify(f"프로덕션 실패: {result.error}", type='negative')
+                    logger.error(f"Production Failed: {result.error}")
+
+            except Exception as e:
+                safe_notify(f"실행 도중 오류 발생: {e}", type='negative')
+                logger.error(f"Production Error Event: {e}")
+            finally:
+                production_running = False
+                try:
+                    gen_spinner.visible = False
+                except RuntimeError:
+                    pass
+
+        async def run_production():
+            if not state.script:
+                safe_notify("각본을 먼저 생성/로드해주십시오.", type='warning')
+                return
+            await _run_production_core(manual_clip_paths=None)
+
+        async def run_production_with_clips(clips: dict):
+            if not state.script:
+                safe_notify("각본을 먼저 로드해주십시오.", type='warning')
+                return
+            await _run_production_core(manual_clip_paths=clips)
+
+        # 우측 설정 패널에서 모드가 바뀌면 현재 탭의 레이아웃을 갱신합니다.
+        def check_mode_and_sync():
+            """글로벌 State의 manual_video_mode와 본 탭 레이아웃 상태를 유기적으로 감지 및 매핑"""
+            try:
+                # 상태가 불일치 시 UI 토글 동기화
+                is_manual = state.manual_video_mode
+                if is_manual != manual_uploader_area.visible:
+                    sync_layout_visibility()
+            except RuntimeError:
+                pass
+
+        # 1초 주기로 글로벌 모드 변경 감지 및 반응형 레이아웃 갱신
+        ui.timer(1.0, check_mode_and_sync)

@@ -9,7 +9,10 @@ async def test_planner():
     planner = ScriptPlanner()
     print("Testing ScriptPlanner...")
     try:
-        script = await planner.plan_content(topic="The speed of light")
+        script, _context = await planner.plan_content(topic="The speed of light")
+        if script is None:
+            print("No script was generated.")
+            return
         print("\n--- Planned Script ---")
         print(f"Title: {script.title}")
         print(f"Description: {script.description}")

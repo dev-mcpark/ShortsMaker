@@ -115,6 +115,11 @@ class Settings:
     tts_model: str = "tts-1"
     default_voice: str = "alloy"
 
+    # NiceGUI Settings
+    nicegui_storage_secret: str = field(
+        default_factory=lambda: os.getenv("NICEGUI_STORAGE_SECRET", "")
+    )
+
     def __post_init__(self):
         """디렉토리 자동 생성 및 환경변수 설정"""
         # 디렉토리 생성

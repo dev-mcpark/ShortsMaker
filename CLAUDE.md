@@ -10,7 +10,7 @@ It allows users to generate YouTube Shorts from RSS feeds or URLs using a Human-
 ## Essential Commands
 
 ### Build & Run
-- **Run App:** `python src/shorts_maker/gui.py`
+- **Run App:** `python -m shorts_maker.gui` or `shorts-maker`
 - **Install Dependencies:** `uv sync`
 - **Lint:** `ruff check .`
 
@@ -27,7 +27,8 @@ GOOGLE_APPLICATION_CREDENTIALS=service_account.json
 ### Module Structure
 ```
 src/shorts_maker/
-├── gui.py                 # NiceGUI Entry Point & UI Logic
+├── gui/                   # NiceGUI pages, components, and state
+│   └── __main__.py        # Application entry point
 ├── planner/
 │   └── script_planner.py  # Script generation (GPT-4o)
 ├── generator/
@@ -41,11 +42,11 @@ src/shorts_maker/
 ```
 
 ### Key Design Patterns
-- **Async UI:** Uses NiceGUI's native async support. No separate worker threads/processes needed.
-- **State Management:** `AppState` class in `gui.py` holds runtime data (script, clips, video path).
+- **Async UI:** Uses NiceGUI's async support; blocking media and API work runs in an executor where needed.
+- **State Management:** `AppState` in `gui/state/app_state.py` holds runtime data (script, clips, video path).
 - **Live Logging:** Captures python logging and streams it to a textarea in the UI.
 
 ## Development Workflow
-1.  Run `python src/shorts_maker/gui.py`.
+1.  Run `python -m shorts_maker.gui`.
 2.  NiceGUI supports auto-reloading for UI changes.
 3.  Core logic changes (planner/generator) may require a restart.
