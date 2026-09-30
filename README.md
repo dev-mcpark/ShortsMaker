@@ -36,6 +36,10 @@ The scheduler uses the same `ProductionService` without a GUI session. Browser s
 held in memory and is lost on a server restart. API settings are process-wide, so run
 separate server instances when different users need different credentials.
 
+An article enters topic history only after its script passes validation. Studio progress
+tracks completed editing work and finishes after an optional upload. Stop requests wait
+for the current external API call to return before the run is released.
+
 ---
 
 ## 🚀 Quick Start

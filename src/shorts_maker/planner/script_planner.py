@@ -383,6 +383,8 @@ class ScriptPlanner:
             }
             script = await self._write_script(selection)
             final_script = await self._validate_and_save(script, selection)
+            if final_script:
+                self._save_history(selection['title'], selection['url'])
             context = ScriptGenerationContext(source_item=selection)
             return final_script, context
 
@@ -444,13 +446,12 @@ class ScriptPlanner:
                 self.logger.warning("⚠️ Failed to extract enhanced content. Using summary.")
                 selection['analysis'] = None
 
-            self._save_history(selection['title'], selection['url'])
-
             # 3. Write & Validate
             script = await self._write_script(selection)
             final_script = await self._validate_and_save(script, selection)
 
             if final_script:
+                self._save_history(selection['title'], selection['url'])
                 context = ScriptGenerationContext(source_item=selection, candidates=scored)
                 return final_script, context
 

@@ -92,10 +92,11 @@ class VideoGenerator:
     async def _generate_clips_sequential(self, script) -> List[str]:
         """순차적 클립 생성."""
         clips_paths = []
-        for scene in script.scenes:
+        for index, scene in enumerate(script.scenes):
             path = await self.generate_scene_clip(scene)
             clips_paths.append(path)
-            await asyncio.sleep(settings.scene_buffer_seconds)
+            if index < len(script.scenes) - 1:
+                await asyncio.sleep(settings.scene_buffer_seconds)
         return clips_paths
 
     async def _generate_clips_parallel(self, script) -> List[str]:

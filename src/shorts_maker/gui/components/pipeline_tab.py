@@ -316,9 +316,7 @@ def render_pipeline_tab(
                 """파이프라인 실행 긴급 중단"""
                 if state.production_service:
                     state.production_service.cancel()
-                state.pipeline_running = False
-                state.pipeline_phase = ProductionPhase.FAILED
-                state.pipeline_message = "사용자에 의해 취소됨"
+                state.pipeline_message = "취소 요청됨 — 현재 작업 종료 대기 중"
                 safe_notify('⚠️ 파이프라인 중단 요청 전송 완료', type='warning')
 
             with ui.row().classes('w-full gap-2 mt-2'):

@@ -14,7 +14,7 @@ from shorts_maker.generator.video_generator import VideoGenerator
 from shorts_maker.gui.state.app_state import AppState
 from shorts_maker.planner.models import ScriptGenerationContext, TopicCandidate
 from shorts_maker.planner.script_planner import ScriptPlanner
-from shorts_maker.services.production_service import ProductionResult, ProductionService
+from shorts_maker.services.production_service import ProductionPhase, ProductionResult, ProductionService
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.veo_prompt_exporter import VeoPromptExporter
@@ -49,7 +49,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertEqual(result.clips, [str(clip)])
         self.assertIsNone(service._generator)
-        editor.compose_video.assert_awaited_once_with([str(clip)], script)
+        editor.compose_video.assert_awaited_once()
+        self.assertEqual(editor.compose_video.await_args.args, ([str(clip)], script))
+        self.assertTrue(callable(editor.compose_video.await_args.kwargs["progress_callback"]))
 
     def test_missing_manual_file_is_rejected_before_editing(self):
         service = ProductionService(mode="video")
@@ -60,6 +62,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn("클립 파일", result.error)
         self.assertIsNone(service._editor)
+        self.assertEqual(service.progress.phase, ProductionPhase.FAILED)
 
     def test_session_options_reach_editor_and_parallel_generator(self):
         state = AppState(mode="image", tts_voice="nova", bgm_mood="cinematic")
@@ -86,7 +89,8 @@ class WorkflowTests(unittest.TestCase):
 
         self.assertTrue(result.success)
         generator.generate_clips.assert_awaited_once_with(script, parallel=True)
-        service._editor.compose_video.assert_awaited_once_with(clips, script)
+        service._editor.compose_video.assert_awaited_once()
+        self.assertEqual(service._editor.compose_video.await_args.args, (clips, script))
 
     def test_editor_rejects_mismatched_clips_before_processing(self):
         editor = object.__new__(VideoEditor)
@@ -111,6 +115,24 @@ class WorkflowTests(unittest.TestCase):
         editor._cleanup_clips.assert_called_once_with([])
         editor.cleanup_temp_files.assert_called_once()
 
+    def test_editor_cancellation_skips_visual_processing(self):
+        editor = object.__new__(VideoEditor)
+        editor._temp_files = []
+        editor.logger = Mock()
+        editor.cleanup_old_temp_files = Mock()
+        editor.cleanup_temp_files = Mock()
+        editor._cleanup_clips = Mock()
+        editor._get_voice_for_mood = Mock(return_value="alloy")
+        editor._generate_tts = AsyncMock(return_value="audio.mp3")
+        editor._create_visual_clip = Mock()
+        script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=1, script_text="Hello")])
+
+        with self.assertRaisesRegex(RuntimeError, "취소"):
+            asyncio.run(editor.compose_video(["scene.png"], script, is_cancelled=lambda: True))
+
+        editor._create_visual_clip.assert_not_called()
+        editor.cleanup_temp_files.assert_called_once()
+
     def test_full_pipeline_retains_work_after_upload_failure(self):
         service = ProductionService()
         script = SimpleNamespace(title="Title", description="Description", tags=[])
@@ -128,6 +150,84 @@ class WorkflowTests(unittest.TestCase):
         self.assertIs(result.script, script)
         self.assertEqual(result.video_path, "video.mp4")
         self.assertEqual(result.clips, ["scene.png"])
+
+    def test_full_pipeline_completes_only_after_upload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            clip = Path(directory) / "scene.png"
+            clip.touch()
+            output = Path(directory) / "output.mp4"
+            output.touch()
+            service = ProductionService(mode="image")
+            script = SimpleNamespace(
+                title="Title", description="Description", tags=[],
+                scenes=[SimpleNamespace(scene_number=1, visual_description="Visual")],
+            )
+            service.generate_script = AsyncMock(return_value=(script, None))
+            service._generator = SimpleNamespace(generate_scene_clip=AsyncMock(return_value=str(clip)))
+            service._editor = SimpleNamespace(compose_video=AsyncMock(return_value=str(output)))
+            service._uploader = SimpleNamespace(upload=AsyncMock(return_value="video-id"))
+            phases = []
+            service.set_progress_callback(lambda progress: phases.append(progress.phase))
+
+            with patch("shorts_maker.services.production_service.asyncio.sleep", new_callable=AsyncMock) as delay:
+                result = asyncio.run(service.full_pipeline(auto_upload=True))
+            delay.assert_not_awaited()
+
+        self.assertTrue(result.success)
+        self.assertIn(ProductionPhase.UPLOADING, phases)
+        self.assertEqual(phases[-1], ProductionPhase.COMPLETED)
+        self.assertNotIn(ProductionPhase.COMPLETED, phases[:phases.index(ProductionPhase.UPLOADING)])
+
+    def test_upload_failure_sets_failed_phase(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output.mp4"
+            output.touch()
+            service = ProductionService()
+            service._uploader = SimpleNamespace(upload=AsyncMock(return_value=None))
+
+            result = asyncio.run(service.upload_to_youtube(str(output), {"title": "Title"}))
+
+        self.assertFalse(result.success)
+        self.assertEqual(service.progress.phase, ProductionPhase.FAILED)
+
+    def test_cancelled_run_does_not_start_upload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output.mp4"
+            output.touch()
+            service = ProductionService()
+            uploader = SimpleNamespace(upload=AsyncMock(return_value="video-id"))
+            service._uploader = uploader
+            service.cancel()
+
+            result = asyncio.run(service.upload_to_youtube(str(output), {"title": "Title"}))
+
+        self.assertFalse(result.success)
+        self.assertEqual(service.progress.phase, ProductionPhase.FAILED)
+        uploader.upload.assert_not_awaited()
+
+    def test_editor_progress_is_reported_when_work_occurs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            clip = Path(directory) / "scene.png"
+            clip.touch()
+            output = Path(directory) / "output.mp4"
+            output.touch()
+            service = ProductionService()
+            async def compose(*args, progress_callback, is_cancelled):
+                progress_callback(50, "씬 편집 중")
+                return str(output)
+
+            service._editor = SimpleNamespace(compose_video=AsyncMock(side_effect=compose))
+            script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=1)])
+            seen = []
+            service.set_progress_callback(lambda progress: seen.append((progress.phase, progress.progress_percent)))
+
+            result = asyncio.run(service.produce_video(script, manual_clip_paths={1: str(clip)}))
+
+        self.assertTrue(result.success)
+        self.assertEqual(next(percent for phase, percent in seen if phase == ProductionPhase.EDITING), 0)
+        self.assertIn((ProductionPhase.EDITING, 50), seen)
+        self.assertNotIn((ProductionPhase.EDITING, 60), seen)
+        self.assertNotIn((ProductionPhase.EDITING, 80), seen)
 
     def test_uploaded_clips_are_recovered_from_disk(self):
         script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=1)])
@@ -152,6 +252,17 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(asyncio.run(generator.generate_scene_clip(scene)), "image.png")
         generator._generate_background_video.assert_awaited_once_with(scene)
         generator._generate_image_imagen.assert_awaited_once_with(scene)
+
+    def test_sequential_generation_waits_only_between_scenes(self):
+        generator = object.__new__(VideoGenerator)
+        generator.generate_scene_clip = AsyncMock(side_effect=["scene_1.png", "scene_2.png"])
+        script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=i) for i in (1, 2)])
+
+        with patch("shorts_maker.generator.video_generator.asyncio.sleep", new_callable=AsyncMock) as delay:
+            result = asyncio.run(generator._generate_clips_sequential(script))
+
+        self.assertEqual(result, ["scene_1.png", "scene_2.png"])
+        delay.assert_awaited_once_with(settings.scene_buffer_seconds)
 
     def test_parallel_failure_does_not_create_publishable_placeholder(self):
         generator = object.__new__(VideoGenerator)
@@ -187,6 +298,27 @@ class WorkflowTests(unittest.TestCase):
         planner._validate_and_save = AsyncMock(return_value=None)
 
         self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+        planner._save_history.assert_not_called()
+
+    def test_valid_script_is_recorded_after_validation(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        candidate = {"title": "Topic", "category": "Tech", "url": "https://example.com"}
+        planner._fetch_rss_feeds = Mock(return_value=[candidate])
+        planner._validate_url = Mock(return_value=True)
+        planner._score_topics = AsyncMock(return_value=[
+            TopicCandidate(item=candidate, score=8, reason="test", selected=True)
+        ])
+        planner.content_extractor = SimpleNamespace(fetch_enhanced_article=Mock(return_value=None))
+        planner._write_script = AsyncMock(return_value=object())
+        validated = object()
+        planner._validate_and_save = AsyncMock(return_value=validated)
+        planner._save_history = Mock()
+
+        result, _ = asyncio.run(planner.plan_content())
+
+        self.assertIs(result, validated)
+        planner._save_history.assert_called_once_with("Topic", "https://example.com")
 
     def test_empty_feed_does_not_invent_a_topic(self):
         planner = object.__new__(ScriptPlanner)

@@ -3,7 +3,7 @@ import asyncio
 import time
 import glob
 from contextlib import suppress
-from typing import List, Optional
+from typing import Callable, List, Optional
 from moviepy import VideoFileClip, TextClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip, ImageClip, CompositeAudioClip
 import moviepy.video.fx as vfx
 from moviepy.video.fx import FadeIn
@@ -134,7 +134,13 @@ class VideoEditor:
         if cleaned > 0:
             self.logger.info(f"🧹 오래된 임시 파일 {cleaned}개 정리")
 
-    async def compose_video(self, media_paths: List[str], script) -> str:
+    async def compose_video(
+        self,
+        media_paths: List[str],
+        script,
+        progress_callback: Optional[Callable[[float, str], None]] = None,
+        is_cancelled: Optional[Callable[[], bool]] = None,
+    ) -> str:
         if len(media_paths) != len(script.scenes):
             raise ValueError("씬 수와 클립 수가 일치하지 않습니다.")
         # 시작 시 오래된 임시 파일 정리
@@ -148,11 +154,14 @@ class VideoEditor:
 
             for i, (path, scene) in enumerate(zip(media_paths, script.scenes)):
                 self.logger.info(f"Editing scene {scene.scene_number}...")
+                if progress_callback:
+                    progress_callback(5 + 65 * i / len(script.scenes), f"씬 {i + 1}/{len(script.scenes)} TTS 생성 중...")
 
                 # 1. TTS
                 audio_path = await self._generate_tts(scene.script_text, i, voice_name)
+                if is_cancelled and is_cancelled():
+                    raise RuntimeError("사용자에 의해 취소됨")
                 self._track_temp_file(audio_path)  # 임시 파일 추적
-                await asyncio.sleep(2)
                 audio = AudioFileClip(audio_path)
                 duration = audio.duration + 0.5
             
@@ -177,6 +186,8 @@ class VideoEditor:
                     final_scene_clip = final_scene_clip.with_effects([FadeIn(duration=0.5)])
             
                 processed_clips.append(final_scene_clip)
+                if progress_callback:
+                    progress_callback(5 + 65 * (i + 1) / len(script.scenes), f"씬 {i + 1}/{len(script.scenes)} 편집 완료")
 
             if not processed_clips:
                 self.logger.warning("No clips to compose.")
@@ -200,6 +211,8 @@ class VideoEditor:
                 final_video = final_video.with_effects([vfx.MultiplySpeed(speed_factor)])
         
             # 4. BGM
+            if progress_callback:
+                progress_callback(75, "BGM 합성 중...")
             try:
                 mood = self.bgm_mood or getattr(script, 'mood', 'cinematic')
                 bgm_path = self.bgm_manager.get_bgm_path(mood)
@@ -221,6 +234,10 @@ class VideoEditor:
 
             settings.output_dir.mkdir(parents=True, exist_ok=True)
             output_filename = str(settings.output_dir / f"final_shorts_{time.time_ns()}.mp4")
+            if is_cancelled and is_cancelled():
+                raise RuntimeError("사용자에 의해 취소됨")
+            if progress_callback:
+                progress_callback(85, "최종 렌더링 중...")
             await asyncio.to_thread(
                 final_video.write_videofile,
                 output_filename,

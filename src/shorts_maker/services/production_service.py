@@ -217,6 +217,7 @@ class ProductionService:
     def _start_phase(self, phase: ProductionPhase, num_scenes: int = 5):
         """단계 시작 - 시간 추적 및 예상 시간 계산"""
         self._progress.phase = phase
+        self._progress.progress_percent = 0
         self._progress.phase_start_time = time.time()
 
         times = self.ESTIMATED_TIMES.get(self.mode, self.ESTIMATED_TIMES["image"])
@@ -264,6 +265,14 @@ class ProductionService:
             self._uploader = YouTubeUploader()
         return self._uploader
 
+    def _failed_result(
+        self, error: str, clips: Optional[List[str]] = None,
+        video_path: Optional[str] = None,
+    ) -> ProductionResult:
+        self._progress.error = error
+        self._update_progress(ProductionPhase.FAILED, 0, f"오류: {error}")
+        return ProductionResult(success=False, video_path=video_path, clips=clips or [], error=error)
+
     async def generate_script(
         self,
         topic: Optional[str] = None,
@@ -284,6 +293,7 @@ class ProductionService:
             self._update_progress(ProductionPhase.PLANNING, 10, "콘텐츠 소스 분석 중...")
 
             if self.is_cancelled():
+                self._update_progress(ProductionPhase.FAILED, 0, "사용자에 의해 취소됨")
                 return None, None
 
             planner = self._get_planner()
@@ -291,6 +301,7 @@ class ProductionService:
             self._update_progress(ProductionPhase.PLANNING, 30, "RSS 피드 스캔 중...")
 
             if self.is_cancelled():
+                self._update_progress(ProductionPhase.FAILED, 0, "사용자에 의해 취소됨")
                 return None, None
 
             self._update_progress(ProductionPhase.PLANNING, 50, "GPT-4o로 스크립트 생성 중...")
@@ -298,6 +309,7 @@ class ProductionService:
             script, context = await planner.plan_content(topic=topic, direct_url=direct_url)
 
             if self.is_cancelled():
+                self._update_progress(ProductionPhase.FAILED, 0, "사용자에 의해 취소됨")
                 return None, None
 
             if script:
@@ -363,6 +375,7 @@ class ProductionService:
         self,
         script: ShortsScript,
         manual_clip_paths: Optional[Dict[int, str]] = None,
+        finish_phase: bool = True,
     ) -> ProductionResult:
         """
         스크립트에서 비디오 생성
@@ -393,9 +406,8 @@ class ProductionService:
                     self._update_scene_progress(i, "processing")
                     clip_path = manual_clip_paths.get(scene.scene_number)
                     if not clip_path or not os.path.isfile(clip_path):
-                        return ProductionResult(
-                            success=False,
-                            error=f"씬 {scene.scene_number}의 클립 파일이 없거나 접근할 수 없습니다."
+                        return self._failed_result(
+                            f"씬 {scene.scene_number}의 클립 파일이 없거나 접근할 수 없습니다.", clips,
                         )
                     clips.append(clip_path)
                     self._update_scene_progress(i, "completed", thumbnail_path=clip_path)
@@ -418,7 +430,7 @@ class ProductionService:
                 else:
                     for i, scene in enumerate(script.scenes):
                         if self.is_cancelled():
-                            return ProductionResult(success=False, clips=clips, error="사용자에 의해 취소됨")
+                            return self._failed_result("사용자에 의해 취소됨", clips)
 
                         self._update_scene_progress(i, "processing")
                         progress_pct = (i / num_scenes) * 100
@@ -438,51 +450,46 @@ class ProductionService:
                             self._update_scene_progress(i, "failed", error=str(scene_error))
                             raise
 
-                        await asyncio.sleep(2)
+                        if i < num_scenes - 1:
+                            await asyncio.sleep(2)
 
             if len(clips) != num_scenes or not clips:
-                return ProductionResult(success=False, clips=clips, error="씬 수와 클립 수가 일치하지 않습니다.")
+                return self._failed_result("씬 수와 클립 수가 일치하지 않습니다.", clips)
             if any(not path or not os.path.isfile(path) for path in clips):
-                return ProductionResult(success=False, clips=clips, error="생성된 클립 파일이 없습니다.")
+                return self._failed_result("생성된 클립 파일이 없습니다.", clips)
 
             self._update_progress(ProductionPhase.GENERATING, 100,
                                    f"✓ {len(clips)}개 클립 생성 완료")
 
             # Phase 2: Video Editing (씬별 상세 진행)
             if self.is_cancelled():
-                return ProductionResult(success=False, clips=clips, error="사용자에 의해 취소됨")
+                return self._failed_result("사용자에 의해 취소됨", clips)
 
             self._start_phase(ProductionPhase.EDITING, num_scenes)
             self._update_progress(ProductionPhase.EDITING, 0, "비디오 편집 시작...")
 
             editor = self._get_editor()
 
-            # 편집 단계별 진행률 (TTS, 자막, BGM, 렌더링)
-            self._update_progress(ProductionPhase.EDITING, 20, "TTS 음성 생성 중...")
+            if self.is_cancelled():
+                return self._failed_result("사용자에 의해 취소됨", clips)
+            video_path = await editor.compose_video(
+                clips, script,
+                progress_callback=lambda percent, message: self._update_progress(
+                    ProductionPhase.EDITING, percent, message,
+                ),
+                is_cancelled=self.is_cancelled,
+            )
 
             if self.is_cancelled():
-                return ProductionResult(success=False, clips=clips, error="사용자에 의해 취소됨")
-
-            self._update_progress(ProductionPhase.EDITING, 40, "자막 오버레이 중...")
-
-            if self.is_cancelled():
-                return ProductionResult(success=False, clips=clips, error="사용자에 의해 취소됨")
-
-            self._update_progress(ProductionPhase.EDITING, 60, "BGM 합성 중...")
-
-            video_path = await editor.compose_video(clips, script)
-
-            if self.is_cancelled():
-                return ProductionResult(success=False, clips=clips, error="사용자에 의해 취소됨")
-
-            self._update_progress(ProductionPhase.EDITING, 80, "최종 렌더링 중...")
+                return self._failed_result("사용자에 의해 취소됨", clips, video_path)
 
             if not video_path or not os.path.exists(video_path):
-                return ProductionResult(success=False, clips=clips, error="비디오 편집 실패")
+                return self._failed_result("비디오 편집 실패", clips)
 
             self._update_progress(ProductionPhase.EDITING, 100, "✓ 편집 완료")
-            self._update_progress(ProductionPhase.COMPLETED, 100,
-                                   f"🎬 프로덕션 완료: {video_path}")
+            if finish_phase:
+                self._update_progress(ProductionPhase.COMPLETED, 100,
+                                       f"🎬 프로덕션 완료: {video_path}")
 
             return ProductionResult(
                 success=True,
@@ -492,9 +499,7 @@ class ProductionService:
 
         except Exception as e:
             self.logger.error(f"비디오 프로덕션 오류: {e}")
-            self._progress.error = str(e)
-            self._update_progress(ProductionPhase.FAILED, 0, f"오류: {e}")
-            return ProductionResult(success=False, clips=clips, error=str(e))
+            return self._failed_result(str(e), clips)
 
     async def upload_to_youtube(
         self,
@@ -512,10 +517,13 @@ class ProductionService:
             ProductionResult 객체
         """
         try:
+            self._start_phase(ProductionPhase.UPLOADING)
             self._update_progress(ProductionPhase.UPLOADING, 0, "YouTube 업로드 시작...")
 
             if not os.path.exists(video_path):
-                return ProductionResult(success=False, error="비디오 파일이 존재하지 않습니다")
+                return self._failed_result("비디오 파일이 존재하지 않습니다")
+            if self.is_cancelled():
+                return self._failed_result("사용자에 의해 취소됨", video_path=video_path)
 
             uploader = self._get_uploader()
             video_id = await uploader.upload(video_path, metadata)
@@ -528,13 +536,11 @@ class ProductionService:
                     youtube_id=video_id
                 )
             else:
-                return ProductionResult(success=False, video_path=video_path, error="업로드 실패")
+                return self._failed_result("업로드 실패", video_path=video_path)
 
         except Exception as e:
             self.logger.error(f"YouTube 업로드 오류: {e}")
-            self._progress.error = str(e)
-            self._update_progress(ProductionPhase.FAILED, 0, f"오류: {e}")
-            return ProductionResult(success=False, video_path=video_path, error=str(e))
+            return self._failed_result(str(e), video_path=video_path)
 
     async def full_pipeline(
         self,
@@ -558,10 +564,10 @@ class ProductionService:
         # Step 1: Script Generation
         script, _context = await self.generate_script(topic=topic, direct_url=direct_url)
         if not script:
-            return ProductionResult(success=False, error="스크립트 생성 실패")
+            return self._failed_result("사용자에 의해 취소됨" if self.is_cancelled() else "스크립트 생성 실패")
 
         # Step 2: Video Production
-        result = await self.produce_video(script)
+        result = await self.produce_video(script, finish_phase=not auto_upload)
         result.script = script
         if not result.success:
             return result

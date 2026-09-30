@@ -116,7 +116,7 @@ def render_main_page() -> None:
                         return
                     if state.production_service:
                         state.production_service.cancel()
-                    state.pipeline_running = False
+                    state.pipeline_message = '취소 요청됨 — 현재 작업 종료 대기 중'
                     ui.notify('⚠️ 파이프라인 취소가 요청되었습니다.', type='warning')
 
                 ui.button('Run Pipeline', on_click=run_entire_pipeline).props('color=violet size=sm icon=play_arrow unelevated').classes('rounded font-semibold text-xs')
