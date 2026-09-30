@@ -4,11 +4,18 @@ ProductionService - 비디오 프로덕션 워크플로우를 추상화하는 �
 GUI와 비즈니스 로직을 분리하여 유지보수성과 테스트 용이성을 높입니다.
 """
 import asyncio
+import hashlib
+import json
 import os
+import shutil
 import time
+import uuid
+from pathlib import Path
 from typing import Optional, List, Dict, Any, Callable, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
+from PIL import Image
+from moviepy import VideoFileClip
 
 from shorts_maker.planner.script_planner import ScriptPlanner, ShortsScript
 from shorts_maker.planner.models import ScriptGenerationContext
@@ -17,6 +24,8 @@ from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.uploader.youtube_uploader import YouTubeUploader
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
+from shorts_maker.utils.config import settings
+from shorts_maker.editor.quality_check import check_video_quality
 
 
 class ProductionPhase(Enum):
@@ -93,6 +102,7 @@ class ProductionResult:
     error: Optional[str] = None
     clips: List[str] = field(default_factory=list)
     script: Optional[ShortsScript] = None
+    ready_for_upload: bool = False
 
 
 class ProductionService:
@@ -273,6 +283,57 @@ class ProductionService:
         self._update_progress(ProductionPhase.FAILED, 0, f"오류: {error}")
         return ProductionResult(success=False, video_path=video_path, clips=clips or [], error=error)
 
+    def _scene_cache_dir(self, script: ShortsScript) -> Path:
+        overlay = (self.character_overlay_config or CharacterOverlayConfig()).to_dict()
+        for key in ("character_image", "character_video"):
+            path = overlay.get(key)
+            if path and Path(path).is_file():
+                stat = Path(path).stat()
+                overlay[f"{key}_version"] = (stat.st_size, stat.st_mtime_ns)
+        identity = json.dumps({
+            "script": script.model_dump(mode="json"),
+            "mode": self.mode,
+            "model": settings.veo_model_id if self.mode == "video" else settings.imagen_model_id,
+            "overlay": overlay,
+        }, sort_keys=True, ensure_ascii=False)
+        digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
+        return settings.clips_dir / f"auto_{digest}"
+
+    @staticmethod
+    def _cached_clip(directory: Path, scene_number: int, mode: str) -> Optional[str]:
+        suffix = ".mp4" if mode == "video" else ".png"
+        path = directory / f"scene_{scene_number:02d}{suffix}"
+        return str(path) if ProductionService._valid_clip(path, mode) else None
+
+    @staticmethod
+    def _valid_clip(path: Path, mode: str) -> bool:
+        try:
+            if not path.is_file() or path.stat().st_size == 0:
+                return False
+            if mode == "video":
+                with VideoFileClip(str(path)) as clip:
+                    return clip.duration > 0 and clip.get_frame(0) is not None
+            with Image.open(path) as image:
+                image.verify()
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _save_clip(directory: Path, scene_number: int, mode: str, source: str) -> str:
+        suffix = ".mp4" if mode == "video" else ".png"
+        destination = directory / f"scene_{scene_number:02d}{suffix}"
+        directory.mkdir(parents=True, exist_ok=True)
+        temporary = directory / f".{destination.stem}.{uuid.uuid4().hex}{suffix}"
+        try:
+            shutil.copyfile(source, temporary)
+            if not ProductionService._valid_clip(temporary, mode):
+                raise ValueError(f"씬 {scene_number} 결과 파일을 읽을 수 없습니다.")
+            os.replace(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return str(destination)
+
     async def generate_script(
         self,
         topic: Optional[str] = None,
@@ -390,11 +451,29 @@ class ProductionService:
         """
         num_scenes = len(script.scenes)
         clips = []
+        editor = None
+        audio_paths = None
 
         try:
             # Phase 1: Visual Generation
             self._start_phase(ProductionPhase.GENERATING, num_scenes)
             self._init_scene_progresses(num_scenes)
+
+            if manual_clip_paths is not None:
+                for scene in script.scenes:
+                    path = manual_clip_paths.get(scene.scene_number)
+                    if not path or not os.path.isfile(path):
+                        return self._failed_result(
+                            f"씬 {scene.scene_number}의 클립 파일이 없거나 접근할 수 없습니다.", clips,
+                        )
+            if self.is_cancelled():
+                return self._failed_result("사용자에 의해 취소됨", clips)
+            if isinstance(script, ShortsScript):
+                self._update_progress(ProductionPhase.GENERATING, 0, "내레이션 길이 확인 중...")
+                editor = self._get_editor()
+                audio_paths = await editor.prepare_narration(script)
+                if self.is_cancelled():
+                    return self._failed_result("사용자에 의해 취소됨", clips)
 
             if manual_clip_paths is not None:
                 # ── 수동 모드: VEO API 호출 없이 업로드된 파일 사용 ──
@@ -405,10 +484,6 @@ class ProductionService:
                 for i, scene in enumerate(script.scenes):
                     self._update_scene_progress(i, "processing")
                     clip_path = manual_clip_paths.get(scene.scene_number)
-                    if not clip_path or not os.path.isfile(clip_path):
-                        return self._failed_result(
-                            f"씬 {scene.scene_number}의 클립 파일이 없거나 접근할 수 없습니다.", clips,
-                        )
                     clips.append(clip_path)
                     self._update_scene_progress(i, "completed", thumbnail_path=clip_path)
                     self._update_progress(
@@ -423,34 +498,55 @@ class ProductionService:
                 self._update_progress(ProductionPhase.GENERATING, 0,
                                        f"비주얼 생성 시작 (0/{num_scenes})")
 
+                cache_dir = self._scene_cache_dir(script) if isinstance(script, ShortsScript) else None
+
+                async def generate_one(index, scene):
+                    if self.is_cancelled():
+                        raise RuntimeError("사용자에 의해 취소됨")
+                    self._update_scene_progress(index, "processing")
+                    cached = await asyncio.to_thread(
+                        self._cached_clip, cache_dir, scene.scene_number, self.mode,
+                    ) if cache_dir else None
+                    self._update_progress(
+                        ProductionPhase.GENERATING,
+                        self._progress.completed_scenes / num_scenes * 100,
+                        f"씬 {index + 1}/{num_scenes} {'저장된 결과 사용' if cached else '생성 중'}",
+                    )
+                    try:
+                        path = cached or await generator.generate_scene_clip(scene)
+                        if not cached and cache_dir:
+                            path = await asyncio.to_thread(
+                                self._save_clip, cache_dir, scene.scene_number, self.mode, path,
+                            )
+                        self._update_scene_progress(index, "completed", thumbnail_path=path)
+                        return path, bool(cached)
+                    except Exception as scene_error:
+                        self._update_scene_progress(index, "failed", error=str(scene_error))
+                        raise
+
                 if self.parallel_clips and self.mode == "image":
-                    clips = await generator.generate_clips(script, parallel=True)
-                    for i, clip_path in enumerate(clips):
-                        self._update_scene_progress(i, "completed", thumbnail_path=clip_path)
+                    semaphore = asyncio.Semaphore(getattr(generator, "max_concurrent", 3))
+
+                    async def bounded(index, scene):
+                        async with semaphore:
+                            path, reused = await generate_one(index, scene)
+                            if not reused:
+                                await asyncio.sleep(2)
+                            return path
+
+                    results = await asyncio.gather(
+                        *(bounded(i, scene) for i, scene in enumerate(script.scenes)),
+                        return_exceptions=True,
+                    )
+                    clips = [path for path in results if isinstance(path, str)]
+                    errors = [error for error in results if isinstance(error, BaseException)]
+                    if errors:
+                        raise errors[0]
                 else:
                     for i, scene in enumerate(script.scenes):
-                        if self.is_cancelled():
-                            return self._failed_result("사용자에 의해 취소됨", clips)
-
-                        self._update_scene_progress(i, "processing")
-                        progress_pct = (i / num_scenes) * 100
-                        self._update_progress(
-                            ProductionPhase.GENERATING,
-                            progress_pct,
-                            f"씬 {i + 1}/{num_scenes} 생성 중: {scene.visual_description[:30]}..."
-                        )
-
-                        try:
-                            clip_path = await generator.generate_scene_clip(scene)
-                            clips.append(clip_path)
-                            self._update_scene_progress(i, "completed", thumbnail_path=clip_path)
-
-                        except Exception as scene_error:
-                            self.logger.error(f"씬 {i + 1} 생성 실패: {scene_error}")
-                            self._update_scene_progress(i, "failed", error=str(scene_error))
-                            raise
-
-                        if i < num_scenes - 1:
+                        path, reused = await generate_one(i, scene)
+                        clips.append(path)
+                        if i < num_scenes - 1 and not reused and not self.is_cancelled():
                             await asyncio.sleep(2)
 
             if len(clips) != num_scenes or not clips:
@@ -468,7 +564,7 @@ class ProductionService:
             self._start_phase(ProductionPhase.EDITING, num_scenes)
             self._update_progress(ProductionPhase.EDITING, 0, "비디오 편집 시작...")
 
-            editor = self._get_editor()
+            editor = editor or self._get_editor()
 
             if self.is_cancelled():
                 return self._failed_result("사용자에 의해 취소됨", clips)
@@ -478,6 +574,7 @@ class ProductionService:
                     ProductionPhase.EDITING, percent, message,
                 ),
                 is_cancelled=self.is_cancelled,
+                **({"audio_paths": audio_paths} if audio_paths is not None else {}),
             )
 
             if self.is_cancelled():
@@ -485,6 +582,11 @@ class ProductionService:
 
             if not video_path or not os.path.exists(video_path):
                 return self._failed_result("비디오 편집 실패", clips)
+
+            try:
+                await asyncio.to_thread(check_video_quality, video_path)
+            except Exception as error:
+                return self._failed_result(f"영상 품질 검사 실패: {error}", clips, video_path)
 
             self._update_progress(ProductionPhase.EDITING, 100, "✓ 편집 완료")
             if finish_phase:
@@ -494,12 +596,16 @@ class ProductionService:
             return ProductionResult(
                 success=True,
                 video_path=video_path,
-                clips=clips
+                clips=clips,
+                ready_for_upload=True,
             )
 
         except Exception as e:
             self.logger.error(f"비디오 프로덕션 오류: {e}")
             return self._failed_result(str(e), clips)
+        finally:
+            if audio_paths and editor:
+                editor.cleanup_temp_files()
 
     async def upload_to_youtube(
         self,
@@ -525,6 +631,8 @@ class ProductionService:
             if self.is_cancelled():
                 return self._failed_result("사용자에 의해 취소됨", video_path=video_path)
 
+            await asyncio.to_thread(check_video_quality, video_path)
+
             uploader = self._get_uploader()
             video_id = await uploader.upload(video_path, metadata)
 
@@ -533,7 +641,8 @@ class ProductionService:
                 return ProductionResult(
                     success=True,
                     video_path=video_path,
-                    youtube_id=video_id
+                    youtube_id=video_id,
+                    ready_for_upload=True,
                 )
             else:
                 return self._failed_result("업로드 실패", video_path=video_path)

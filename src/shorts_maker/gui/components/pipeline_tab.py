@@ -123,6 +123,8 @@ def render_pipeline_tab(
                 state.pipeline_running = True
                 state.pipeline_phase = ProductionPhase.IDLE
                 state.last_error = None
+                state.final_video_path = None
+                state.generated_clips = []
 
                 try:
                     start_btn.disable()
@@ -243,7 +245,7 @@ def render_pipeline_tab(
                     state.pipeline_running = False
                     await monitor_task
                     state.script = result.script
-                    state.final_video_path = result.video_path
+                    state.final_video_path = result.video_path if result.ready_for_upload else None
                     state.generated_clips = result.clips
 
                     if result.video_path:
@@ -287,6 +289,8 @@ def render_pipeline_tab(
                         state.last_error = result.error
                         show_error_panel(result.error)
                         safe_notify('❌ 파이프라인 구동 중 에러가 발생했습니다.', type='negative')
+                        if result.clips:
+                            safe_notify('완료된 씬은 저장되었습니다. Generation 탭의 Start Production으로 이어서 제작하세요.', type='info')
 
                         state.pipeline_history.append({
                             'title': state.script.title if state.script else '작업 실패',

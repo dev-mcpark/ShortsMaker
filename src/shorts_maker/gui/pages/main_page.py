@@ -89,6 +89,7 @@ def render_main_page() -> None:
                         return
                     ui.notify('🎬 전 파이프라인 자동 실행을 시작합니다...', type='info')
                     state.pipeline_running = True
+                    state.final_video_path = None
                     try:
                         service = state.new_production_service()
                         # UI 진행상황 갱신을 위해 콜백 동기화
@@ -97,7 +98,7 @@ def render_main_page() -> None:
                         result = await service.full_pipeline(auto_upload=False)
                         if result.script:
                             state.script = result.script
-                        if result.video_path:
+                        if result.ready_for_upload:
                             state.final_video_path = result.video_path
                         if result.clips:
                             state.generated_clips = result.clips

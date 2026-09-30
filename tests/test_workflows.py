@@ -31,7 +31,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("씬 1", result.error)
         self.assertIsNone(service._generator)
 
-    def test_manual_clips_reach_editor_without_generator(self):
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_manual_clips_reach_editor_without_generator(self, _check):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "output.mp4"
             output.touch()
@@ -64,7 +65,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertIsNone(service._editor)
         self.assertEqual(service.progress.phase, ProductionPhase.FAILED)
 
-    def test_session_options_reach_editor_and_parallel_generator(self):
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_session_options_reach_editor_and_parallel_generator(self, _check):
         state = AppState(mode="image", tts_voice="nova", bgm_mood="cinematic")
         with patch.object(settings, "update_api_keys"):
             service = state.new_production_service(parallel_clips=True)
@@ -81,14 +83,14 @@ class WorkflowTests(unittest.TestCase):
             clips = [str(Path(directory) / f"{i}.png") for i in (1, 2)]
             for clip in clips:
                 Path(clip).touch()
-            generator = SimpleNamespace(generate_clips=AsyncMock(return_value=clips))
+            generator = SimpleNamespace(generate_scene_clip=AsyncMock(side_effect=clips))
             service._generator = generator
             service._editor = SimpleNamespace(compose_video=AsyncMock(return_value=str(output)))
             script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=i) for i in (1, 2)])
             result = asyncio.run(service.produce_video(script))
 
         self.assertTrue(result.success)
-        generator.generate_clips.assert_awaited_once_with(script, parallel=True)
+        self.assertEqual(generator.generate_scene_clip.await_count, 2)
         service._editor.compose_video.assert_awaited_once()
         self.assertEqual(service._editor.compose_video.await_args.args, (clips, script))
 
@@ -138,7 +140,7 @@ class WorkflowTests(unittest.TestCase):
         script = SimpleNamespace(title="Title", description="Description", tags=[])
         service.generate_script = AsyncMock(return_value=(script, None))
         service.produce_video = AsyncMock(return_value=ProductionResult(
-            success=True, video_path="video.mp4", clips=["scene.png"]
+            success=True, video_path="video.mp4", clips=["scene.png"], ready_for_upload=True,
         ))
         service.upload_to_youtube = AsyncMock(return_value=ProductionResult(
             success=False, error="upload failed"
@@ -150,8 +152,10 @@ class WorkflowTests(unittest.TestCase):
         self.assertIs(result.script, script)
         self.assertEqual(result.video_path, "video.mp4")
         self.assertEqual(result.clips, ["scene.png"])
+        self.assertTrue(result.ready_for_upload)
 
-    def test_full_pipeline_completes_only_after_upload(self):
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_full_pipeline_completes_only_after_upload(self, _check):
         with tempfile.TemporaryDirectory() as directory:
             clip = Path(directory) / "scene.png"
             clip.touch()
@@ -178,7 +182,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(phases[-1], ProductionPhase.COMPLETED)
         self.assertNotIn(ProductionPhase.COMPLETED, phases[:phases.index(ProductionPhase.UPLOADING)])
 
-    def test_upload_failure_sets_failed_phase(self):
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_upload_failure_sets_failed_phase(self, _check):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "output.mp4"
             output.touch()
@@ -205,7 +210,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(service.progress.phase, ProductionPhase.FAILED)
         uploader.upload.assert_not_awaited()
 
-    def test_editor_progress_is_reported_when_work_occurs(self):
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_editor_progress_is_reported_when_work_occurs(self, _check):
         with tempfile.TemporaryDirectory() as directory:
             clip = Path(directory) / "scene.png"
             clip.touch()

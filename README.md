@@ -40,6 +40,15 @@ An article enters topic history only after its script passes validation. Studio 
 tracks completed editing work and finishes after an optional upload. Stop requests wait
 for the current external API call to return before the run is released.
 
+Production checks narration length before requesting Veo or Imagen media. Runs with the
+same script and visual settings reuse completed scene files from `outputs/clips/auto_*`,
+including after a restart. To retry a failed scene from the full pipeline, keep the
+script and run **Start Production** in the Generation tab; a new full pipeline run
+plans a new script. Before completion and again before upload, the rendered video is
+checked for Shorts length, 9:16 framing, an audio track, silent audio, and black frames.
+Subtitles are kept inside the rendered frame. If a check fails, the video is retained
+for preview but is not marked ready for upload.
+
 ---
 
 ## 🚀 Quick Start

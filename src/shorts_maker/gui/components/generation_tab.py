@@ -361,6 +361,10 @@ def render_generation_tab(state: 'AppState') -> None:
                 gen_spinner.visible = True
                 scene_progress_container.visible = True
                 scene_progress_container.clear()
+                if video_player:
+                    video_player.visible = False
+                if placeholder_content:
+                    placeholder_content.visible = True
             except RuntimeError:
                 return
 
@@ -368,6 +372,8 @@ def render_generation_tab(state: 'AppState') -> None:
                 # 상태 초기화
                 state.reset_pipeline()
                 state.pipeline_running = True
+                state.final_video_path = None
+                state.generated_clips = []
 
                 service = state.new_production_service()
 
@@ -428,6 +434,15 @@ def render_generation_tab(state: 'AppState') -> None:
                             pass
                     logger.info(f"Final output video available at: {state.final_video_path}")
                 else:
+                    state.generated_clips = result.clips
+                    if result.video_path and video_player:
+                        try:
+                            video_player.set_source(result.video_path)
+                            video_player.visible = True
+                            if placeholder_content:
+                                placeholder_content.visible = False
+                        except RuntimeError:
+                            pass
                     safe_notify(f"프로덕션 실패: {result.error}", type='negative')
                     logger.error(f"Production Failed: {result.error}")
 

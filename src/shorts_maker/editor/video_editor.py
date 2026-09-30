@@ -134,18 +134,46 @@ class VideoEditor:
         if cleaned > 0:
             self.logger.info(f"🧹 오래된 임시 파일 {cleaned}개 정리")
 
+    async def prepare_narration(self, script) -> List[str]:
+        """Generate narration once, before the costly visual generation step."""
+        audio_paths = []
+        total_duration = 0.0
+        voice = self._get_voice_for_mood(getattr(script, 'mood', 'cinematic'))
+        try:
+            for index, scene in enumerate(script.scenes):
+                path = await self._generate_tts(scene.script_text, index, voice)
+                audio_paths.append(path)
+                audio = AudioFileClip(path)
+                try:
+                    total_duration += audio.duration + 0.5
+                finally:
+                    audio.close()
+            # A small speed adjustment is acceptable; larger ones make speech hard to follow.
+            limit = settings.target_duration * 1.15
+            if total_duration > limit:
+                raise ValueError(
+                    f"내레이션이 {total_duration:.1f}초로 너무 깁니다. "
+                    f"{limit:.1f}초 이하가 되도록 스크립트를 줄여주세요."
+                )
+            return audio_paths
+        except Exception:
+            self.cleanup_temp_files()
+            raise
+
     async def compose_video(
         self,
         media_paths: List[str],
         script,
         progress_callback: Optional[Callable[[float, str], None]] = None,
         is_cancelled: Optional[Callable[[], bool]] = None,
+        audio_paths: Optional[List[str]] = None,
     ) -> str:
         if len(media_paths) != len(script.scenes):
             raise ValueError("씬 수와 클립 수가 일치하지 않습니다.")
+        if audio_paths is not None and len(audio_paths) != len(script.scenes):
+            raise ValueError("씬 수와 내레이션 수가 일치하지 않습니다.")
         # 시작 시 오래된 임시 파일 정리
         self.cleanup_old_temp_files()
-        self._temp_files.clear()
 
         processed_clips = []
         final_video = None
@@ -158,7 +186,7 @@ class VideoEditor:
                     progress_callback(5 + 65 * i / len(script.scenes), f"씬 {i + 1}/{len(script.scenes)} TTS 생성 중...")
 
                 # 1. TTS
-                audio_path = await self._generate_tts(scene.script_text, i, voice_name)
+                audio_path = audio_paths[i] if audio_paths is not None else await self._generate_tts(scene.script_text, i, voice_name)
                 if is_cancelled and is_cancelled():
                     raise RuntimeError("사용자에 의해 취소됨")
                 self._track_temp_file(audio_path)  # 임시 파일 추적
@@ -198,13 +226,13 @@ class VideoEditor:
         
             # [CRITICAL] Enforce 59s Limit for Shorts
             # If video is longer than 59s, speed it up to fit exactly into 58.5s (safety margin)
-            MAX_SHORTS_DURATION = 59.0
+            MAX_SHORTS_DURATION = settings.max_shorts_duration
             if final_video.duration > MAX_SHORTS_DURATION:
                 self.logger.warning(f"⚠️ Video duration ({final_video.duration}s) exceeds Shorts limit.")
                 self.logger.info("⚡ Speeding up video to fit 58.5s...")
             
                 # Calculate speed factor (e.g., 65s / 58.5s = 1.11x speed)
-                target_duration = 58.5
+                target_duration = settings.target_duration
                 speed_factor = final_video.duration / target_duration
             
                 # Apply speed effect to both video and audio
@@ -262,6 +290,8 @@ class VideoEditor:
                 clip = ImageClip(path).with_duration(duration)
                 clip = clip.resized(height=1920)
                 if clip.w < 1080: clip = clip.resized(width=1080)
+                if clip.w > 1080: clip = clip.cropped(x_center=clip.w / 2, width=1080)
+                if clip.h > 1920: clip = clip.cropped(y_center=clip.h / 2, height=1920)
                 clip = clip.with_position('center')
                 return clip
 
@@ -277,8 +307,12 @@ class VideoEditor:
 
                 # Resize/Crop to 9:16
                 clip = clip.resized(height=1920)
+                if clip.w < 1080:
+                    clip = clip.resized(width=1080)
                 if clip.w > 1080:
                     clip = clip.cropped(x1=clip.w/2 - 540, width=1080)
+                if clip.h > 1920:
+                    clip = clip.cropped(y_center=clip.h / 2, height=1920)
 
                 return clip.with_position('center')
 
@@ -296,6 +330,13 @@ class VideoEditor:
 
     def _create_subtitle_clips(self, text, duration) -> List:
         """Returns a list of clips for clean subtitle rendering using user-configurable settings."""
+        def place(clip):
+            margin = 80
+            if clip.h > settings.video_height - 2 * margin:
+                raise ValueError("자막이 화면 높이를 초과합니다. 문장을 줄여주세요.")
+            y = min(max(margin, self.subtitle_y_position), settings.video_height - clip.h - margin)
+            return clip.with_position(('center', y)).with_duration(duration)
+
         try:
             # Main Text with user-configurable color, size, and position
             font_name = 'AppleGothic'
@@ -310,10 +351,10 @@ class VideoEditor:
                 text_align='center',
                 stroke_color='black',
                 stroke_width=3  # Slightly thicker for better readability
-            ).with_position(('center', self.subtitle_y_position)).with_duration(duration)
+            )
 
             # No shadow - clean border is sufficient for readability
-            return [txt_clip]
+            return [place(txt_clip)]
 
         except Exception as e:
             self.logger.error(f"❌ Subtitle error: {e}")
@@ -328,8 +369,8 @@ class VideoEditor:
                     size=(900, None),
                     stroke_color='black',
                     stroke_width=1
-                ).with_position(('center', self.subtitle_y_position)).with_duration(duration)
-                return [fallback]
+                )
+                return [place(fallback)]
             except Exception as fallback_error:
                 self.logger.error(f"자막 폴백도 실패: {fallback_error}")
                 raise
