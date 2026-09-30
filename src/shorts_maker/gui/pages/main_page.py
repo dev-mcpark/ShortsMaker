@@ -95,10 +95,14 @@ def render_main_page() -> None:
                         service.set_progress_callback(lambda p: state.sync_from_progress(p))
                         # 백그라운드 태스크로 구동
                         result = await service.full_pipeline(auto_upload=False)
-                        if result.success:
+                        if result.script:
                             state.script = result.script
+                        if result.video_path:
                             state.final_video_path = result.video_path
+                        if result.clips:
                             state.generated_clips = result.clips
+                        if result.success:
+                            ui.notify('제작 완료', type='positive')
                         else:
                             ui.notify(f'제작 실패: {result.error}', type='negative')
                     except Exception as e:

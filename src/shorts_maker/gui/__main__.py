@@ -2,6 +2,7 @@
 
 from nicegui import ui, app
 import logging
+import secrets
 from collections import deque
 
 from shorts_maker.gui.pages import render_main_page
@@ -59,8 +60,9 @@ def run():
         favicon="🎬",
         dark=True,
         reload=True,
+        host="127.0.0.1",
         port=8080,
-        storage_secret=settings.nicegui_storage_secret or "shortsmaker_secret_key_change_in_production"
+        storage_secret=settings.nicegui_storage_secret or secrets.token_urlsafe(32)
     )
 
 

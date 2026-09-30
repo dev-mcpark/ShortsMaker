@@ -15,6 +15,7 @@ CharacterVideoGenerator - 캐릭터 이미지로부터 말하는 영상 생성
 import os
 import time
 import asyncio
+import mimetypes
 from typing import Optional
 from pathlib import Path
 
@@ -110,7 +111,7 @@ class CharacterVideoGenerator:
             output_path = str(settings.assets_dir / f"{input_name}_speaking.mp4")
 
         # 출력 디렉토리 생성
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
         # 프롬프트 선택
         prompt = custom_prompt or self.SPEAKING_PROMPTS.get(style, self.SPEAKING_PROMPTS["news_anchor"])
@@ -120,13 +121,16 @@ class CharacterVideoGenerator:
         self.logger.info(f"   Output: {output_path}")
 
         try:
+            mime_type = mimetypes.guess_type(character_image_path)[0]
+            if mime_type not in {"image/png", "image/jpeg"}:
+                raise ValueError("캐릭터 이미지는 PNG 또는 JPEG여야 합니다.")
             # 이미지 로드
             with open(character_image_path, "rb") as f:
                 image_bytes = f.read()
 
             image_input = types.Image(
                 image_bytes=image_bytes,
-                mime_type="image/png"
+                mime_type=mime_type
             )
 
             # Veo 모델로 영상 생성
@@ -139,7 +143,8 @@ class CharacterVideoGenerator:
                 model_id,
                 prompt,
                 image_input,
-                output_path
+                output_path,
+                duration_seconds,
             )
 
             if result and os.path.exists(output_path):
@@ -156,7 +161,8 @@ class CharacterVideoGenerator:
             self.logger.error(traceback.format_exc())
             return None
 
-    def _run_veo_generation(self, model_id: str, prompt: str, image_input, output_path: str) -> bool:
+    def _run_veo_generation(self, model_id: str, prompt: str, image_input,
+                            output_path: str, duration_seconds: int) -> bool:
         """Veo API 호출 (동기)"""
         max_attempts = 3
 
@@ -168,14 +174,18 @@ class CharacterVideoGenerator:
                     model=model_id,
                     prompt=prompt,
                     image=image_input,
-                    config={"aspect_ratio": "9:16"}
+                    config={"aspect_ratio": "9:16", "duration_seconds": duration_seconds}
                 )
 
                 # 완료 대기
-                while not operation.done:
+                for _ in range(90):  # 최대 15분 대기
+                    if operation.done:
+                        break
                     time.sleep(10)
                     operation = self.client.operations.get(operation)
                     self.logger.debug("   Waiting...")
+                if not operation.done:
+                    raise TimeoutError("Veo generation did not finish within 15 minutes")
 
                 self.logger.info("   Done!")
 
@@ -187,6 +197,9 @@ class CharacterVideoGenerator:
                     error_info = getattr(operation, 'error', 'Unknown Error')
                     raise Exception(f"No video generated. Error: {error_info}")
 
+            except TimeoutError as e:
+                self.logger.error(f"   ❌ Error: {e}")
+                return False
             except Exception as e:
                 err_str = str(e).lower()
 

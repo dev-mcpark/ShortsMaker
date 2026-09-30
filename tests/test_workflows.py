@@ -153,7 +153,7 @@ class WorkflowTests(unittest.TestCase):
         generator._generate_background_video.assert_awaited_once_with(scene)
         generator._generate_image_imagen.assert_awaited_once_with(scene)
 
-    def test_parallel_failure_keeps_scene_order(self):
+    def test_parallel_failure_does_not_create_publishable_placeholder(self):
         generator = object.__new__(VideoGenerator)
         generator.logger = get_logger(__name__)
         generator.max_concurrent = 2
@@ -167,16 +167,17 @@ class WorkflowTests(unittest.TestCase):
 
         generator.generate_scene_clip = generate
         with patch("shorts_maker.generator.video_generator.asyncio.sleep", new_callable=AsyncMock):
-            paths = asyncio.run(generator._generate_clips_parallel(SimpleNamespace(scenes=scenes)))
+            with self.assertRaisesRegex(RuntimeError, "generation failed"):
+                asyncio.run(generator._generate_clips_parallel(SimpleNamespace(scenes=scenes)))
 
-        self.assertEqual(paths, ["temp/error_scene_1.png", "scene_2.png"])
-        generator._create_mock_image.assert_called_once_with("temp/error_scene_1.png")
+        generator._create_mock_image.assert_not_called()
 
     def test_rejected_script_is_not_returned(self):
         planner = object.__new__(ScriptPlanner)
         planner.logger = get_logger(__name__)
         candidate = {"title": "Topic", "category": "Tech", "url": "https://example.com"}
         planner._fetch_rss_feeds = Mock(return_value=[candidate])
+        planner._validate_url = Mock(return_value=True)
         planner._score_topics = AsyncMock(return_value=[
             TopicCandidate(item=candidate, score=8, reason="test", selected=True)
         ])
@@ -186,6 +187,48 @@ class WorkflowTests(unittest.TestCase):
         planner._validate_and_save = AsyncMock(return_value=None)
 
         self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+
+    def test_empty_feed_does_not_invent_a_topic(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner._fetch_rss_feeds = Mock(return_value=[])
+        planner._score_topics = AsyncMock()
+
+        self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+        planner._score_topics.assert_not_awaited()
+
+    def test_private_rss_article_is_not_downloaded(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        item = {"title": "Internal", "category": "Tech", "url": "http://127.0.0.1/private"}
+        planner._fetch_rss_feeds = Mock(return_value=[item])
+        planner._score_topics = AsyncMock(return_value=[
+            TopicCandidate(item=item, score=9, reason="test", selected=True)
+        ])
+        planner.content_extractor = SimpleNamespace(fetch_enhanced_article=Mock())
+
+        with patch.object(settings, "max_topic_retries", 1):
+            self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+
+        planner.content_extractor.fetch_enhanced_article.assert_not_called()
+
+    def test_rss_redirect_to_private_address_is_not_followed(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.rss_sources = {"Tech": ["https://example.com/feed"]}
+        planner.rss_cache = SimpleNamespace(get=Mock(return_value=None), set=Mock())
+        planner._load_url_history = Mock(return_value=[])
+        redirect = SimpleNamespace(
+            is_redirect=True, headers={"location": "http://127.0.0.1/private"}
+        )
+
+        with patch("shorts_maker.planner.script_planner.httpx", create=True) as httpx_client:
+            httpx_client.get.return_value = redirect
+            with patch("shorts_maker.planner.script_planner.feedparser.parse") as parse:
+                parse.return_value = SimpleNamespace(entries=[], feed={})
+                planner._fetch_rss_feeds()
+
+        httpx_client.get.assert_called_once()
 
     def test_regeneration_limit_counts_failed_attempts(self):
         service = ProductionService()
@@ -209,6 +252,11 @@ class WorkflowTests(unittest.TestCase):
         with patch.object(module.ui, "run") as run_server:
             getattr(module, function_name)()
         self.assertEqual(run_server.call_args.kwargs["port"], 8080)
+        self.assertEqual(run_server.call_args.kwargs["host"], "127.0.0.1")
+        self.assertNotEqual(
+            run_server.call_args.kwargs["storage_secret"],
+            "shortsmaker_secret_key_change_in_production",
+        )
 
 
 if __name__ == "__main__":

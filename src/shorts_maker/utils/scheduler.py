@@ -4,6 +4,9 @@ ScheduleManager - 자동 비디오 프로덕션 스케줄링 관리 모듈
 정기적인 비디오 생성 작업을 스케줄링하고 실행합니다.
 """
 import json
+import os
+import re
+import tempfile
 import uuid
 from pathlib import Path
 from typing import List, Dict, Optional, Any
@@ -53,13 +56,19 @@ class ScheduleManager:
             self.logger.info("Scheduler started")
 
             # 저장된 스케줄 로드 및 등록
-            self._load_and_register_jobs()
+            try:
+                self._load_and_register_jobs()
+            except Exception:
+                self.stop_scheduler()
+                raise
 
     def stop_scheduler(self):
         """스케줄러 중지"""
         if self._scheduler and self._scheduler_running:
-            self._scheduler.shutdown(wait=False)
+            scheduler = self._scheduler
+            self._scheduler = None
             self._scheduler_running = False
+            scheduler.shutdown(wait=False)
             self.logger.info("Scheduler stopped")
 
     def _load_and_register_jobs(self):
@@ -76,13 +85,15 @@ class ScheduleManager:
         Returns:
             스케줄 딕셔너리 리스트
         """
+        if not self.filename.exists():
+            return []
         try:
-            if self.filename.exists():
-                content = self.filename.read_text(encoding='utf-8')
-                return json.loads(content)
-        except (json.JSONDecodeError, IOError) as e:
-            self.logger.error(f"Failed to load schedules: {e}")
-        return []
+            schedules = json.loads(self.filename.read_text(encoding='utf-8'))
+        except (json.JSONDecodeError, OSError) as e:
+            raise ValueError(f"일정 파일을 읽을 수 없습니다: {self.filename}") from e
+        if not isinstance(schedules, list) or any(not isinstance(item, dict) for item in schedules):
+            raise ValueError(f"일정 파일 형식이 잘못되었습니다: {self.filename}")
+        return schedules
 
     def save_schedules(self, schedules: List[Dict[str, Any]]):
         """
@@ -91,14 +102,24 @@ class ScheduleManager:
         Args:
             schedules: 저장할 스케줄 리스트
         """
+        temp_path = None
         try:
-            self.filename.write_text(
-                json.dumps(schedules, indent=2, ensure_ascii=False),
-                encoding='utf-8'
-            )
+            with tempfile.NamedTemporaryFile(
+                mode='w', encoding='utf-8', dir=self.filename.parent,
+                prefix=f'.{self.filename.name}.', delete=False,
+            ) as file:
+                temp_path = Path(file.name)
+                json.dump(schedules, file, indent=2, ensure_ascii=False)
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(temp_path, self.filename)
             self.logger.info(f"Saved {len(schedules)} schedules")
-        except IOError as e:
+        except OSError as e:
             self.logger.error(f"Failed to save schedules: {e}")
+            raise
+        finally:
+            if temp_path:
+                temp_path.unlink(missing_ok=True)
 
     def create_schedule(
         self,
@@ -127,6 +148,7 @@ class ScheduleManager:
         Returns:
             생성된 스케줄 딕셔너리
         """
+        self._validate_schedule(name, time, frequency, mode)
         schedule = {
             'id': str(uuid.uuid4()),
             'name': name,
@@ -168,8 +190,9 @@ class ScheduleManager:
         schedules = self.load_schedules()
         for i, schedule in enumerate(schedules):
             if schedule['id'] == schedule_id:
-                # 업데이트 적용
-                schedule.update(updates)
+                updated = {**schedule, **updates}
+                self._validate_schedule(updated['name'], updated['time'], updated['frequency'], updated['mode'])
+                schedule = updated
                 schedules[i] = schedule
                 self.save_schedules(schedules)
 
@@ -184,6 +207,18 @@ class ScheduleManager:
 
         self.logger.warning(f"Schedule not found: {schedule_id}")
         return None
+
+    @staticmethod
+    def _validate_schedule(name: str, time: str, frequency: str, mode: str):
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("일정 이름이 필요합니다.")
+        if not isinstance(time, str) or not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', time):
+            raise ValueError("시간은 HH:MM 형식이어야 합니다.")
+        days = {'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'}
+        if frequency != 'Daily' and frequency not in {f'Weekly ({day})' for day in days}:
+            raise ValueError("지원하지 않는 반복 주기입니다.")
+        if mode not in {'image', 'video'}:
+            raise ValueError("지원하지 않는 생성 모드입니다.")
 
     def delete_schedule(self, schedule_id: str) -> bool:
         """

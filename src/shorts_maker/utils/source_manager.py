@@ -1,8 +1,11 @@
 import json
 import os
+import ipaddress
+import tempfile
+from pathlib import Path
+from urllib.parse import urlparse
 from typing import Dict, List
-
-RSS_FILE = "rss_sources.json"
+from shorts_maker.utils.config import settings
 
 DEFAULT_SOURCES = {
     "Tech_IT": [
@@ -36,8 +39,24 @@ DEFAULT_SOURCES = {
 }
 
 class SourceManager:
+    @staticmethod
+    def is_allowed_url(url: str) -> bool:
+        try:
+            parsed = urlparse(url)
+            host = (parsed.hostname or '').lower().rstrip('.')
+            if parsed.scheme not in {'http', 'https'} or not host or parsed.username or parsed.password:
+                return False
+            if host == 'localhost' or host.endswith('.localhost'):
+                return False
+            try:
+                return ipaddress.ip_address(host).is_global
+            except ValueError:
+                return True
+        except (TypeError, ValueError):
+            return False
+
     def __init__(self):
-        self.filepath = RSS_FILE
+        self.filepath = settings.rss_sources_file
         self._ensure_file_exists()
 
     def _ensure_file_exists(self):
@@ -47,20 +66,50 @@ class SourceManager:
     def load_sources(self) -> Dict[str, List[str]]:
         try:
             with open(self.filepath, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception:
-            return DEFAULT_SOURCES
+                sources = json.load(f)
+        except FileNotFoundError:
+            return {category: urls.copy() for category, urls in DEFAULT_SOURCES.items()}
+        except (OSError, json.JSONDecodeError) as e:
+            raise ValueError(f"RSS 소스 파일을 읽을 수 없습니다: {self.filepath}") from e
+        if not isinstance(sources, dict) or any(
+            not isinstance(category, str) or not isinstance(urls, list)
+            or not all(isinstance(url, str) for url in urls)
+            for category, urls in sources.items()
+        ):
+            raise ValueError(f"RSS 소스 파일 형식이 잘못되었습니다: {self.filepath}")
+        return sources
 
     def save_sources(self, sources: Dict[str, List[str]]):
-        with open(self.filepath, 'w', encoding='utf-8') as f:
-            json.dump(sources, f, indent=4, ensure_ascii=False)
+        path = Path(self.filepath)
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode='w', encoding='utf-8', dir=path.parent,
+                prefix=f'.{path.name}.', delete=False,
+            ) as file:
+                temp_path = Path(file.name)
+                json.dump(sources, file, indent=4, ensure_ascii=False)
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(temp_path, path)
+        finally:
+            if temp_path:
+                temp_path.unlink(missing_ok=True)
 
     def add_source(self, category: str, url: str):
+        if not self.is_allowed_url(url):
+            raise ValueError("RSS 주소는 공개된 http 또는 https URL이어야 합니다.")
         sources = self.load_sources()
         if category not in sources:
             sources[category] = []
         if url not in sources[category]:
             sources[category].append(url)
+            self.save_sources(sources)
+
+    def remove_category(self, category: str):
+        sources = self.load_sources()
+        if category in sources:
+            del sources[category]
             self.save_sources(sources)
 
     def remove_source(self, category: str, url: str):

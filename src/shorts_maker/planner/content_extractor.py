@@ -2,6 +2,7 @@
 
 import json
 import trafilatura
+from trafilatura.settings import use_config
 from bs4 import BeautifulSoup
 from typing import Optional, List
 from shorts_maker.utils.logger import get_logger
@@ -23,6 +24,8 @@ class ContentExtractor:
     def __init__(self):
         self.logger = get_logger(__name__)
         self.timeout = 10  # HTTP 요청 타임아웃
+        self.download_config = use_config()
+        self.download_config.set("DEFAULT", "DOWNLOAD_TIMEOUT", str(self.timeout))
     
     def fetch_enhanced_article(self, url: str) -> Optional[ArticleContent]:
         """향상된 기사 추출 - 더 많은 정보 수집
@@ -36,7 +39,7 @@ class ContentExtractor:
         try:
             # 1. Download HTML
             self.logger.info(f"📥 Downloading article from: {url}")
-            downloaded = trafilatura.fetch_url(url)
+            downloaded = trafilatura.fetch_url(url, config=self.download_config)
             if not downloaded:
                 self.logger.warning(f"Failed to download URL: {url}")
                 return None
@@ -173,5 +176,4 @@ class ContentExtractor:
                 links.append(href)
         
         # 중복 제거 및 최대 5개
-        unique_links = list(set(links))
-        return unique_links[:5]
+        return list(dict.fromkeys(links))[:5]

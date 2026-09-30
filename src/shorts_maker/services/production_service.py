@@ -436,9 +436,7 @@ class ProductionService:
                         except Exception as scene_error:
                             self.logger.error(f"씬 {i + 1} 생성 실패: {scene_error}")
                             self._update_scene_progress(i, "failed", error=str(scene_error))
-                            mock_path = f"temp/error_scene_{i}.png"
-                            generator.create_fallback_image(mock_path)
-                            clips.append(mock_path)
+                            raise
 
                         await asyncio.sleep(2)
 

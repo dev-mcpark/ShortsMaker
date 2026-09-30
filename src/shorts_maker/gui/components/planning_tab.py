@@ -1,14 +1,14 @@
 """Script Planning 탭 컴포넌트 - Premium UI 적용"""
 
-from nicegui import ui
-import os
 import json
+from nicegui import ui
 from typing import TYPE_CHECKING
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify
 from shorts_maker.gui.config.constants import SCENE_COST_MULTIPLIER
 from shorts_maker.gui.config.ui_theme import SCENE_GRADIENTS
 from shorts_maker.planner.script_planner import ShortsScript
+from shorts_maker.utils.config import settings
 from shorts_maker.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -234,10 +234,10 @@ def render_planning_tab(state: 'AppState') -> None:
                     ui.icon('folder_open', size='xs').classes('text-amber-400')
                     ui.label('저장된 각본').classes('text-xs font-bold text-amber-300 uppercase tracking-wider')
 
-                script_dir = "outputs/scripts"
-                if os.path.exists(script_dir):
+                script_dir = settings.scripts_dir
+                if script_dir.exists():
                     script_files = sorted(
-                        [f for f in os.listdir(script_dir) if f.endswith('.json')],
+                        [path.name for path in script_dir.glob('*.json') if path.is_file()],
                         reverse=True
                     )[:5]
 
@@ -248,9 +248,9 @@ def render_planning_tab(state: 'AppState') -> None:
                         ).props('outlined dense dark').classes('w-full mb-2')
 
                         async def load_selected_script():
-                            if script_select.value:
+                            if script_select.value in script_files:
                                 try:
-                                    with open(f"{script_dir}/{script_select.value}", 'r', encoding='utf-8') as f:
+                                    with (script_dir / script_select.value).open('r', encoding='utf-8') as f:
                                         data = json.load(f)
                                     loaded_script = ShortsScript.model_validate(data)
                                     state.reset_manual_mode()
@@ -269,7 +269,7 @@ def render_planning_tab(state: 'AppState') -> None:
                     else:
                         ui.label('저장된 각본 없음').classes('text-xs text-gray-600')
                 else:
-                    ui.label('outputs/scripts 폴더 없음').classes('text-xs text-gray-600')
+                    ui.label(f'{script_dir} 폴더 없음').classes('text-xs text-gray-600')
 
             # JSON 편집기 (고급)
             with ui.expansion('JSON 편집기', icon='code').classes('w-full').props('header-class="text-xs text-gray-500 px-0"'):

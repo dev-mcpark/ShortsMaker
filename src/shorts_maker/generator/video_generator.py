@@ -1,6 +1,7 @@
 import os
 import time
 import asyncio
+import uuid
 from typing import List, Optional
 
 from google import genai
@@ -80,7 +81,8 @@ class VideoGenerator:
 
         path = await self._generate_image_imagen(scene)
         if self.character_overlay:
-            return self.character_overlay.composite_on_image(
+            return await asyncio.to_thread(
+                self.character_overlay.composite_on_image,
                 path, path.replace(".png", "_final.png")
             )
         return path
@@ -115,27 +117,22 @@ class VideoGenerator:
             return_exceptions=True,
         )
 
-        clips_paths = []
-        for scene, result in zip(scenes, results):
+        for result in results:
             if isinstance(result, BaseException):
                 self.logger.error(f"병렬 처리 중 오류: {result}")
-                mock_path = f"temp/error_scene_{scene.scene_number}.png"
-                self._create_mock_image(mock_path)
-                clips_paths.append(mock_path)
-            else:
-                clips_paths.append(result)
+                raise result
 
-        self.logger.info(f"✅ 병렬 처리 완료: {len(clips_paths)}개 클립 생성")
-        return clips_paths
+        self.logger.info(f"✅ 병렬 처리 완료: {len(results)}개 클립 생성")
+        return results
 
     # ── Current Pipeline: Background Video + Character Composite ─────────
 
     async def _generate_background_video(self, scene) -> str:
         """Stage 1: 배경 영상만 생성 (캐릭터 없이)."""
-        output_path = f"temp/bg_scene_{scene.scene_number}.mp4"
+        output_path = str(settings.temp_dir / f"bg_scene_{scene.scene_number}_{uuid.uuid4().hex}.mp4")
 
         if not self.client:
-            return await asyncio.to_thread(self._create_mock_video, output_path, scene.duration_seconds)
+            raise RuntimeError("GenAI client is unavailable")
 
         model_id = settings.veo_model_id
         self.logger.info(
@@ -151,14 +148,14 @@ class VideoGenerator:
             if os.path.exists(output_path):
                 self.logger.info(f"    ✅ Background video generated: {output_path}")
                 return output_path
+            raise RuntimeError("Veo returned no video file")
         except Exception as e:
             self.logger.error(f"    ❌ Veo Background Generation Error: {e}")
-
-        return await asyncio.to_thread(self._create_mock_video, output_path, scene.duration_seconds)
+            raise
 
     async def _composite_character_on_video(self, bg_video_path: str, scene) -> str:
         """Stage 2: 배경 영상에 캐릭터 합성."""
-        output_path = f"temp/scene_{scene.scene_number}.mp4"
+        output_path = str(settings.temp_dir / f"scene_{scene.scene_number}_{uuid.uuid4().hex}.mp4")
 
         if not self.character_overlay:
             self.logger.warning("Character overlay not configured, returning background video")
@@ -179,8 +176,7 @@ class VideoGenerator:
                 return result_path
         except Exception as e:
             self.logger.error(f"    ❌ Character compositing error: {e}")
-
-        return bg_video_path
+            raise
 
     # ── Veo Helpers ───────────────────────────────────────────────────────
 
@@ -209,9 +205,13 @@ class VideoGenerator:
                     config={"aspect_ratio": "9:16"},
                 )
 
-                while not operation.done:
+                for _ in range(90):  # 최대 15분 대기
+                    if operation.done:
+                        break
                     time.sleep(10)
                     operation = self.client.operations.get(operation)
+                if not operation.done:
+                    raise TimeoutError("Veo generation did not finish within 15 minutes")
 
                 self.logger.info("    Done!")
 
@@ -223,6 +223,8 @@ class VideoGenerator:
                 error_info = getattr(operation, "error", "Unknown Error")
                 raise Exception(f"No video generated. Error: {error_info}")
 
+            except TimeoutError:
+                raise
             except Exception as e:
                 err_str = str(e).lower()
 
@@ -271,10 +273,10 @@ class VideoGenerator:
 
     async def _generate_image_imagen(self, scene) -> str:
         """Imagen으로 씬 이미지를 생성합니다."""
-        output_path = f"temp/scene_{scene.scene_number}.png"
+        output_path = str(settings.temp_dir / f"scene_{scene.scene_number}_{uuid.uuid4().hex}.png")
 
         if not self.client:
-            return self._create_mock_image(output_path)
+            raise RuntimeError("GenAI client is unavailable")
 
         self.logger.info(f"🎨 Requesting Imagen for scene {scene.scene_number}...")
         try:
@@ -286,10 +288,12 @@ class VideoGenerator:
                 scene,
                 output_path,
             )
+            if not os.path.isfile(output_path):
+                raise RuntimeError("Imagen returned no image file")
             return output_path
         except Exception as e:
             self.logger.error(f"❌ Imagen Generation Error: {e}")
-        return self._create_mock_image(output_path)
+            raise
 
     def _run_imagen_generation(self, model_id: str, scene, output_path: str) -> None:
         response = self.client.models.generate_images(
@@ -305,29 +309,3 @@ class VideoGenerator:
             response.generated_images[0].image.save(output_path)
         else:
             raise Exception("No image returned")
-
-    # ── Fallback / Mock Helpers ───────────────────────────────────────────
-
-    def create_fallback_image(self, path: str) -> str:
-        """오류 발생 시 대체 이미지를 생성합니다 (public API)."""
-        return self._create_mock_image(path)
-
-    def _create_mock_video(self, path: str, duration: float) -> str:
-        self.logger.warning(f"⚠️ Creating mock video for: {path}")
-        from moviepy import ColorClip
-
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        clip = ColorClip(size=(1080, 1920), color=(0, 0, 50), duration=duration)
-        clip.write_videofile(path, fps=24, codec="libx264", logger=None)
-        return path
-
-    def _create_mock_image(self, path: str) -> str:
-        self.logger.warning(f"⚠️ Creating mock image for: {path}")
-        from PIL import Image, ImageDraw
-
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        img = Image.new("RGB", (1080, 1920), color=(0, 0, 0))
-        d = ImageDraw.Draw(img)
-        d.text((10, 10), "Placeholder", fill=(255, 255, 255))
-        img.save(path)
-        return path

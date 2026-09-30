@@ -1,7 +1,7 @@
 """Pydantic models for script planning"""
 
 from dataclasses import dataclass, field
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from typing import List, Optional, Dict, Any
 
 
@@ -25,11 +25,11 @@ class ScriptGenerationContext:
 
 class VideoScene(BaseModel):
     """개별 비디오 씬 정보"""
-    scene_number: int
+    scene_number: int = Field(ge=1)
     visual_description: str
     motion_instruction: str = ""  # Optional: Veo 모드에서만 사용 (image 모드에서는 빈 문자열)
     script_text: str
-    duration_seconds: float = 5.0
+    duration_seconds: float = Field(default=5.0, gt=0)
 
 
 class ShortsScript(BaseModel):
@@ -42,7 +42,14 @@ class ShortsScript(BaseModel):
     source_name: str
     source_url: str
     generation_mode: str  # 'image' or 'video'
-    scenes: List[VideoScene]
+    scenes: List[VideoScene] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_scene_numbers(self):
+        numbers = [scene.scene_number for scene in self.scenes]
+        if len(numbers) != len(set(numbers)):
+            raise ValueError("씬 번호가 중복되었습니다.")
+        return self
 
 
 class ArticleContent(BaseModel):

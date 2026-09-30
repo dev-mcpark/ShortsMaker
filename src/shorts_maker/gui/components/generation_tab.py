@@ -1,5 +1,6 @@
 """Video Generation 탭 컴포넌트 - Google AI Studio 스타일 중앙 융합 개편"""
 import asyncio
+import json
 from nicegui import ui
 from typing import TYPE_CHECKING
 
@@ -82,7 +83,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                 with ui.column().classes('justify-center gap-2 min-w-[240px] border-l border-slate-800 pl-4'):
                     def copy_all_json():
                         json_str = exporter.export_json(state.script, state.manual_script_id)
-                        ui.run_javascript(f'navigator.clipboard.writeText({repr(json_str)})')
+                        ui.run_javascript(f'navigator.clipboard.writeText({json.dumps(json_str)})')
                         safe_notify('전체 프롬프트 JSON이 클립보드에 복사되었습니다.', type='positive')
 
                     ui.button(
@@ -134,7 +135,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
 
                         def make_copy_fn(p=prompt, sn=scene_num):
                             def copy_prompt():
-                                ui.run_javascript(f'navigator.clipboard.writeText({repr(p)})')
+                                ui.run_javascript(f'navigator.clipboard.writeText({json.dumps(p)})')
                                 safe_notify(f'씬 {sn} 프롬프트 복사 완료!', type='info')
                             return copy_prompt
 

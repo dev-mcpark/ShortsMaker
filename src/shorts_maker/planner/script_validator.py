@@ -88,6 +88,14 @@ class ScriptValidator:
             result_data["is_advertising"] = is_ad
 
             result = ValidationResult(**result_data)
+            if result.is_advertising:
+                result.is_valid = False
+            if result.is_valid and result.score < 70:
+                result.is_valid = False
+                result.reason = "low_score"
+            if result.is_valid and sum(scene.duration_seconds for scene in script.scenes) > settings.max_shorts_duration:
+                result.is_valid = False
+                result.reason = "too_long"
 
             if result.is_valid:
                 self.logger.info(f"✅ Script Validated! Score: {result.score}")

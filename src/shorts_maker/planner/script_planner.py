@@ -3,12 +3,12 @@ import os
 import json
 import random
 import re
-import ipaddress
 import feedparser
+import httpx
 from dataclasses import dataclass
 from datetime import datetime
 import time
-from urllib.parse import urlparse
+from urllib.parse import urljoin
 from openai import AsyncOpenAI
 from typing import List, Dict, Optional, Tuple
 from shorts_maker.utils.logger import get_logger
@@ -83,50 +83,10 @@ class ScriptPlanner:
         self.content_enricher = ContentEnricher()
 
     def _validate_url(self, url: str) -> bool:
-        """
-        URL 유효성 검증 (SSRF 방지)
-
-        Args:
-            url: 검증할 URL
-
-        Returns:
-            bool: URL이 안전하면 True, 아니면 False
-        """
-        try:
-            parsed = urlparse(url)
-
-            # 허용된 스킴만 허용
-            if parsed.scheme not in ('http', 'https'):
-                self.logger.warning(f"허용되지 않은 URL 스킴: {parsed.scheme}")
-                return False
-
-            # 호스트명이 없으면 거부
-            if not parsed.hostname:
-                self.logger.warning("호스트명이 없는 URL")
-                return False
-
-            # 내부 호스트 차단
-            hostname = parsed.hostname.lower()
-            blocked_hosts = ('localhost', '127.0.0.1', '0.0.0.0', '::1')
-            if hostname in blocked_hosts:
-                self.logger.warning(f"내부 호스트 URL 차단: {hostname}")
-                return False
-
-            # 프라이빗 IP 대역 차단
-            try:
-                ip = ipaddress.ip_address(hostname)
-                if ip.is_private or ip.is_loopback or ip.is_reserved:
-                    self.logger.warning(f"프라이빗 IP URL 차단: {hostname}")
-                    return False
-            except ValueError:
-                # IP 주소가 아닌 경우 (도메인명) - 통과
-                pass
-
-            return True
-
-        except Exception as e:
-            self.logger.error(f"URL 검증 오류: {e}")
-            return False
+        allowed = SourceManager.is_allowed_url(url)
+        if not allowed:
+            self.logger.warning(f"허용되지 않은 RSS/기사 URL: {url}")
+        return allowed
 
     def _load_url_history(self) -> List[str]:
         if os.path.exists(self.url_history_file):
@@ -202,6 +162,8 @@ class ScriptPlanner:
         self.logger.info(f"📡 Fetching feeds from {len(selected_sources)} sources...")
         for category, url in selected_sources:
             try:
+                if not self._validate_url(url):
+                    continue
                 # 캐시 확인
                 cached_entries = self.rss_cache.get(url) if use_cache else None
 
@@ -211,7 +173,22 @@ class ScriptPlanner:
                     source_name = "Cached Source"
                 else:
                     cache_misses += 1
-                    feed = feedparser.parse(url)
+                    feed_url = url
+                    for _ in range(4):
+                        if not self._validate_url(feed_url):
+                            raise ValueError(f"허용되지 않은 RSS 주소: {feed_url}")
+                        response = httpx.get(feed_url, timeout=10, follow_redirects=False)
+                        if response.is_redirect:
+                            location = response.headers.get('location')
+                            if not location:
+                                raise ValueError("RSS 리다이렉트 주소가 없습니다.")
+                            feed_url = urljoin(feed_url, location)
+                            continue
+                        response.raise_for_status()
+                        feed = feedparser.parse(response.content)
+                        break
+                    else:
+                        raise ValueError("RSS 리다이렉트가 너무 많습니다.")
                     feed_entries = [
                         {
                             'title': e.title,
@@ -412,7 +389,8 @@ class ScriptPlanner:
         # [Mode 2: RSS Discovery]
         candidates = await asyncio.to_thread(self._fetch_rss_feeds)
         if not candidates:
-            candidates = [{'category': 'General', 'source': 'Fallback', 'title': 'AI Future', 'content': 'AI impact.', 'url': 'google.com'}]
+            self.logger.warning("사용 가능한 RSS 기사가 없어 각본 생성을 중단합니다.")
+            return None, None
 
         max_topic_retries = settings.max_topic_retries
         script = None
@@ -431,6 +409,9 @@ class ScriptPlanner:
                 break
 
             selection = selected_candidate.item
+            if not self._validate_url(selection['url']):
+                candidates = [c for c in candidates if c['url'] != selection['url']]
+                continue
             self.logger.info(f"🔥 Selected Topic (Attempt {attempt+1}): {selection['title']} ({selection['category']}) [score={selected_candidate.score}]")
 
             # 2. Fetch Full Content
@@ -740,7 +721,7 @@ class ScriptPlanner:
             "title": "호기심을 자극하는 한글 제목 (이모지 포함 가능)",
             "description": "영상 내용에 대한 자세한 한글 설명...",
             "tags": ["category_name", "shorts", "trend"],
-            "mood": "upbeat",
+            "mood": "energetic",
             "style": "The Info Curator",
             "source_name": "Source Name",
             "source_url": "https://example.com",
@@ -764,18 +745,16 @@ class ScriptPlanner:
         }}
         """
 
-        try:
-            response = await self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"}
-            )
-            data = json.loads(response.choices[0].message.content)
-            if data.get('mood') not in self.allowed_moods: data['mood'] = 'upbeat'
-            # Ensure generation_mode is consistent
-            data['generation_mode'] = self.generation_mode
-            # Inject source info from the item to ensure accuracy
-            data['source_name'] = item.get('source', 'Unknown Source')
-            data['source_url'] = item.get('url', '')
-            return ShortsScript(**data)
-        except Exception as e: raise e
+        response = await self.client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        data = json.loads(response.choices[0].message.content)
+        if data.get('mood') not in self.allowed_moods: data['mood'] = 'energetic'
+        # Ensure generation_mode is consistent
+        data['generation_mode'] = self.generation_mode
+        # Inject source info from the item to ensure accuracy
+        data['source_name'] = item.get('source', 'Unknown Source')
+        data['source_url'] = item.get('url', '')
+        return ShortsScript(**data)

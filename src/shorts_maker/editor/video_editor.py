@@ -113,7 +113,7 @@ class VideoEditor:
 
     def cleanup_old_temp_files(self, max_age_hours: int = 24):
         """오래된 임시 파일 정리 (24시간 이상)"""
-        temp_dir = "temp"
+        temp_dir = str(settings.temp_dir)
         if not os.path.exists(temp_dir):
             return
 
@@ -239,8 +239,9 @@ class VideoEditor:
     def _create_visual_clip(self, path, duration):
         clip = None
         try:
+            extension = os.path.splitext(path)[1].lower()
             # IMAGE MODE
-            if path.endswith('.png') or path.endswith('.jpg'):
+            if extension in {'.png', '.jpg', '.jpeg'}:
                 clip = ImageClip(path).with_duration(duration)
                 clip = clip.resized(height=1920)
                 if clip.w < 1080: clip = clip.resized(width=1080)
@@ -248,7 +249,7 @@ class VideoEditor:
                 return clip
 
             # VIDEO MODE
-            elif path.endswith('.mp4'):
+            elif extension in {'.mp4', '.mov', '.webm'}:
                 clip = VideoFileClip(path)
 
                 # Loop if too short (MoviePy v2 fix)
@@ -264,6 +265,8 @@ class VideoEditor:
 
                 return clip.with_position('center')
 
+            raise ValueError(f"지원하지 않는 미디어 형식: {extension or path}")
+
         except Exception as e:
             self.logger.error(f"Visual clip creation error: {e}")
             # 리소스 정리: 오류 발생 시 clip 닫기
@@ -272,8 +275,7 @@ class VideoEditor:
                     clip.close()
                 except Exception:
                     pass
-            from moviepy import ColorClip
-            return ColorClip(size=(1080, 1920), color=(0,0,0), duration=duration)
+            raise
 
     def _create_subtitle_clips(self, text, duration) -> List:
         """Returns a list of clips for clean subtitle rendering using user-configurable settings."""
@@ -313,11 +315,12 @@ class VideoEditor:
                 return [fallback]
             except Exception as fallback_error:
                 self.logger.error(f"자막 폴백도 실패: {fallback_error}")
-                return []
+                raise
 
     async def _generate_tts(self, text: str, scene_idx: int, voice: str) -> str:
         settings.temp_dir.mkdir(parents=True, exist_ok=True)
         output_path = str(settings.temp_dir / f"audio_{scene_idx}_{time.time_ns()}.mp3")
+        self._track_temp_file(output_path)
         self.logger.info(f"Generating OpenAI TTS ({voice}) for scene {scene_idx}...")
 
         max_retries = 3

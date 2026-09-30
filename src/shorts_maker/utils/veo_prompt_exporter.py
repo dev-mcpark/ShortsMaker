@@ -5,7 +5,9 @@ VEO 프롬프트 내보내기 유틸리티.
 업로드된 클립 파일을 관리합니다.
 """
 import json
+import os
 import re
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -24,10 +26,12 @@ class VeoPromptExporter:
         """스크립트 ID 생성: 타임스탬프_제목(안전문자만)"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_title = re.sub(r'[^\w\uAC00-\uD7A3]', '_', script.title)[:30]
-        return f"{timestamp}_{safe_title}"
+        return f"{timestamp}_{safe_title}_{uuid.uuid4().hex[:8]}"
 
     def get_clips_dir(self, script_id: str) -> Path:
         """해당 스크립트의 클립 저장 디렉토리 반환 및 생성"""
+        if not re.fullmatch(r"[\w-]{1,80}", script_id):
+            raise ValueError("유효하지 않은 스크립트 ID입니다.")
         clips_dir = settings.clips_dir / script_id
         clips_dir.mkdir(parents=True, exist_ok=True)
         return clips_dir
@@ -84,7 +88,12 @@ class VeoPromptExporter:
             저장된 파일의 Path
         """
         clip_path = self.get_clip_path(script_id, scene_number)
-        clip_path.write_bytes(file_content)
+        temp_path = clip_path.with_name(f'.{clip_path.name}.{uuid.uuid4().hex}.tmp')
+        try:
+            temp_path.write_bytes(file_content)
+            os.replace(temp_path, clip_path)
+        finally:
+            temp_path.unlink(missing_ok=True)
         logger.info(f"✅ 씬 {scene_number} 클립 저장: {clip_path}")
         return clip_path
 

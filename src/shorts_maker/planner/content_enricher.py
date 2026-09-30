@@ -2,6 +2,7 @@
 
 import os
 import json
+import asyncio
 from openai import AsyncOpenAI
 from typing import Optional, List, Dict
 import requests
@@ -90,9 +91,8 @@ class ContentEnricher:
         params = {"q": query, "count": 5}
         
         try:
-            # Note: 런타임에 동기 요청을 비동기화하기 위해 run_in_executor 등을 사용하는 것이 좋으나 
-            # 여기선 간단히 구현합니다.
-            response = requests.get(
+            response = await asyncio.to_thread(
+                requests.get,
                 "https://api.search.brave.com/res/v1/web/search",
                 headers=headers,
                 params=params,
@@ -154,5 +154,3 @@ class ContentEnricher:
         except Exception as e:
             self.logger.error(f"Error summarizing search results: {e}")
             return []
-
-import os # Missing import added implicitly in thought

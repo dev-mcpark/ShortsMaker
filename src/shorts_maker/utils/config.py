@@ -20,6 +20,9 @@ from dotenv import load_dotenv
 # 프로젝트 루트 경로 탐지
 def _find_project_root() -> Path:
     """pyproject.toml 또는 .git이 있는 프로젝트 루트 탐색"""
+    source_root = Path(__file__).resolve().parents[3]
+    if (source_root / "pyproject.toml").exists():
+        return source_root
     current = Path.cwd()
     for parent in [current] + list(current.parents):
         if (parent / "pyproject.toml").exists() or (parent / ".git").exists():

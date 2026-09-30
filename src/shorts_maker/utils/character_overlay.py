@@ -18,7 +18,7 @@ import os
 import numpy as np
 from typing import Optional, Tuple, Literal
 from pathlib import Path
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 from moviepy import (
     VideoFileClip,
     ImageClip,
@@ -73,6 +73,12 @@ class CharacterOverlay:
             chroma_key_threshold: 크로마키 민감도 (0.0~1.0)
         """
         self.logger = get_logger(__name__)
+        self.size_ratio = size_ratio
+        self.corner_radius = corner_radius
+        self.border_width = border_width
+        self.border_color = border_color
+        self.chroma_key_enabled = chroma_key_enabled
+        self.chroma_key_color = chroma_key_color
         self.chroma_key_threshold = chroma_key_threshold
 
         # 기본 캐릭터 소스 설정
@@ -134,7 +140,7 @@ class CharacterOverlay:
             try:
                 hex_color = self.chroma_key_color.lstrip('#')
                 key_color = np.array([int(hex_color[i:i+2], 16) for i in (0, 2, 4)])
-            except:
+            except (ValueError, IndexError):
                 key_color = np.array([0, 255, 0])  # 기본값: 녹색
 
         # RGB만 사용
@@ -226,11 +232,11 @@ class CharacterOverlay:
             result = Image.new('RGBA', target_size, (0, 0, 0, 0))
             offset_x = (target_size[0] - char_img.width) // 2
             offset_y = (target_size[1] - char_img.height) // 2
-            result.paste(char_img, (offset_x, offset_y), char_img)
+            result.alpha_composite(char_img, (offset_x, offset_y))
 
             # 마스크 적용
             mask = self.create_rounded_mask(target_size)
-            result.putalpha(mask)
+            result.putalpha(ImageChops.multiply(result.getchannel('A'), mask))
 
             # 테두리 추가
             border = self.create_border_frame(target_size)
@@ -272,16 +278,14 @@ class CharacterOverlay:
             char_img = self.prepare_character_image((char_width, char_height))
 
             if char_img is None:
-                self.logger.warning("No character image, saving background only")
-                bg.save(output_path)
-                return output_path
+                raise FileNotFoundError(f"Character image not available: {self.character_source}")
 
             # 위치 계산
             pos_x = int(bg_width * self.position[0])
             pos_y = int(bg_height * self.position[1])
 
             # 합성
-            bg.paste(char_img, (pos_x, pos_y), char_img)
+            bg.alpha_composite(char_img, (pos_x, pos_y))
             bg.save(output_path)
 
             self.logger.info(f"Character composited: {output_path}")
@@ -289,7 +293,7 @@ class CharacterOverlay:
 
         except Exception as e:
             self.logger.error(f"Image compositing failed: {e}")
-            return background_path
+            raise
 
     def composite_on_video(
         self,
@@ -377,9 +381,7 @@ class CharacterOverlay:
                 char_img = self.prepare_character_image((char_width, char_height))
 
                 if char_img is None:
-                    self.logger.warning("No character source, saving background only")
-                    bg_clip.write_videofile(output_path, codec="libx264", audio=False, logger=None)
-                    return output_path
+                    raise FileNotFoundError(f"Character image not available: {self.character_source}")
 
                 # PIL Image -> numpy array for MoviePy
                 char_array = np.array(char_img)
@@ -417,9 +419,7 @@ class CharacterOverlay:
 
         except Exception as e:
             self.logger.error(f"Video compositing failed: {e}")
-            import traceback
-            self.logger.error(traceback.format_exc())
-            return background_video_path
+            raise
 
         finally:
             # 리소스 정리

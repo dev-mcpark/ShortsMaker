@@ -31,7 +31,7 @@ def load_script(script_path: str) -> ShortsScript:
     """JSON 파일에서 스크립트 로드"""
     with open(script_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
-    return ShortsScript.from_dict(data)
+    return ShortsScript.model_validate(data)
 
 
 async def test_single_scene_generation(script: ShortsScript, mode: str = "image"):
@@ -65,12 +65,7 @@ async def test_single_scene_generation(script: ShortsScript, mode: str = "image"
     )
 
     # 첫 번째 씬만 포함하는 테스트용 스크립트 생성
-    test_script = ShortsScript(
-        title=script.title,
-        description=script.description,
-        tags=script.tags,
-        scenes=[script.scenes[0]]  # 첫 번째 씬만
-    )
+    test_script = script.model_copy(update={"scenes": [script.scenes[0]]})
 
     logger.info(f"\n🎬 씬 1 정보:")
     logger.info(f"   - Visual: {test_script.scenes[0].visual_description[:100]}...")
@@ -185,8 +180,8 @@ async def main():
         script_choice = input(f"\n스크립트 선택 (1-{min(5, len(scripts))}): ").strip()
         try:
             script_idx = int(script_choice) - 1
-            script_path = scripts[script_idx]
-        except:
+            script_path = scripts[script_idx] if 0 <= script_idx < min(5, len(scripts)) else scripts[0]
+        except ValueError:
             script_path = scripts[0]
 
         script = load_script(str(script_path))

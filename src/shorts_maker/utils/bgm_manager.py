@@ -1,13 +1,19 @@
 import os
 import random
 import glob
+from typing import Optional
+
+from shorts_maker.utils.config import settings
+from shorts_maker.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 class BGMManager:
     def __init__(self):
-        self.bgm_dir = "bgm"
+        self.bgm_dir = str(settings.bgm_dir)
         os.makedirs(self.bgm_dir, exist_ok=True)
 
-    def get_bgm_path(self, mood: str) -> str:
+    def get_bgm_path(self, mood: str) -> Optional[str]:
         """
         Finds a local BGM file that matches the mood.
         Includes a mapping to group similar moods.
@@ -45,5 +51,5 @@ class BGMManager:
             return None
         
         selected_file = random.choice(files)
-        print(f"Selected BGM Category: {category} ({selected_file})")
+        logger.info(f"Selected BGM Category: {category} ({selected_file})")
         return selected_file
