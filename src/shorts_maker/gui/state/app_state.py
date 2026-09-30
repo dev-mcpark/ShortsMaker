@@ -12,7 +12,10 @@ if TYPE_CHECKING:
 
 @dataclass
 class AppState:
-    """전역 애플리케이션 상태"""
+    """브라우저 세션의 UI 상태."""
+
+    current_view: str = "workspace"
+    workspace_sub_tab: str = "editor"
 
     # API Keys (사용자 입력)
     openai_key: str = ""
@@ -95,15 +98,36 @@ class AppState:
         self._production_service = value
 
     def get_or_create_service(self) -> "ProductionService":
-        """현재 mode에 맞는 ProductionService를 반환. mode가 바뀌면 재생성."""
-        from shorts_maker.services.production_service import ProductionService
+        """Reuse the current planning service while its credentials and mode are current."""
+        from shorts_maker.utils.config import settings
 
-        if self._production_service is None or self._production_service.mode != self.mode:
-            char_config = self.build_character_overlay_config()
-            self._production_service = ProductionService(
-                mode=self.mode,
-                character_overlay_config=char_config,
-            )
+        if (self._production_service is None
+                or self._production_service.mode != self.mode
+                or self._production_service.is_cancelled()
+                or (self.openai_key and self.openai_key != settings.openai_api_key)
+                or (self.gcp_project and self.gcp_project != settings.gcp_project_id)):
+            return self.new_production_service()
+        return self._production_service
+
+    def new_production_service(self, parallel_clips: bool = False) -> "ProductionService":
+        """Create one configured service for a new production run."""
+        from shorts_maker.services.production_service import ProductionService
+        from shorts_maker.utils.config import settings
+
+        settings.update_api_keys(openai_key=self.openai_key, gcp_project=self.gcp_project)
+        self._production_service = ProductionService(
+            mode=self.mode,
+            parallel_clips=parallel_clips,
+            character_overlay_config=self.build_character_overlay_config(),
+            editor_options={
+                "tts_voice": self.tts_voice,
+                "bgm_mood": self.bgm_mood,
+                "bgm_volume": self.bgm_volume,
+                "subtitle_color": self.subtitle_color,
+                "subtitle_size": self.subtitle_size,
+                "subtitle_y_position": self.subtitle_y_position,
+            },
+        )
         return self._production_service
 
     # ── State mutators ────────────────────────────────────────────────────────

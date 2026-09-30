@@ -1,63 +1,30 @@
-"""세션 스토리지 관리"""
+"""Browser session to in-memory application state mapping."""
+
+import uuid
 
 from nicegui import app
-from typing import Any, Optional
-import logging
 
-logger = logging.getLogger(__name__)
+from shorts_maker.gui.state.app_state import AppState
+from shorts_maker.utils.config import settings
 
 
 class SessionManager:
-    """브라우저 세션 스토리지 관리"""
+    # ponytail: process-local state; use persistent storage if reloads across server restarts matter.
+    _sessions: dict[str, AppState] = {}
 
-    @staticmethod
-    def get(key: str, default: Any = None) -> Any:
-        """세션에서 값 가져오기"""
-        try:
-            return app.storage.browser.get(key, default)
-        except Exception as e:
-            logger.debug(f"Session get failed: {e}")
-            return default
-
-    @staticmethod
-    def set(key: str, value: Any) -> bool:
-        """세션에 값 저장"""
-        try:
-            app.storage.browser[key] = value
-            return True
-        except Exception as e:
-            logger.debug(f"Session set failed: {e}")
-            return False
-
-    @staticmethod
-    def delete(key: str) -> bool:
-        """세션에서 값 삭제"""
-        try:
-            if key in app.storage.browser:
-                del app.storage.browser[key]
-            return True
-        except Exception as e:
-            logger.debug(f"Session delete failed: {e}")
-            return False
-
-    @staticmethod
-    def clear() -> bool:
-        """세션 전체 초기화"""
-        try:
-            app.storage.browser.clear()
-            return True
-        except Exception as e:
-            logger.debug(f"Session clear failed: {e}")
-            return False
-
-    @staticmethod
-    def exists(key: str) -> bool:
-        """키 존재 여부 확인"""
-        try:
-            return key in app.storage.browser
-        except Exception:
-            return False
+    @classmethod
+    def get_state(cls, session_id: str) -> AppState:
+        if session_id not in cls._sessions:
+            cls._sessions[session_id] = AppState(
+                mode=settings.generation_mode,
+                openai_key=settings.openai_api_key,
+                gcp_project=settings.gcp_project_id,
+            )
+        return cls._sessions[session_id]
 
 
-# 편의를 위한 싱글톤
-session = SessionManager()
+def get_session_state() -> AppState:
+    browser = app.storage.browser
+    if "session_id" not in browser:
+        browser["session_id"] = str(uuid.uuid4())
+    return SessionManager.get_state(browser["session_id"])

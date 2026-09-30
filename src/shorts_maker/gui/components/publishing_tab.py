@@ -47,16 +47,14 @@ def render_publishing_tab(state: 'AppState') -> None:
                     safe_notify("Uploading...", type='info')
 
                     try:
-                        from shorts_maker.uploader.youtube_uploader import YouTubeUploader
-
-                        uploader = YouTubeUploader()
                         meta = {
                             "title": title_input.value,
                             "description": desc_input.value,
                             "tags": [t.strip() for t in tags_input.value.split(',')]
                         }
 
-                        vid_id = await uploader.upload(state.final_video_path, meta)
+                        result = await state.get_or_create_service().upload_to_youtube(state.final_video_path, meta)
+                        vid_id = result.youtube_id
 
                         if vid_id:
                             safe_notify(f"Uploaded! ID: {vid_id}", type='positive')

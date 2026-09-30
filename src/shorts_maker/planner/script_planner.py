@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 import random
@@ -364,7 +365,9 @@ class ScriptPlanner:
                 raise ValueError(error_msg)
 
             self.logger.info(f"🔗 Planning content from Direct URL: {direct_url}")
-            article_content = self.content_extractor.fetch_enhanced_article(direct_url)
+            article_content = await asyncio.to_thread(
+                self.content_extractor.fetch_enhanced_article, direct_url
+            )
 
             if not article_content or article_content.word_count < 100:
                 error_msg = "추출된 본문 내용이 너무 적거나 URL에서 내용을 가져올 수 없습니다. 다른 URL을 시도해주세요."
@@ -407,7 +410,7 @@ class ScriptPlanner:
             return final_script, context
 
         # [Mode 2: RSS Discovery]
-        candidates = self._fetch_rss_feeds()
+        candidates = await asyncio.to_thread(self._fetch_rss_feeds)
         if not candidates:
             candidates = [{'category': 'General', 'source': 'Fallback', 'title': 'AI Future', 'content': 'AI impact.', 'url': 'google.com'}]
 
@@ -432,7 +435,9 @@ class ScriptPlanner:
 
             # 2. Fetch Full Content
             self.logger.info(f"🕵️ Fetching enhanced article from: {selection['url']}")
-            article_content = self.content_extractor.fetch_enhanced_article(selection['url'])
+            article_content = await asyncio.to_thread(
+                self.content_extractor.fetch_enhanced_article, selection['url']
+            )
             if article_content:
                 self.logger.info(f"✅ Successfully extracted {article_content.word_count} words.")
 

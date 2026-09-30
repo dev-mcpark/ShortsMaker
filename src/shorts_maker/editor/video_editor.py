@@ -2,6 +2,7 @@ import os
 import asyncio
 import time
 import glob
+from contextlib import suppress
 from typing import List, Optional
 from moviepy import VideoFileClip, TextClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip, ImageClip, CompositeAudioClip
 import moviepy.video.fx as vfx
@@ -24,7 +25,8 @@ class VideoEditor:
         bgm_volume: float = 0.15,
         subtitle_color: str = "#FFD700",
         subtitle_size: int = 60,
-        subtitle_y_position: int = 1300
+        subtitle_y_position: int = 1300,
+        bgm_mood: Optional[str] = None,
     ):
         """
         VideoEditor 초기화
@@ -52,6 +54,7 @@ class VideoEditor:
         # User-configurable options
         self.tts_voice = tts_voice
         self.bgm_volume = bgm_volume
+        self.bgm_mood = bgm_mood
         self.subtitle_color = subtitle_color
         self.subtitle_size = subtitle_size
         self.subtitle_y_position = subtitle_y_position
@@ -132,101 +135,106 @@ class VideoEditor:
             self.logger.info(f"🧹 오래된 임시 파일 {cleaned}개 정리")
 
     async def compose_video(self, media_paths: List[str], script) -> str:
+        if len(media_paths) != len(script.scenes):
+            raise ValueError("씬 수와 클립 수가 일치하지 않습니다.")
         # 시작 시 오래된 임시 파일 정리
         self.cleanup_old_temp_files()
         self._temp_files.clear()
 
         processed_clips = []
-        voice_name = self._get_voice_for_mood(getattr(script, 'mood', 'cinematic'))
-
-        for i, (path, scene) in enumerate(zip(media_paths, script.scenes)):
-            self.logger.info(f"Editing scene {scene.scene_number}...")
-
-            # 1. TTS
-            audio_path = await self._generate_tts(scene.script_text, i, voice_name)
-            self._track_temp_file(audio_path)  # 임시 파일 추적
-            await asyncio.sleep(2)
-            audio = AudioFileClip(audio_path)
-            duration = audio.duration + 0.5
-            
-            # 2. Visual Clip (Adaptive to file type)
-            clip = self._create_visual_clip(path, duration)
-            clip = clip.with_audio(audio)
-            
-            # [FIX] Character is now integrated into the video via Veo.
-            # No need for manual overlay anymore.
-            layers = [clip]
-
-            # 3. Subtitle (Flattened structure)
-            subtitle_clips = self._create_subtitle_clips(scene.script_text, duration)
-            if subtitle_clips:
-                layers.extend(subtitle_clips)
-
-            # [FIX] Explicit duration for composite clip
-            final_scene_clip = CompositeVideoClip(layers).with_duration(duration)
-            
-            # Fade In
-            if i > 0:
-                final_scene_clip = final_scene_clip.with_effects([FadeIn(duration=0.5)])
-            
-            processed_clips.append(final_scene_clip)
-
-        if not processed_clips:
-            self.logger.warning("No clips to compose.")
-            return ""
-
-        self.logger.info("Concatenating all clips...")
-        final_video = concatenate_videoclips(processed_clips, method="compose")
-        
-        # [CRITICAL] Enforce 59s Limit for Shorts
-        # If video is longer than 59s, speed it up to fit exactly into 58.5s (safety margin)
-        MAX_SHORTS_DURATION = 59.0
-        if final_video.duration > MAX_SHORTS_DURATION:
-            self.logger.warning(f"⚠️ Video duration ({final_video.duration}s) exceeds Shorts limit.")
-            self.logger.info("⚡ Speeding up video to fit 58.5s...")
-            
-            # Calculate speed factor (e.g., 65s / 58.5s = 1.11x speed)
-            target_duration = 58.5
-            speed_factor = final_video.duration / target_duration
-            
-            # Apply speed effect to both video and audio
-            final_video = final_video.with_effects([vfx.MultiplySpeed(speed_factor)])
-        
-        # 4. BGM
+        final_video = None
         try:
-            mood = getattr(script, 'mood', 'cinematic')
-            bgm_path = self.bgm_manager.get_bgm_path(mood)
-            if bgm_path and os.path.exists(bgm_path):
-                bgm = AudioFileClip(bgm_path)
-                # Loop BGM if needed using new syntax
-                if bgm.duration < final_video.duration:
-                    # AudioFileClip might not support with_effects(Loop) same way?
-                    # Actually audio looping in moviepy is mostly done via audio_loop from afx
-                    from moviepy.audio.fx import AudioLoop
-                    bgm = bgm.with_effects([AudioLoop(duration=final_video.duration)])
-                else:
-                    bgm = bgm.subclipped(0, final_video.duration)
+            voice_name = self._get_voice_for_mood(getattr(script, 'mood', 'cinematic'))
+
+            for i, (path, scene) in enumerate(zip(media_paths, script.scenes)):
+                self.logger.info(f"Editing scene {scene.scene_number}...")
+
+                # 1. TTS
+                audio_path = await self._generate_tts(scene.script_text, i, voice_name)
+                self._track_temp_file(audio_path)  # 임시 파일 추적
+                await asyncio.sleep(2)
+                audio = AudioFileClip(audio_path)
+                duration = audio.duration + 0.5
+            
+                # 2. Visual Clip (Adaptive to file type)
+                clip = self._create_visual_clip(path, duration)
+                clip = clip.with_audio(audio)
+            
+                # [FIX] Character is now integrated into the video via Veo.
+                # No need for manual overlay anymore.
+                layers = [clip]
+
+                # 3. Subtitle (Flattened structure)
+                subtitle_clips = self._create_subtitle_clips(scene.script_text, duration)
+                if subtitle_clips:
+                    layers.extend(subtitle_clips)
+
+                # [FIX] Explicit duration for composite clip
+                final_scene_clip = CompositeVideoClip(layers).with_duration(duration)
+            
+                # Fade In
+                if i > 0:
+                    final_scene_clip = final_scene_clip.with_effects([FadeIn(duration=0.5)])
+            
+                processed_clips.append(final_scene_clip)
+
+            if not processed_clips:
+                self.logger.warning("No clips to compose.")
+                return ""
+
+            self.logger.info("Concatenating all clips...")
+            final_video = concatenate_videoclips(processed_clips, method="compose")
+        
+            # [CRITICAL] Enforce 59s Limit for Shorts
+            # If video is longer than 59s, speed it up to fit exactly into 58.5s (safety margin)
+            MAX_SHORTS_DURATION = 59.0
+            if final_video.duration > MAX_SHORTS_DURATION:
+                self.logger.warning(f"⚠️ Video duration ({final_video.duration}s) exceeds Shorts limit.")
+                self.logger.info("⚡ Speeding up video to fit 58.5s...")
+            
+                # Calculate speed factor (e.g., 65s / 58.5s = 1.11x speed)
+                target_duration = 58.5
+                speed_factor = final_video.duration / target_duration
+            
+                # Apply speed effect to both video and audio
+                final_video = final_video.with_effects([vfx.MultiplySpeed(speed_factor)])
+        
+            # 4. BGM
+            try:
+                mood = self.bgm_mood or getattr(script, 'mood', 'cinematic')
+                bgm_path = self.bgm_manager.get_bgm_path(mood)
+                if bgm_path and os.path.exists(bgm_path):
+                    bgm = AudioFileClip(bgm_path)
+                    # Loop BGM if needed using new syntax
+                    if bgm.duration < final_video.duration:
+                        # AudioFileClip might not support with_effects(Loop) same way?
+                        # Actually audio looping in moviepy is mostly done via audio_loop from afx
+                        from moviepy.audio.fx import AudioLoop
+                        bgm = bgm.with_effects([AudioLoop(duration=final_video.duration)])
+                    else:
+                        bgm = bgm.subclipped(0, final_video.duration)
                 
-                bgm = bgm.with_volume_scaled(self.bgm_volume)
-                final_video = final_video.with_audio(CompositeAudioClip([final_video.audio, bgm]))
-        except Exception as e:
-            self.logger.error(f"Error adding BGM: {e}")
+                    bgm = bgm.with_volume_scaled(self.bgm_volume)
+                    final_video = final_video.with_audio(CompositeAudioClip([final_video.audio, bgm]))
+            except Exception as e:
+                self.logger.error(f"Error adding BGM: {e}")
 
-        output_filename = f"outputs/final_shorts_{int(time.time())}.mp4"
-        os.makedirs("outputs", exist_ok=True)
-        final_video.write_videofile(output_filename, fps=24, codec="libx264", audio_codec="aac")
-
-        # 리소스 정리: MoviePy 클립 닫기 (메모리 누수 방지)
-        self._cleanup_clips(processed_clips)
-        try:
-            final_video.close()
-        except Exception:
-            pass
-
-        # 성공 후 임시 파일 정리
-        self.cleanup_temp_files()
-
-        return output_filename
+            settings.output_dir.mkdir(parents=True, exist_ok=True)
+            output_filename = str(settings.output_dir / f"final_shorts_{time.time_ns()}.mp4")
+            await asyncio.to_thread(
+                final_video.write_videofile,
+                output_filename,
+                fps=24,
+                codec="libx264",
+                audio_codec="aac",
+            )
+            return output_filename
+        finally:
+            self._cleanup_clips(processed_clips)
+            if final_video is not None:
+                with suppress(Exception):
+                    final_video.close()
+            self.cleanup_temp_files()
 
     def _create_visual_clip(self, path, duration):
         clip = None
@@ -308,8 +316,8 @@ class VideoEditor:
                 return []
 
     async def _generate_tts(self, text: str, scene_idx: int, voice: str) -> str:
-        output_path = f"temp/audio_{scene_idx}_{int(time.time())}.mp3"
-        os.makedirs("temp", exist_ok=True)
+        settings.temp_dir.mkdir(parents=True, exist_ok=True)
+        output_path = str(settings.temp_dir / f"audio_{scene_idx}_{time.time_ns()}.mp3")
         self.logger.info(f"Generating OpenAI TTS ({voice}) for scene {scene_idx}...")
 
         max_retries = 3
@@ -322,7 +330,7 @@ class VideoEditor:
                     voice=voice,
                     input=text
                 )
-                response.stream_to_file(output_path)
+                await asyncio.to_thread(response.stream_to_file, output_path)
                 return output_path
             except Exception as e:
                 self.logger.warning(f"⚠️ OpenAI TTS Attempt {attempt+1} Failed ({e}).")

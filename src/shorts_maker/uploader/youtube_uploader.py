@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -55,6 +56,10 @@ class YouTubeUploader:
         return build(self.api_service_name, self.api_version, credentials=creds)
 
     async def upload(self, video_path: str, metadata: dict):
+        """Run the blocking Google client without freezing the UI loop."""
+        return await asyncio.to_thread(self._upload_sync, video_path, metadata)
+
+    def _upload_sync(self, video_path: str, metadata: dict):
         self.logger.info(f"Starting upload to YouTube: {video_path}")
         try:
             youtube = self.get_authenticated_service()

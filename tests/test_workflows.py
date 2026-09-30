@@ -9,10 +9,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.generator.video_generator import VideoGenerator
+from shorts_maker.gui.state.app_state import AppState
 from shorts_maker.planner.models import ScriptGenerationContext, TopicCandidate
 from shorts_maker.planner.script_planner import ScriptPlanner
-from shorts_maker.services.production_service import ProductionService
+from shorts_maker.services.production_service import ProductionResult, ProductionService
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.veo_prompt_exporter import VeoPromptExporter
@@ -33,19 +35,99 @@ class WorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "output.mp4"
             output.touch()
+            clip = Path(directory) / "clip.mp4"
+            clip.touch()
             service = ProductionService(mode="video")
             editor = SimpleNamespace(compose_video=AsyncMock(return_value=str(output)))
             service._editor = editor
             script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=1)])
 
             result = asyncio.run(
-                service.produce_video(script, manual_clip_paths={1: "clip.mp4"})
+                service.produce_video(script, manual_clip_paths={1: str(clip)})
             )
 
         self.assertTrue(result.success)
-        self.assertEqual(result.clips, ["clip.mp4"])
+        self.assertEqual(result.clips, [str(clip)])
         self.assertIsNone(service._generator)
-        editor.compose_video.assert_awaited_once_with(["clip.mp4"], script)
+        editor.compose_video.assert_awaited_once_with([str(clip)], script)
+
+    def test_missing_manual_file_is_rejected_before_editing(self):
+        service = ProductionService(mode="video")
+        script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=1)])
+
+        result = asyncio.run(service.produce_video(script, manual_clip_paths={1: "/missing/clip.mp4"}))
+
+        self.assertFalse(result.success)
+        self.assertIn("클립 파일", result.error)
+        self.assertIsNone(service._editor)
+
+    def test_session_options_reach_editor_and_parallel_generator(self):
+        state = AppState(mode="image", tts_voice="nova", bgm_mood="cinematic")
+        with patch.object(settings, "update_api_keys"):
+            service = state.new_production_service(parallel_clips=True)
+        self.assertIs(state.production_service, service)
+        self.assertTrue(service.parallel_clips)
+        with patch("shorts_maker.services.production_service.VideoEditor") as editor_class:
+            service._get_editor()
+        self.assertEqual(editor_class.call_args.kwargs["tts_voice"], "nova")
+        self.assertEqual(editor_class.call_args.kwargs["bgm_mood"], "cinematic")
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output.mp4"
+            output.touch()
+            clips = [str(Path(directory) / f"{i}.png") for i in (1, 2)]
+            for clip in clips:
+                Path(clip).touch()
+            generator = SimpleNamespace(generate_clips=AsyncMock(return_value=clips))
+            service._generator = generator
+            service._editor = SimpleNamespace(compose_video=AsyncMock(return_value=str(output)))
+            script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=i) for i in (1, 2)])
+            result = asyncio.run(service.produce_video(script))
+
+        self.assertTrue(result.success)
+        generator.generate_clips.assert_awaited_once_with(script, parallel=True)
+        service._editor.compose_video.assert_awaited_once_with(clips, script)
+
+    def test_editor_rejects_mismatched_clips_before_processing(self):
+        editor = object.__new__(VideoEditor)
+        script = SimpleNamespace(scenes=[object(), object()])
+        with self.assertRaisesRegex(ValueError, "씬 수와 클립 수"):
+            asyncio.run(editor.compose_video(["one.png"], script))
+
+    def test_editor_cleans_up_when_tts_fails(self):
+        editor = object.__new__(VideoEditor)
+        editor._temp_files = []
+        editor.logger = Mock()
+        editor.cleanup_old_temp_files = Mock()
+        editor.cleanup_temp_files = Mock()
+        editor._cleanup_clips = Mock()
+        editor._get_voice_for_mood = Mock(return_value="alloy")
+        editor._generate_tts = AsyncMock(side_effect=RuntimeError("tts failed"))
+        script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=1, script_text="Hello")])
+
+        with self.assertRaisesRegex(RuntimeError, "tts failed"):
+            asyncio.run(editor.compose_video(["scene.png"], script))
+
+        editor._cleanup_clips.assert_called_once_with([])
+        editor.cleanup_temp_files.assert_called_once()
+
+    def test_full_pipeline_retains_work_after_upload_failure(self):
+        service = ProductionService()
+        script = SimpleNamespace(title="Title", description="Description", tags=[])
+        service.generate_script = AsyncMock(return_value=(script, None))
+        service.produce_video = AsyncMock(return_value=ProductionResult(
+            success=True, video_path="video.mp4", clips=["scene.png"]
+        ))
+        service.upload_to_youtube = AsyncMock(return_value=ProductionResult(
+            success=False, error="upload failed"
+        ))
+
+        result = asyncio.run(service.full_pipeline(auto_upload=True))
+
+        self.assertFalse(result.success)
+        self.assertIs(result.script, script)
+        self.assertEqual(result.video_path, "video.mp4")
+        self.assertEqual(result.clips, ["scene.png"])
 
     def test_uploaded_clips_are_recovered_from_disk(self):
         script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=1)])

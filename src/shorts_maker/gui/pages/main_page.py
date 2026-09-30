@@ -1,11 +1,8 @@
 """메인 페이지 레이아웃 - Google AI Studio 스타일 개편"""
 
-from nicegui import ui, app
-import uuid
-import os
-from typing import Dict, Any
+from nicegui import ui
 
-from shorts_maker.gui.state.app_state import AppState
+from shorts_maker.gui.state import get_session_state
 from shorts_maker.gui.components import (
     render_pipeline_tab,
     render_sources_tab,
@@ -21,39 +18,6 @@ from shorts_maker.utils.config import settings
 from shorts_maker.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-class SessionManager:
-    """세션별 상태를 관리하는 매니저 클래스"""
-    _sessions: Dict[str, AppState] = {}
-
-    @classmethod
-    def get_state(cls, session_id: str) -> AppState:
-        """세션 ID에 해당하는 상태 반환 (없으면 생성)"""
-        if session_id not in cls._sessions:
-            cls._sessions[session_id] = AppState()
-            state = cls._sessions[session_id]
-            state.mode = settings.generation_mode
-            state.openai_key = settings.openai_api_key
-            state.gcp_project = settings.gcp_project_id
-            # 세션 뷰 기본값 설정
-            state.current_view = 'workspace'
-            state.workspace_sub_tab = 'editor'
-        return cls._sessions[session_id]
-
-    @classmethod
-    def cleanup_session(cls, session_id: str):
-        """세션 정리"""
-        if session_id in cls._sessions:
-            del cls._sessions[session_id]
-
-
-def get_session_state() -> AppState:
-    """현재 세션의 상태를 반환"""
-    if 'session_id' not in app.storage.browser:
-        app.storage.browser['session_id'] = str(uuid.uuid4())
-    session_id = app.storage.browser['session_id']
-    return SessionManager.get_state(session_id)
 
 
 def update_step_indicators(phase: ProductionPhase, step_indicators: list) -> None:
@@ -126,11 +90,17 @@ def render_main_page() -> None:
                     ui.notify('🎬 전 파이프라인 자동 실행을 시작합니다...', type='info')
                     state.pipeline_running = True
                     try:
-                        service = state.get_or_create_service()
+                        service = state.new_production_service()
                         # UI 진행상황 갱신을 위해 콜백 동기화
                         service.set_progress_callback(lambda p: state.sync_from_progress(p))
                         # 백그라운드 태스크로 구동
-                        await service.full_pipeline(auto_upload=False)
+                        result = await service.full_pipeline(auto_upload=False)
+                        if result.success:
+                            state.script = result.script
+                            state.final_video_path = result.video_path
+                            state.generated_clips = result.clips
+                        else:
+                            ui.notify(f'제작 실패: {result.error}', type='negative')
                     except Exception as e:
                         ui.notify(f'실행 실패: {e}', type='negative')
                     finally:
@@ -140,8 +110,8 @@ def render_main_page() -> None:
                     if not state.pipeline_running:
                         ui.notify('실행 중인 파이프라인이 없습니다.', type='info')
                         return
-                    service = state.get_or_create_service()
-                    service.cancel()
+                    if state.production_service:
+                        state.production_service.cancel()
                     state.pipeline_running = False
                     ui.notify('⚠️ 파이프라인 취소가 요청되었습니다.', type='warning')
 
@@ -271,6 +241,7 @@ def render_main_page() -> None:
                 def save_sidebar_settings():
                     if state.openai_key or state.gcp_project:
                         settings.update_api_keys(openai_key=state.openai_key, gcp_project=state.gcp_project)
+                        state.production_service = None
                     ui.notify('설정이 성공적으로 로드되었습니다!', type='positive')
 
                 ui.button('Save settings', on_click=save_sidebar_settings).props('color=violet size=sm icon=save unelevated').classes('w-full py-1 text-xs')

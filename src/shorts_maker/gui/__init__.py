@@ -13,11 +13,11 @@ Usage:
 """
 
 from .pages import render_main_page
-from .state import AppState, SessionManager, session
+from .state import AppState, SessionManager, get_session_state
 
 __all__ = [
     'render_main_page',
     'AppState',
     'SessionManager',
-    'session',
+    'get_session_state',
 ]

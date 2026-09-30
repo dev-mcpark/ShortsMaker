@@ -135,7 +135,7 @@ class VideoGenerator:
         output_path = f"temp/bg_scene_{scene.scene_number}.mp4"
 
         if not self.client:
-            return self._create_mock_video(output_path, scene.duration_seconds)
+            return await asyncio.to_thread(self._create_mock_video, output_path, scene.duration_seconds)
 
         model_id = settings.veo_model_id
         self.logger.info(
@@ -154,7 +154,7 @@ class VideoGenerator:
         except Exception as e:
             self.logger.error(f"    ❌ Veo Background Generation Error: {e}")
 
-        return self._create_mock_video(output_path, scene.duration_seconds)
+        return await asyncio.to_thread(self._create_mock_video, output_path, scene.duration_seconds)
 
     async def _composite_character_on_video(self, bg_video_path: str, scene) -> str:
         """Stage 2: 배경 영상에 캐릭터 합성."""

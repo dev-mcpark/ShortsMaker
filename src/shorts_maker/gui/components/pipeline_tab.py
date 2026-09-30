@@ -8,7 +8,6 @@ from shorts_maker.gui.components.common.safe_ui import (
     safe_notify, safe_refresh, safe_update, safe_set_visibility
 )
 from shorts_maker.services.production_service import ProductionPhase, ProductionProgress
-from shorts_maker.utils.config import settings
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.gui.components.common.progress_utils import format_time, update_scene_grid
 
@@ -165,23 +164,7 @@ def render_pipeline_tab(
                 safe_set_visibility(preview_placeholder, True)
 
                 try:
-                    # API Key 및 GCP 프로젝트 동적 매핑
-                    if state.openai_key or state.gcp_project:
-                        settings.update_api_keys(
-                            openai_key=state.openai_key,
-                            gcp_project=state.gcp_project
-                        )
-
-                    # 캐릭터 설정 바인딩
-                    char_config = state.build_character_overlay_config()
-
-                    from shorts_maker.services.production_service import ProductionService
-                    service = ProductionService(
-                        mode=state.mode,
-                        parallel_clips=parallel_clips.value,
-                        character_overlay_config=char_config
-                    )
-                    state.production_service = service
+                    service = state.new_production_service(parallel_clips=parallel_clips.value)
 
                     # 콜백 연결
                     def on_progress(progress: ProductionProgress):
@@ -259,20 +242,22 @@ def render_pipeline_tab(
 
                     state.pipeline_running = False
                     await monitor_task
+                    state.script = result.script
+                    state.final_video_path = result.video_path
+                    state.generated_clips = result.clips
+
+                    if result.video_path:
+                        try:
+                            video_preview.set_source(result.video_path)
+                            video_preview.visible = True
+                            preview_placeholder.visible = False
+                        except Exception as e:
+                            logger.warning(f"Video set source failed: {e}")
 
                     if result.success:
-                        state.final_video_path = result.video_path
                         state.pipeline_phase = ProductionPhase.COMPLETED
                         state.pipeline_message = "파이프라인 전체 완료!"
                         safe_notify('🎉 전 프로세스가 성공적으로 조율되었습니다!', type='positive')
-
-                        if result.video_path:
-                            try:
-                                video_preview.set_source(result.video_path)
-                                video_preview.visible = True
-                                preview_placeholder.visible = False
-                            except Exception as e:
-                                logger.warning(f"Video set source failed: {e}")
 
                         if result.youtube_id:
                             safe_notify(f'📺 유튜브 자동 업로드 성공! ID: {result.youtube_id}', type='positive')

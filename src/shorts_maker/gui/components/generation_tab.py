@@ -4,7 +4,7 @@ from nicegui import ui
 from typing import TYPE_CHECKING
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify
-from shorts_maker.services.production_service import ProductionService, ProductionPhase, ProductionProgress
+from shorts_maker.services.production_service import ProductionPhase, ProductionProgress
 from shorts_maker.gui.components.common.progress_utils import update_scene_grid
 from shorts_maker.utils.veo_prompt_exporter import VeoPromptExporter
 from shorts_maker.utils.logger import get_logger
@@ -351,6 +351,9 @@ def render_generation_tab(state: 'AppState') -> None:
         # ── 4. EVENT HANDLERS CORE (동적 렌더러 연동) ──
         async def _run_production_core(manual_clip_paths=None):
             nonlocal video_player, placeholder_content
+            if state.pipeline_running:
+                safe_notify('이미 제작이 진행 중입니다.', type='warning')
+                return
             production_running = True
 
             try:
@@ -363,12 +366,9 @@ def render_generation_tab(state: 'AppState') -> None:
             try:
                 # 상태 초기화
                 state.reset_pipeline()
+                state.pipeline_running = True
 
-                char_config = state.build_character_overlay_config()
-                service = ProductionService(
-                    mode=state.mode,
-                    character_overlay_config=char_config
-                )
+                service = state.new_production_service()
 
                 def on_progress(progress: ProductionProgress):
                     state.sync_from_progress(progress)
@@ -435,6 +435,7 @@ def render_generation_tab(state: 'AppState') -> None:
                 logger.error(f"Production Error Event: {e}")
             finally:
                 production_running = False
+                state.pipeline_running = False
                 try:
                     gen_spinner.visible = False
                 except RuntimeError:

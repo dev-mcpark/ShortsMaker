@@ -17,20 +17,24 @@ ShortsMaker automatically researches, writes scripts, generates visuals, and upl
 
 ## 🏗️ Architecture
 
-ShortsMaker uses a modular pipeline designed for information density and viral storytelling:
+ShortsMaker is a modular monolith. The NiceGUI screens keep browser-session UI state in
+`AppState` and start work through `ProductionService`. That service owns the production
+sequence and progress/cancellation state; it calls the planner, media generator, editor,
+and uploader. Those components contain their own external API and file operations.
 
 ```mermaid
-graph TD
-    A[RSS/URL Source] --> B[ContentExtractor]
-    B -->|Enhanced Text + Quotes| C[ContentAnalyzer]
-    C -->|Core Message + Hook| D[ContentEnricher]
-    D -->|External Web Data| E[ScriptWriter]
-    E -->|Structured Script| F[ProductionService]
-    F -->|Visual Gen| G[VideoGenerator]
-    F -->|Audio Gen| H[TTS Engine]
-    G & H --> I[VideoEditor]
-    I --> J[YouTubeUploader]
+flowchart LR
+    UI[NiceGUI screens] --> State[AppState per browser session]
+    State --> Service[ProductionService]
+    Service --> Planner[ScriptPlanner]
+    Service --> Generator[VideoGenerator]
+    Service --> Editor[VideoEditor]
+    Service --> Uploader[YouTubeUploader]
 ```
+
+The scheduler uses the same `ProductionService` without a GUI session. Browser state is
+held in memory and is lost on a server restart. API settings are process-wide, so run
+separate server instances when different users need different credentials.
 
 ---
 

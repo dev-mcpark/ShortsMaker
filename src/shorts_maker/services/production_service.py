@@ -92,6 +92,7 @@ class ProductionResult:
     youtube_id: Optional[str] = None
     error: Optional[str] = None
     clips: List[str] = field(default_factory=list)
+    script: Optional[ShortsScript] = None
 
 
 class ProductionService:
@@ -119,7 +120,8 @@ class ProductionService:
     }
 
     def __init__(self, mode: str = "image", parallel_clips: bool = False,
-                 character_overlay_config: Optional[CharacterOverlayConfig] = None):
+                 character_overlay_config: Optional[CharacterOverlayConfig] = None,
+                 editor_options: Optional[Dict[str, Any]] = None):
         """
         ProductionService 초기화
 
@@ -132,6 +134,7 @@ class ProductionService:
         self.mode = mode
         self.parallel_clips = parallel_clips
         self.character_overlay_config = character_overlay_config
+        self.editor_options = editor_options or {}
         self._progress = ProductionProgress()
         self._cancelled = False
 
@@ -252,7 +255,7 @@ class ProductionService:
     def _get_editor(self) -> VideoEditor:
         """VideoEditor 인스턴스 반환 (지연 초기화)"""
         if self._editor is None:
-            self._editor = VideoEditor()
+            self._editor = VideoEditor(**self.editor_options)
         return self._editor
 
     def _get_uploader(self) -> YouTubeUploader:
@@ -389,10 +392,10 @@ class ProductionService:
                 for i, scene in enumerate(script.scenes):
                     self._update_scene_progress(i, "processing")
                     clip_path = manual_clip_paths.get(scene.scene_number)
-                    if not clip_path:
+                    if not clip_path or not os.path.isfile(clip_path):
                         return ProductionResult(
                             success=False,
-                            error=f"씬 {scene.scene_number}의 클립 파일이 없습니다."
+                            error=f"씬 {scene.scene_number}의 클립 파일이 없거나 접근할 수 없습니다."
                         )
                     clips.append(clip_path)
                     self._update_scene_progress(i, "completed", thumbnail_path=clip_path)
@@ -408,34 +411,41 @@ class ProductionService:
                 self._update_progress(ProductionPhase.GENERATING, 0,
                                        f"비주얼 생성 시작 (0/{num_scenes})")
 
-                for i, scene in enumerate(script.scenes):
-                    if self.is_cancelled():
-                        return ProductionResult(success=False, clips=clips, error="사용자에 의해 취소됨")
-
-                    self._update_scene_progress(i, "processing")
-                    progress_pct = (i / num_scenes) * 100
-                    self._update_progress(
-                        ProductionPhase.GENERATING,
-                        progress_pct,
-                        f"씬 {i + 1}/{num_scenes} 생성 중: {scene.visual_description[:30]}..."
-                    )
-
-                    try:
-                        clip_path = await generator.generate_scene_clip(scene)
-                        clips.append(clip_path)
+                if self.parallel_clips and self.mode == "image":
+                    clips = await generator.generate_clips(script, parallel=True)
+                    for i, clip_path in enumerate(clips):
                         self._update_scene_progress(i, "completed", thumbnail_path=clip_path)
+                else:
+                    for i, scene in enumerate(script.scenes):
+                        if self.is_cancelled():
+                            return ProductionResult(success=False, clips=clips, error="사용자에 의해 취소됨")
 
-                    except Exception as scene_error:
-                        self.logger.error(f"씬 {i + 1} 생성 실패: {scene_error}")
-                        self._update_scene_progress(i, "failed", error=str(scene_error))
-                        mock_path = f"temp/error_scene_{i}.png"
-                        generator.create_fallback_image(mock_path)
-                        clips.append(mock_path)
+                        self._update_scene_progress(i, "processing")
+                        progress_pct = (i / num_scenes) * 100
+                        self._update_progress(
+                            ProductionPhase.GENERATING,
+                            progress_pct,
+                            f"씬 {i + 1}/{num_scenes} 생성 중: {scene.visual_description[:30]}..."
+                        )
 
-                    await asyncio.sleep(2)
+                        try:
+                            clip_path = await generator.generate_scene_clip(scene)
+                            clips.append(clip_path)
+                            self._update_scene_progress(i, "completed", thumbnail_path=clip_path)
 
-            if not clips:
-                return ProductionResult(success=False, error="클립 생성 실패")
+                        except Exception as scene_error:
+                            self.logger.error(f"씬 {i + 1} 생성 실패: {scene_error}")
+                            self._update_scene_progress(i, "failed", error=str(scene_error))
+                            mock_path = f"temp/error_scene_{i}.png"
+                            generator.create_fallback_image(mock_path)
+                            clips.append(mock_path)
+
+                        await asyncio.sleep(2)
+
+            if len(clips) != num_scenes or not clips:
+                return ProductionResult(success=False, clips=clips, error="씬 수와 클립 수가 일치하지 않습니다.")
+            if any(not path or not os.path.isfile(path) for path in clips):
+                return ProductionResult(success=False, clips=clips, error="생성된 클립 파일이 없습니다.")
 
             self._update_progress(ProductionPhase.GENERATING, 100,
                                    f"✓ {len(clips)}개 클립 생성 완료")
@@ -554,6 +564,7 @@ class ProductionService:
 
         # Step 2: Video Production
         result = await self.produce_video(script)
+        result.script = script
         if not result.success:
             return result
 
@@ -565,7 +576,9 @@ class ProductionService:
                 "tags": script.tags
             }
             upload_result = await self.upload_to_youtube(result.video_path, metadata)
-            return upload_result
+            result.success = upload_result.success
+            result.youtube_id = upload_result.youtube_id
+            result.error = upload_result.error
 
         return result
 
@@ -576,4 +589,5 @@ class ProductionService:
         self._generator = None
         self._editor = None
         self._uploader = None
+        self._cancelled = False
         self.logger.info("ProductionService 상태 초기화됨")

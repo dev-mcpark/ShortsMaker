@@ -9,7 +9,6 @@ from shorts_maker.gui.components.common.safe_ui import safe_notify
 from shorts_maker.gui.config.constants import SCENE_COST_MULTIPLIER
 from shorts_maker.gui.config.ui_theme import SCENE_GRADIENTS
 from shorts_maker.planner.script_planner import ShortsScript
-from shorts_maker.utils.config import settings
 from shorts_maker.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -193,11 +192,6 @@ def render_planning_tab(state: 'AppState') -> None:
                     except RuntimeError:
                         return
                     try:
-                        if state.openai_key or state.gcp_project:
-                            settings.update_api_keys(
-                                openai_key=state.openai_key,
-                                gcp_project=state.gcp_project
-                            )
                         logger.info(f"Starting Plan: Mode={source_mode.value}")
                         service = state.get_or_create_service()
                         script, context = await service.generate_script(
