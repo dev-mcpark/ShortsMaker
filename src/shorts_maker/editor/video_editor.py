@@ -148,8 +148,8 @@ class VideoEditor:
                     total_duration += audio.duration + 0.5
                 finally:
                     audio.close()
-            # A small speed adjustment is acceptable; larger ones make speech hard to follow.
-            limit = settings.target_duration * 1.15
+            # Reject long narration before paying for visuals or speeding speech up heavily.
+            limit = settings.max_shorts_duration
             if total_duration > limit:
                 raise ValueError(
                     f"내레이션이 {total_duration:.1f}초로 너무 깁니다. "

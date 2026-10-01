@@ -11,6 +11,7 @@ ShortsMaker 중앙 설정 관리 모듈.
 2. 프로젝트 루트 (하위 호환)
 """
 import os
+import math
 import sys
 from pathlib import Path
 from typing import Optional
@@ -74,10 +75,13 @@ class Settings:
 
     # Model IDs
     veo_model_id: str = field(default_factory=lambda: os.getenv("VEO_MODEL_ID", "veo-3.1-fast-generate-001"))
-    imagen_model_id: str = "imagen-3.0-generate-001"
+    image_model_id: str = field(default_factory=lambda: os.getenv("IMAGE_MODEL_ID", "gemini-3.1-flash-lite-image"))
+    veo_duration_seconds: int = field(default_factory=lambda: int(os.getenv("VEO_DURATION_SECONDS", "8")))
+    hybrid_veo_duration_seconds: int = field(default_factory=lambda: int(os.getenv("HYBRID_VEO_DURATION_SECONDS", "6")))
+    max_visual_cost_usd: float = field(default_factory=lambda: float(os.getenv("MAX_VISUAL_COST_USD", "1.0")))
 
     # Generation Mode
-    generation_mode: str = field(default_factory=lambda: os.getenv("GENERATION_MODE", "video"))
+    generation_mode: str = field(default_factory=lambda: os.getenv("GENERATION_MODE", "hybrid"))
 
     # Credential Paths (자동 탐색)
     service_account_path: Path = field(default_factory=lambda: _find_credential_file("service_account.json"))
@@ -125,6 +129,12 @@ class Settings:
 
     def __post_init__(self):
         """디렉토리 자동 생성 및 환경변수 설정"""
+        if self.generation_mode not in {"hybrid", "image", "video"}:
+            raise ValueError("GENERATION_MODE는 hybrid, image, video 중 하나여야 합니다.")
+        if self.veo_duration_seconds not in {4, 6, 8} or self.hybrid_veo_duration_seconds not in {4, 6, 8}:
+            raise ValueError("Veo 생성 길이는 4, 6, 8초 중 하나여야 합니다.")
+        if not math.isfinite(self.max_visual_cost_usd) or self.max_visual_cost_usd < 0:
+            raise ValueError("MAX_VISUAL_COST_USD는 0 이상의 유한한 숫자여야 합니다.")
         # 디렉토리 생성
         for dir_path in [self.temp_dir, self.output_dir, self.scripts_dir,
                          self.clips_dir, self.bgm_dir, self.logs_dir,
@@ -204,6 +214,7 @@ class Settings:
         print(f"   Project:  {self.gcp_project_id or '❌ Not set'}")
         print(f"   Location: {self.gcp_location}")
         print(f"   Veo:      {self.veo_model_id}")
+        print(f"   Image:    {self.image_model_id}")
         print()
 
         # Credentials

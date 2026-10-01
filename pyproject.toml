@@ -8,7 +8,7 @@ authors = [
 ]
 readme = "README.md"
 license = { text = "MIT" }
-keywords = ["youtube", "shorts", "automation", "ai", "veo3", "imagen3", "video-generation"]
+keywords = ["youtube", "shorts", "automation", "ai", "veo3", "gemini", "video-generation"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",

@@ -259,7 +259,10 @@ def render_pipeline_tab(
                     if result.success:
                         state.pipeline_phase = ProductionPhase.COMPLETED
                         state.pipeline_message = "파이프라인 전체 완료!"
-                        safe_notify('🎉 전 프로세스가 성공적으로 조율되었습니다!', type='positive')
+                        safe_notify(
+                            f'제작 완료 · 예상 비주얼 API 비용 ${result.estimated_visual_cost_usd:.3f} '
+                            f'· 재사용·수동 {result.reused_scenes}장면', type='positive',
+                        )
 
                         if result.youtube_id:
                             safe_notify(f'📺 유튜브 자동 업로드 성공! ID: {result.youtube_id}', type='positive')
@@ -279,7 +282,10 @@ def render_pipeline_tab(
                             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M'),
                             'success': True,
                             'video_path': result.video_path,
-                            'youtube_id': result.youtube_id
+                            'youtube_id': result.youtube_id,
+                            'estimated_visual_cost_usd': result.estimated_visual_cost_usd,
+                            'generated_scenes': result.generated_scenes,
+                            'reused_scenes': result.reused_scenes,
                         })
                         safe_refresh(history_list)
 

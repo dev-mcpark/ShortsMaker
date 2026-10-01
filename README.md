@@ -1,6 +1,6 @@
 # ShortsMaker 🎬
 
-AI-powered YouTube Shorts automation pipeline using **Google Veo 3.1** (Video) or **Imagen 3** (Image). 
+AI-powered YouTube Shorts automation pipeline using **Google Veo 3.1** and **Gemini image generation**.
 ShortsMaker automatically researches, writes scripts, generates visuals, and uploads content to YouTube, allowing for a fully hands-off content creation experience.
 
 ---
@@ -9,7 +9,7 @@ ShortsMaker automatically researches, writes scripts, generates visuals, and upl
 
 - **Deep Content Research:** A 3-stage enrichment pipeline (Extraction, Analysis, Enrichment) that gathers deep context, expert quotes, and supplementary web data.
 - **Smart Storytelling:** Automatically structures scripts into high-retention formats (Hook -> Mystery -> Secret -> Impact).
-- **High-Fidelity Visuals:** Leverages Google's latest **Veo 3.1** (State-of-the-art video generation) or **Imagen 3** (High-quality image generation) via Vertex AI.
+- **Flexible Visuals:** A short Veo opening followed by Gemini images by default; full-image and full-video modes remain available.
 - **Automated Composition:** Native integration with `moviepy` for seamless audio-visual merging, subtitling, and BGM.
 - **Modern GUI:** A clean, productive Studio interface built with **NiceGUI**.
 
@@ -40,9 +40,12 @@ An article enters topic history only after its script passes validation. Studio 
 tracks completed editing work and finishes after an optional upload. Stop requests wait
 for the current external API call to return before the run is released.
 
-Production checks narration length before requesting Veo or Imagen media. Runs with the
-same script and visual settings reuse completed scene files from `outputs/clips/auto_*`,
-including after a restart. To retry a failed scene from the full pipeline, keep the
+Production estimates new visual API output cost before narration or media generation and
+stops if it exceeds `MAX_VISUAL_COST_USD`. This is a planning limit, not a provider billing
+cap: prompt tokens, GPT, TTS, retries, and taxes are excluded. It then checks narration length before
+requesting Veo or Gemini media. Scene files in `outputs/clips/scenes/` are keyed by the
+visual prompt, model, duration, and character overlay, so narration edits reuse them.
+To retry a failed scene from the full pipeline, keep the
 script and run **Start Production** in the Generation tab; a new full pipeline run
 plans a new script. Before completion and again before upload, the rendered video is
 checked for Shorts length, 9:16 framing, an audio track, silent audio, and black frames.
@@ -88,10 +91,14 @@ Launch your browser and go to `http://localhost:8080`.
 
 ---
 
-## 🛠️ Performance & ROI
-To maximize ROI, we recommend:
-- **Image Mode (Imagen 3)**: ~$0.26 per video (Recommended for high-volume testing).
-- **Video Mode (Veo 3.1)**: ~$4.50 per video (Best for premium quality).
+## 🛠️ Production plan and visual cost
+
+1. **Generate a sourced, reviewable script.** Keep the existing content checks and review the hook, facts, and originality before publishing.
+2. **Choose visuals by scene.** The default `hybrid` mode uses one 6-second silent Veo hook and Gemini stills for later scenes. Each scene can set `visual_mode` to `image` or `video`; manual clips can replace individual scenes.
+3. **Check expected spend, then reuse work.** The run stops before paid generation if new visual outputs exceed `MAX_VISUAL_COST_USD` (default $1). Completed scenes survive a failed run and narration changes.
+4. **Inspect the finished video.** The editor checks length, framing, audio, and black frames before upload. The result shows expected visual API cost and reused scene count. Compare those estimates with the provider bill and YouTube retention data before increasing volume.
+
+Using the configured models, a new 6-scene hybrid video is estimated at about **$0.65** for visuals (6 seconds of Veo Fast at $0.08/second plus five Gemini images estimated at $0.034 each). Six still images are about **$0.20**; six 8-second Veo Fast clips are about **$3.84**. These are illustrative October 2026 planning rates, not full production costs. Check [Vertex AI pricing](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing) and [model lifecycle dates](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions) before raising budgets. A Google Cloud spend cap and OpenAI account spending limit should also be configured separately.
 
 ---
 

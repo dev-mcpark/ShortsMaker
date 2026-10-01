@@ -22,7 +22,7 @@ class AppState:
     gcp_project: str = ""
 
     # Production Mode
-    mode: str = "video"  # "video" or "image"
+    mode: str = "hybrid"  # "hybrid", "video" or "image"
 
     # Pipeline State
     pipeline_running: bool = False

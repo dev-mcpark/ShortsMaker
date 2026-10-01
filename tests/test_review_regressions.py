@@ -154,14 +154,36 @@ class ReviewRegressions(unittest.TestCase):
 
     def test_generation_failure_does_not_return_mock_media(self):
         generator = object.__new__(VideoGenerator)
-        generator.client = None
+        generator.image_client = SimpleNamespace(models=SimpleNamespace(
+            generate_content=Mock(side_effect=RuntimeError("GenAI unavailable")),
+        ))
         generator.logger = Mock()
         generator._create_mock_image = Mock(return_value="placeholder.png")
 
         with self.assertRaisesRegex(RuntimeError, "GenAI"):
-            asyncio.run(generator._generate_image_imagen(SimpleNamespace(scene_number=1)))
+            asyncio.run(generator._generate_image_gemini(SimpleNamespace(
+                scene_number=1, visual_description="A vertical image",
+            )))
 
         generator._create_mock_image.assert_not_called()
+
+    def test_gemini_image_request_uses_vertical_1k_output(self):
+        generator = object.__new__(VideoGenerator)
+        image = SimpleNamespace(save=Mock())
+        part = SimpleNamespace(as_image=Mock(return_value=image))
+        generator.image_client = SimpleNamespace(models=SimpleNamespace(
+            generate_content=Mock(return_value=SimpleNamespace(candidates=[
+                SimpleNamespace(content=SimpleNamespace(parts=[part])),
+            ])),
+        ))
+        scene = SimpleNamespace(visual_description="A vertical landscape")
+        generator._run_image_generation("gemini-3.1-flash-lite-image", scene, "scene.png")
+
+        image.save.assert_called_once_with("scene.png")
+        request = generator.image_client.models.generate_content.call_args.kwargs
+        self.assertEqual(request["contents"], scene.visual_description)
+        self.assertEqual(request["config"].image_config.aspect_ratio, "9:16")
+        self.assertEqual(request["config"].image_config.image_size, "1K")
 
     def test_veo_polling_stops_after_bounded_wait(self):
         generator = object.__new__(VideoGenerator)
@@ -175,6 +197,7 @@ class ReviewRegressions(unittest.TestCase):
             with self.assertRaises(TimeoutError):
                 generator._retry_veo_call("model", "prompt", "unused.mp4", "fallback")
         generator.client.models.generate_videos.assert_called_once()
+        self.assertFalse(generator.client.models.generate_videos.call_args.kwargs["config"]["generate_audio"])
 
         character_generator = object.__new__(CharacterVideoGenerator)
         character_generator.client = SimpleNamespace(

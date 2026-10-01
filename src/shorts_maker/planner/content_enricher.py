@@ -38,6 +38,9 @@ class ContentEnricher:
             보강된 정보 포인트 리스트 (List[str])
         """
         self.logger.info(f"🌐 Enriching content for topic: {topic}")
+        if not self.search_api_key:
+            self.logger.info("Brave Search API key missing; skipping enrichment.")
+            return []
         
         # 1. 검색 쿼리 생성
         search_query = await self._generate_search_query(topic, core_message, visual_keywords)
@@ -139,7 +142,7 @@ class ContentEnricher:
         
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"}
             )

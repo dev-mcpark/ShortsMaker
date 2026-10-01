@@ -250,17 +250,18 @@ class WorkflowTests(unittest.TestCase):
         generator.mode = "video"
         generator.character_overlay = None
         generator._generate_background_video = AsyncMock(return_value="background.mp4")
-        generator._generate_image_imagen = AsyncMock(return_value="image.png")
+        generator._generate_image_gemini = AsyncMock(return_value="image.png")
         scene = SimpleNamespace(scene_number=1)
 
         self.assertEqual(asyncio.run(generator.generate_scene_clip(scene)), "background.mp4")
         generator.mode = "image"
         self.assertEqual(asyncio.run(generator.generate_scene_clip(scene)), "image.png")
         generator._generate_background_video.assert_awaited_once_with(scene)
-        generator._generate_image_imagen.assert_awaited_once_with(scene)
+        generator._generate_image_gemini.assert_awaited_once_with(scene)
 
     def test_sequential_generation_waits_only_between_scenes(self):
         generator = object.__new__(VideoGenerator)
+        generator.mode = "image"
         generator.generate_scene_clip = AsyncMock(side_effect=["scene_1.png", "scene_2.png"])
         script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=i) for i in (1, 2)])
 

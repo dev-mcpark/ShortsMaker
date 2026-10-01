@@ -10,6 +10,7 @@ from google.genai import types
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
+from shorts_maker.services.visual_cost import scene_mode
 
 
 class VideoGenerator:
@@ -23,7 +24,7 @@ class VideoGenerator:
         VideoGenerator 초기화
 
         Args:
-            mode: 'image' (Imagen) 또는 'video' (Veo)
+            mode: 'image', 'video' 또는 'hybrid'
             max_concurrent: 병렬 처리 시 최대 동시 요청 수 (기본값: 3)
             character_overlay_config: 캐릭터 오버레이 설정 (None이면 기본값 사용)
         """
@@ -32,6 +33,7 @@ class VideoGenerator:
         self.max_concurrent = max_concurrent
         self.project_id = settings.gcp_project_id
         self.location = settings.gcp_location
+        self.image_client = None
 
         # 캐릭터 오버레이 설정
         self.character_overlay_config = character_overlay_config or CharacterOverlayConfig()
@@ -71,15 +73,20 @@ class VideoGenerator:
             return await self._generate_clips_parallel(script)
         return await self._generate_clips_sequential(script)
 
-    async def generate_scene_clip(self, scene) -> str:
+    async def generate_scene_clip(self, scene, mode_override: Optional[str] = None) -> str:
         """현재 생성 모드에 맞는 단일 씬 클립을 만듭니다."""
-        if self.mode == "video":
-            path = await self._generate_background_video(scene)
+        mode = mode_override or self.mode
+        if mode == "video":
+            path = (await self._generate_background_video(
+                scene, settings.hybrid_veo_duration_seconds,
+            ) if self.mode == "hybrid" else await self._generate_background_video(scene))
             if self.character_overlay:
                 return await self._composite_character_on_video(path, scene)
             return path
+        if mode != "image":
+            raise ValueError(f"지원하지 않는 생성 모드: {mode}")
 
-        path = await self._generate_image_imagen(scene)
+        path = await self._generate_image_gemini(scene)
         if self.character_overlay:
             return await asyncio.to_thread(
                 self.character_overlay.composite_on_image,
@@ -93,7 +100,9 @@ class VideoGenerator:
         """순차적 클립 생성."""
         clips_paths = []
         for index, scene in enumerate(script.scenes):
-            path = await self.generate_scene_clip(scene)
+            path = await self.generate_scene_clip(
+                scene, mode_override=scene_mode(self.mode, scene, index),
+            ) if self.mode == "hybrid" else await self.generate_scene_clip(scene)
             clips_paths.append(path)
             if index < len(script.scenes) - 1:
                 await asyncio.sleep(settings.scene_buffer_seconds)
@@ -128,7 +137,7 @@ class VideoGenerator:
 
     # ── Current Pipeline: Background Video + Character Composite ─────────
 
-    async def _generate_background_video(self, scene) -> str:
+    async def _generate_background_video(self, scene, duration_seconds: Optional[int] = None) -> str:
         """Stage 1: 배경 영상만 생성 (캐릭터 없이)."""
         output_path = str(settings.temp_dir / f"bg_scene_{scene.scene_number}_{uuid.uuid4().hex}.mp4")
 
@@ -144,7 +153,7 @@ class VideoGenerator:
         try:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
-                None, self._run_veo_background_only, model_id, scene, output_path
+                None, self._run_veo_background_only, model_id, scene, output_path, duration_seconds
             )
             if os.path.exists(output_path):
                 self.logger.info(f"    ✅ Background video generated: {output_path}")
@@ -188,6 +197,7 @@ class VideoGenerator:
         output_path: str,
         fallback_prompt: str,
         max_attempts: int = 4,
+        duration_seconds: Optional[int] = None,
     ) -> None:
         """Veo API 호출을 재시도 로직과 함께 실행.
 
@@ -203,7 +213,12 @@ class VideoGenerator:
                 operation = self.client.models.generate_videos(
                     model=model_id,
                     prompt=current_prompt,
-                    config={"aspect_ratio": "9:16"},
+                    config={
+                        "aspect_ratio": "9:16",
+                        "duration_seconds": duration_seconds or settings.veo_duration_seconds,
+                        "resolution": "720p",
+                        "generate_audio": False,
+                    },
                 )
 
                 for _ in range(90):  # 최대 15분 대기
@@ -229,23 +244,25 @@ class VideoGenerator:
             except Exception as e:
                 err_str = str(e).lower()
 
-                if ("internal error" in err_str or "500" in err_str or "try again later" in err_str) and attempt < max_attempts - 1:
+                if any(term in err_str for term in (
+                    "internal error", "500", "502", "503", "504", "429",
+                    "resource exhausted", "try again later",
+                )) and attempt < max_attempts - 1:
                     self.logger.warning("    ⚠️ Server error, retrying in 30s...")
                     time.sleep(30)
                     continue
 
-                if "violate" in err_str or "code': 3" in err_str:
+                if ("violate" in err_str or "code': 3" in err_str) and current_prompt != fallback_prompt and attempt < max_attempts - 1:
                     self.logger.warning("    ⚠️ Safety violation, simplifying prompt...")
-                    if attempt < max_attempts - 1:
-                        current_prompt = fallback_prompt
-                        continue
+                    current_prompt = fallback_prompt
+                    continue
 
                 self.logger.error(f"    ❌ Error: {e}")
-                if attempt == max_attempts - 1:
-                    raise
-                time.sleep(10)
+                raise
 
-    def _run_veo_background_only(self, model_id: str, scene, output_path: str) -> None:
+    def _run_veo_background_only(
+        self, model_id: str, scene, output_path: str, duration_seconds: Optional[int] = None,
+    ) -> None:
         """Veo로 배경 영상만 생성 (캐릭터 언급 없음)."""
         self.logger.info(
             f"--> Generating background-only video for Scene {scene.scene_number}"
@@ -268,45 +285,51 @@ class VideoGenerator:
             f"Beautiful atmospheric scene, professional quality, no people."
         )
 
-        self._retry_veo_call(model_id, initial_prompt, output_path, fallback_prompt)
+        self._retry_veo_call(
+            model_id, initial_prompt, output_path, fallback_prompt,
+            duration_seconds=duration_seconds,
+        )
 
-    # ── Imagen Helper ─────────────────────────────────────────────────────
+    # ── Image Helper ──────────────────────────────────────────────────────
 
-    async def _generate_image_imagen(self, scene) -> str:
-        """Imagen으로 씬 이미지를 생성합니다."""
+    async def _generate_image_gemini(self, scene) -> str:
+        """Generate a vertical still with the supported Gemini image model."""
         output_path = str(settings.temp_dir / f"scene_{scene.scene_number}_{uuid.uuid4().hex}.png")
 
-        if not self.client:
-            raise RuntimeError("GenAI client is unavailable")
-
-        self.logger.info(f"🎨 Requesting Imagen for scene {scene.scene_number}...")
+        self.logger.info(f"🎨 Requesting Gemini image for scene {scene.scene_number}...")
         try:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None,
-                self._run_imagen_generation,
-                settings.imagen_model_id,
+                self._run_image_generation,
+                settings.image_model_id,
                 scene,
                 output_path,
             )
             if not os.path.isfile(output_path):
-                raise RuntimeError("Imagen returned no image file")
+                raise RuntimeError("Gemini returned no image file")
             return output_path
         except Exception as e:
-            self.logger.error(f"❌ Imagen Generation Error: {e}")
+            self.logger.error(f"❌ Gemini Image Generation Error: {e}")
             raise
 
-    def _run_imagen_generation(self, model_id: str, scene, output_path: str) -> None:
-        response = self.client.models.generate_images(
+    def _run_image_generation(self, model_id: str, scene, output_path: str) -> None:
+        if self.image_client is None:
+            self.image_client = genai.Client(
+                vertexai=True, project=self.project_id, location="global",
+            )
+        response = self.image_client.models.generate_content(
             model=model_id,
-            prompt=scene.visual_description,
-            config=types.GenerateImagesConfig(
-                number_of_images=1,
-                aspect_ratio="9:16",
-                safety_filter_level="block_some",
+            contents=scene.visual_description,
+            config=types.GenerateContentConfig(
+                response_modalities=["TEXT", "IMAGE"],
+                image_config=types.ImageConfig(aspect_ratio="9:16", image_size="1K"),
             ),
         )
-        if response and response.generated_images:
-            response.generated_images[0].image.save(output_path)
-        else:
-            raise Exception("No image returned")
+        for candidate in response.candidates or []:
+            for part in (candidate.content.parts or []) if candidate.content else []:
+                image = part.as_image()
+                if image:
+                    image.save(output_path)
+                    return
+        raise RuntimeError("No image returned")

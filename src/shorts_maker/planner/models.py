@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from pydantic import BaseModel, Field, model_validator
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 
 
 @dataclass
@@ -30,6 +30,7 @@ class VideoScene(BaseModel):
     motion_instruction: str = ""  # Optional: Veo 모드에서만 사용 (image 모드에서는 빈 문자열)
     script_text: str
     duration_seconds: float = Field(default=5.0, gt=0)
+    visual_mode: Optional[Literal["image", "video"]] = None  # hybrid 모드에서만 적용
 
 
 class ShortsScript(BaseModel):
@@ -41,7 +42,7 @@ class ShortsScript(BaseModel):
     style: str
     source_name: str
     source_url: str
-    generation_mode: str  # 'image' or 'video'
+    generation_mode: str  # 'image', 'video' or 'hybrid'
     scenes: List[VideoScene] = Field(min_length=1)
 
     @model_validator(mode="after")

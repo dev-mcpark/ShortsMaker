@@ -141,6 +141,10 @@ def render_scheduling_tab(state: 'AppState') -> None:
                         with ui.column().classes('gap-1'):
                             ui.label('Mode').classes('text-xs text-gray-500')
                             with ui.button_group().props('rounded'):
+                                mode_hybrid_btn = ui.button(
+                                    'HYBRID',
+                                    on_click=lambda: mode_select.set_value('hybrid')
+                                ).props('color=purple size=sm')
                                 mode_img_btn = ui.button(
                                     'IMAGE',
                                     on_click=lambda: mode_select.set_value('image')
@@ -148,16 +152,17 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                 mode_vid_btn = ui.button(
                                     'VIDEO',
                                     on_click=lambda: mode_select.set_value('video')
-                                ).props('color=purple size=sm')
-                            mode_select = ui.radio(['image', 'video'], value='video').classes('hidden')
+                                ).props('outline color=purple size=sm')
+                            mode_select = ui.radio(['hybrid', 'image', 'video'], value='hybrid').classes('hidden')
 
                             def update_mode_btns():
-                                if mode_select.value == 'video':
-                                    mode_vid_btn.props(remove='outline', add='')
-                                    mode_img_btn.props(remove='', add='outline')
-                                else:
-                                    mode_img_btn.props(remove='outline', add='')
-                                    mode_vid_btn.props(remove='', add='outline')
+                                for value, button in (
+                                    ('hybrid', mode_hybrid_btn),
+                                    ('image', mode_img_btn),
+                                    ('video', mode_vid_btn),
+                                ):
+                                    button.props(remove='outline' if mode_select.value == value else '',
+                                                 add='' if mode_select.value == value else 'outline')
                             mode_select.on_value_change(lambda: update_mode_btns())
 
                         with ui.column().classes('gap-1'):
@@ -245,7 +250,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 ui.label(schedule['name']).classes('font-bold text-white text-lg')
 
                                                 mode = schedule.get('mode', 'image')
-                                                mode_color = 'bg-purple-600' if mode == 'video' else 'bg-blue-600'
+                                                mode_color = 'bg-purple-600' if mode == 'video' else 'bg-teal-600' if mode == 'hybrid' else 'bg-blue-600'
                                                 ui.badge(mode.upper()).classes(f'{mode_color} text-white text-xs px-2')
 
                                                 if schedule.get('auto_upload'):

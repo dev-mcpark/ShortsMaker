@@ -129,7 +129,7 @@ class ScheduleManager:
         topic: Optional[str] = None,
         direct_url: Optional[str] = None,
         auto_upload: bool = False,
-        mode: str = "image",
+        mode: str = "hybrid",
         enabled: bool = True
     ) -> Dict[str, Any]:
         """
@@ -142,7 +142,7 @@ class ScheduleManager:
             topic: RSS 검색 토픽 (선택)
             direct_url: 직접 URL (선택)
             auto_upload: YouTube 자동 업로드 여부
-            mode: 생성 모드 ('image' 또는 'video')
+            mode: 생성 모드 ('hybrid', 'image' 또는 'video')
             enabled: 활성화 여부
 
         Returns:
@@ -217,7 +217,7 @@ class ScheduleManager:
         days = {'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'}
         if frequency != 'Daily' and frequency not in {f'Weekly ({day})' for day in days}:
             raise ValueError("지원하지 않는 반복 주기입니다.")
-        if mode not in {'image', 'video'}:
+        if mode not in {'hybrid', 'image', 'video'}:
             raise ValueError("지원하지 않는 생성 모드입니다.")
 
     def delete_schedule(self, schedule_id: str) -> bool:

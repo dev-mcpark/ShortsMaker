@@ -282,7 +282,7 @@ def render_generation_tab(state: 'AppState') -> None:
                         with ui.column().classes('items-center gap-3 z-10 p-6 text-center') as placeholder_content:
                             ui.icon('smart_display', size='lg').classes('text-violet-500/70')
                             ui.label('Shorts Preview Area').classes('text-sm font-bold text-slate-300')
-                            ui.label('우측 패널에서 Veo 3.1 / Imagen 3 설정을 조정한 뒤, 상단의 생성을 구동하면 여기에 프리뷰가 재생됩니다.').classes('text-xs text-slate-500 max-w-md leading-relaxed')
+                            ui.label('우측 패널에서 하이브리드, Gemini 이미지, Veo 영상 모드를 고른 뒤 생성하면 여기에 프리뷰가 재생됩니다.').classes('text-xs text-slate-500 max-w-md leading-relaxed')
 
                             # 만약 API 요금 절감을 원할 시 수동 모드로 돌릴 것을 추천하는 뱃지
                             with ui.row().classes('items-center gap-1.5 mt-2 bg-violet-950/30 rounded-lg border border-violet-500/20 px-3 py-1.5'):
@@ -418,7 +418,11 @@ def render_generation_tab(state: 'AppState') -> None:
                     state.final_video_path = result.video_path
                     state.generated_clips = result.clips
                     update_progress_ui('complete', 100)
-                    safe_notify("🎉 영상 편집 및 프로덕션 완료!", type='positive')
+                    safe_notify(
+                        f"영상 제작 완료 · 예상 비주얼 API 비용 ${result.estimated_visual_cost_usd:.3f} "
+                        f"· 재사용·수동 {result.reused_scenes}장면",
+                        type='positive',
+                    )
 
                     if video_player and state.final_video_path:
                         try:

@@ -61,6 +61,7 @@ class ProductionGateTests(unittest.TestCase):
             retry = ProductionService()
             retry._editor = fake_editor(output)
             retry._generator = SimpleNamespace(generate_scene_clip=AsyncMock(return_value=str(source2)))
+            script.scenes[0].script_text = "Narration revised without changing the visual"
             result = asyncio.run(retry.produce_video(script))
 
             self.assertTrue(result.success)
@@ -73,9 +74,40 @@ class ProductionGateTests(unittest.TestCase):
     def test_corrupt_cached_scene_is_regenerated(self):
         with tempfile.TemporaryDirectory() as directory:
             cache = Path(directory)
-            cached = cache / "scene_01.png"
+            cached = cache / "clip.png"
             cached.write_bytes(b"corrupt")
-            self.assertIsNone(ProductionService._cached_clip(cache, 1, "image"))
+            self.assertIsNone(ProductionService._cached_clip(cache, "image"))
+
+    def test_estimated_cost_cap_blocks_paid_calls_and_tts(self):
+        service = ProductionService(mode="hybrid")
+        service._editor = fake_editor("unused.mp4")
+        service._generator = SimpleNamespace(generate_scene_clip=AsyncMock())
+        with patch.object(settings, "max_visual_cost_usd", 0.10):
+            result = asyncio.run(service.produce_video(sample_script()))
+        self.assertFalse(result.success)
+        self.assertIn("예상 비주얼 비용", result.error)
+        service._editor.prepare_narration.assert_not_awaited()
+        service._generator.generate_scene_clip.assert_not_awaited()
+
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    @patch("shorts_maker.services.production_service.asyncio.sleep", new_callable=AsyncMock)
+    def test_hybrid_generates_video_hook_and_image_remainder(self, _sleep, _check):
+        with tempfile.TemporaryDirectory() as directory, patch.object(settings, "clips_dir", Path(directory)):
+            output = Path(directory) / "output.mp4"
+            output.touch()
+            script = sample_script()
+            service = ProductionService(mode="hybrid")
+            service._editor = fake_editor(output)
+            service._generator = SimpleNamespace(generate_scene_clip=AsyncMock(
+                side_effect=[str(output), str(output)],
+            ))
+            with patch.object(ProductionService, "_save_clip", side_effect=lambda _dir, _mode, path: path):
+                result = asyncio.run(service.produce_video(script))
+            self.assertTrue(result.success)
+            self.assertEqual(result.generated_scenes, 2)
+            self.assertAlmostEqual(result.estimated_visual_cost_usd, 0.514)
+            calls = service._generator.generate_scene_clip.await_args_list
+            self.assertEqual([call.kwargs["mode_override"] for call in calls], ["video", "image"])
 
     @patch("shorts_maker.services.production_service.check_video_quality")
     @patch("shorts_maker.services.production_service.asyncio.sleep", new_callable=AsyncMock)

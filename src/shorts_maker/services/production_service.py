@@ -26,6 +26,7 @@ from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
 from shorts_maker.utils.config import settings
 from shorts_maker.editor.quality_check import check_video_quality
+from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
 
 
 class ProductionPhase(Enum):
@@ -103,6 +104,9 @@ class ProductionResult:
     clips: List[str] = field(default_factory=list)
     script: Optional[ShortsScript] = None
     ready_for_upload: bool = False
+    estimated_visual_cost_usd: float = 0.0
+    generated_scenes: int = 0
+    reused_scenes: int = 0
 
 
 class ProductionService:
@@ -121,6 +125,12 @@ class ProductionService:
             "editing_per_scene": 20,
             "uploading": 60
         },
+        "hybrid": {
+            "planning": 30,
+            "generating_per_scene": 35,
+            "editing_per_scene": 20,
+            "uploading": 60,
+        },
         "video": {
             "planning": 30,
             "generating_per_scene": 120,  # Veo는 훨씬 오래 걸림
@@ -136,7 +146,7 @@ class ProductionService:
         ProductionService 초기화
 
         Args:
-            mode: 'image' (Imagen) 또는 'video' (Veo)
+            mode: 'hybrid', 'image' 또는 'video'
             parallel_clips: True면 이미지 모드에서 병렬 처리
             character_overlay_config: 캐릭터 오버레이 설정 (None이면 기본값 사용)
         """
@@ -283,7 +293,7 @@ class ProductionService:
         self._update_progress(ProductionPhase.FAILED, 0, f"오류: {error}")
         return ProductionResult(success=False, video_path=video_path, clips=clips or [], error=error)
 
-    def _scene_cache_dir(self, script: ShortsScript) -> Path:
+    def _scene_cache_dir(self, scene, mode: str) -> Path:
         overlay = (self.character_overlay_config or CharacterOverlayConfig()).to_dict()
         for key in ("character_image", "character_video"):
             path = overlay.get(key)
@@ -291,18 +301,22 @@ class ProductionService:
                 stat = Path(path).stat()
                 overlay[f"{key}_version"] = (stat.st_size, stat.st_mtime_ns)
         identity = json.dumps({
-            "script": script.model_dump(mode="json"),
-            "mode": self.mode,
-            "model": settings.veo_model_id if self.mode == "video" else settings.imagen_model_id,
+            "visual_description": scene.visual_description,
+            "motion_instruction": scene.motion_instruction if mode == "video" else None,
+            "mode": mode,
+            "model": settings.veo_model_id if mode == "video" else settings.image_model_id,
+            "format": "720p-silent" if mode == "video" else "1K-vertical",
+            "duration": (settings.hybrid_veo_duration_seconds if self.mode == "hybrid"
+                         else settings.veo_duration_seconds) if mode == "video" else None,
             "overlay": overlay,
         }, sort_keys=True, ensure_ascii=False)
         digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
-        return settings.clips_dir / f"auto_{digest}"
+        return settings.clips_dir / "scenes" / digest
 
     @staticmethod
-    def _cached_clip(directory: Path, scene_number: int, mode: str) -> Optional[str]:
+    def _cached_clip(directory: Path, mode: str) -> Optional[str]:
         suffix = ".mp4" if mode == "video" else ".png"
-        path = directory / f"scene_{scene_number:02d}{suffix}"
+        path = directory / f"clip{suffix}"
         return str(path) if ProductionService._valid_clip(path, mode) else None
 
     @staticmethod
@@ -320,15 +334,15 @@ class ProductionService:
             return False
 
     @staticmethod
-    def _save_clip(directory: Path, scene_number: int, mode: str, source: str) -> str:
+    def _save_clip(directory: Path, mode: str, source: str) -> str:
         suffix = ".mp4" if mode == "video" else ".png"
-        destination = directory / f"scene_{scene_number:02d}{suffix}"
+        destination = directory / f"clip{suffix}"
         directory.mkdir(parents=True, exist_ok=True)
         temporary = directory / f".{destination.stem}.{uuid.uuid4().hex}{suffix}"
         try:
             shutil.copyfile(source, temporary)
             if not ProductionService._valid_clip(temporary, mode):
-                raise ValueError(f"씬 {scene_number} 결과 파일을 읽을 수 없습니다.")
+                raise ValueError("생성 결과 파일을 읽을 수 없습니다.")
             os.replace(temporary, destination)
         finally:
             temporary.unlink(missing_ok=True)
@@ -453,21 +467,51 @@ class ProductionService:
         clips = []
         editor = None
         audio_paths = None
+        estimated_cost = 0.0
+        generated_scenes = 0
+        reused_scenes = 0
 
         try:
             # Phase 1: Visual Generation
             self._start_phase(ProductionPhase.GENERATING, num_scenes)
             self._init_scene_progresses(num_scenes)
 
-            if manual_clip_paths is not None:
-                for scene in script.scenes:
-                    path = manual_clip_paths.get(scene.scene_number)
-                    if not path or not os.path.isfile(path):
-                        return self._failed_result(
-                            f"씬 {scene.scene_number}의 클립 파일이 없거나 접근할 수 없습니다.", clips,
-                        )
+            if manual_clip_paths is not None and not manual_clip_paths:
+                return self._failed_result("씬 1의 클립 파일이 없습니다.", clips)
+            manual_paths = manual_clip_paths or {}
+            for scene_number, path in manual_paths.items():
+                if not path or not os.path.isfile(path):
+                    return self._failed_result(
+                        f"씬 {scene_number}의 클립 파일이 없거나 접근할 수 없습니다.", clips,
+                    )
             if self.is_cancelled():
                 return self._failed_result("사용자에 의해 취소됨", clips)
+
+            # Estimate only new API requests; manual clips and valid cache entries cost nothing.
+            visual_modes = [scene_mode(self.mode, scene, i) for i, scene in enumerate(script.scenes)]
+            cache_dirs = [
+                self._scene_cache_dir(scene, mode) if isinstance(script, ShortsScript) else None
+                for scene, mode in zip(script.scenes, visual_modes)
+            ]
+            cached_paths = []
+            for scene, mode, directory in zip(script.scenes, visual_modes, cache_dirs):
+                cached = (
+                    await asyncio.to_thread(self._cached_clip, directory, mode)
+                    if directory and scene.scene_number not in manual_paths else None
+                )
+                cached_paths.append(cached)
+                if scene.scene_number not in manual_paths and not cached:
+                    model = settings.veo_model_id if mode == "video" else settings.image_model_id
+                    duration = (settings.hybrid_veo_duration_seconds if self.mode == "hybrid"
+                                else settings.veo_duration_seconds)
+                    estimated_cost += estimated_scene_cost(mode, model, duration)
+            if estimated_cost > settings.max_visual_cost_usd:
+                return self._failed_result(
+                    f"예상 비주얼 비용 ${estimated_cost:.3f}가 설정 상한 "
+                    f"${settings.max_visual_cost_usd:.2f}를 초과합니다. "
+                    "이미지 모드 또는 MAX_VISUAL_COST_USD 설정을 확인하세요.", clips,
+                )
+            self.logger.info(f"Visual API estimate: ${estimated_cost:.3f} (cap ${settings.max_visual_cost_usd:.2f})")
             if isinstance(script, ShortsScript):
                 self._update_progress(ProductionPhase.GENERATING, 0, "내레이션 길이 확인 중...")
                 editor = self._get_editor()
@@ -475,79 +519,67 @@ class ProductionService:
                 if self.is_cancelled():
                     return self._failed_result("사용자에 의해 취소됨", clips)
 
-            if manual_clip_paths is not None:
-                # ── 수동 모드: VEO API 호출 없이 업로드된 파일 사용 ──
+            self._update_progress(ProductionPhase.GENERATING, 0,
+                                   f"비주얼 준비 시작 (예상 API 비용 ${estimated_cost:.3f})")
+
+            async def generate_one(index, scene):
+                if self.is_cancelled():
+                    raise RuntimeError("사용자에 의해 취소됨")
+                self._update_scene_progress(index, "processing")
+                cached = cached_paths[index]
+                manual = manual_paths.get(scene.scene_number)
                 self._update_progress(
-                    ProductionPhase.GENERATING, 0,
-                    f"수동 클립 로드 중 (0/{num_scenes})"
+                    ProductionPhase.GENERATING,
+                    self._progress.completed_scenes / num_scenes * 100,
+                    f"씬 {index + 1}/{num_scenes} "
+                    f"{'수동 클립 사용' if manual else '저장된 결과 사용' if cached else '생성 중'}",
                 )
-                for i, scene in enumerate(script.scenes):
-                    self._update_scene_progress(i, "processing")
-                    clip_path = manual_clip_paths.get(scene.scene_number)
-                    clips.append(clip_path)
-                    self._update_scene_progress(i, "completed", thumbnail_path=clip_path)
-                    self._update_progress(
-                        ProductionPhase.GENERATING,
-                        (i + 1) / num_scenes * 100,
-                        f"씬 {i + 1}/{num_scenes} 클립 확인 완료"
-                    )
-
-            else:
-                # ── 자동 모드: VEO/Imagen API 호출 ──
-                generator = self._get_generator()
-                self._update_progress(ProductionPhase.GENERATING, 0,
-                                       f"비주얼 생성 시작 (0/{num_scenes})")
-
-                cache_dir = self._scene_cache_dir(script) if isinstance(script, ShortsScript) else None
-
-                async def generate_one(index, scene):
-                    if self.is_cancelled():
-                        raise RuntimeError("사용자에 의해 취소됨")
-                    self._update_scene_progress(index, "processing")
-                    cached = await asyncio.to_thread(
-                        self._cached_clip, cache_dir, scene.scene_number, self.mode,
-                    ) if cache_dir else None
-                    self._update_progress(
-                        ProductionPhase.GENERATING,
-                        self._progress.completed_scenes / num_scenes * 100,
-                        f"씬 {index + 1}/{num_scenes} {'저장된 결과 사용' if cached else '생성 중'}",
-                    )
-                    try:
-                        path = cached or await generator.generate_scene_clip(scene)
-                        if not cached and cache_dir:
+                try:
+                    if manual or cached:
+                        path = manual or cached
+                    else:
+                        generator = self._get_generator()
+                        path = await generator.generate_scene_clip(
+                            scene, mode_override=visual_modes[index],
+                        ) if self.mode == "hybrid" else await generator.generate_scene_clip(scene)
+                        if cache_dirs[index]:
                             path = await asyncio.to_thread(
-                                self._save_clip, cache_dir, scene.scene_number, self.mode, path,
+                                self._save_clip, cache_dirs[index], visual_modes[index], path,
                             )
-                        self._update_scene_progress(index, "completed", thumbnail_path=path)
-                        return path, bool(cached)
-                    except Exception as scene_error:
-                        self._update_scene_progress(index, "failed", error=str(scene_error))
-                        raise
+                    self._update_scene_progress(index, "completed", thumbnail_path=path)
+                    return path, bool(manual or cached)
+                except Exception as scene_error:
+                    self._update_scene_progress(index, "failed", error=str(scene_error))
+                    raise
 
-                if self.parallel_clips and self.mode == "image":
-                    semaphore = asyncio.Semaphore(getattr(generator, "max_concurrent", 3))
+            if self.parallel_clips and self.mode == "image":
+                semaphore = asyncio.Semaphore(getattr(self._generator, "max_concurrent", 3))
 
-                    async def bounded(index, scene):
-                        async with semaphore:
-                            path, reused = await generate_one(index, scene)
-                            if not reused:
-                                await asyncio.sleep(2)
-                            return path
-
-                    results = await asyncio.gather(
-                        *(bounded(i, scene) for i, scene in enumerate(script.scenes)),
-                        return_exceptions=True,
-                    )
-                    clips = [path for path in results if isinstance(path, str)]
-                    errors = [error for error in results if isinstance(error, BaseException)]
-                    if errors:
-                        raise errors[0]
-                else:
-                    for i, scene in enumerate(script.scenes):
-                        path, reused = await generate_one(i, scene)
-                        clips.append(path)
-                        if i < num_scenes - 1 and not reused and not self.is_cancelled():
+                async def bounded(index, scene):
+                    async with semaphore:
+                        path, reused = await generate_one(index, scene)
+                        if not reused:
                             await asyncio.sleep(2)
+                        return path, reused
+
+                results = await asyncio.gather(
+                    *(bounded(i, scene) for i, scene in enumerate(script.scenes)),
+                    return_exceptions=True,
+                )
+                clips = [result[0] for result in results if isinstance(result, tuple)]
+                errors = [error for error in results if isinstance(error, BaseException)]
+                if errors:
+                    raise errors[0]
+                generated_scenes = sum(not result[1] for result in results)
+                reused_scenes = num_scenes - generated_scenes
+            else:
+                for i, scene in enumerate(script.scenes):
+                    path, reused = await generate_one(i, scene)
+                    clips.append(path)
+                    generated_scenes += not reused
+                    reused_scenes += reused
+                    if i < num_scenes - 1 and not reused and not self.is_cancelled():
+                        await asyncio.sleep(2)
 
             if len(clips) != num_scenes or not clips:
                 return self._failed_result("씬 수와 클립 수가 일치하지 않습니다.", clips)
@@ -598,6 +630,9 @@ class ProductionService:
                 video_path=video_path,
                 clips=clips,
                 ready_for_upload=True,
+                estimated_visual_cost_usd=round(estimated_cost, 4),
+                generated_scenes=generated_scenes,
+                reused_scenes=reused_scenes,
             )
 
         except Exception as e:

@@ -103,7 +103,10 @@ def render_main_page() -> None:
                         if result.clips:
                             state.generated_clips = result.clips
                         if result.success:
-                            ui.notify('제작 완료', type='positive')
+                            ui.notify(
+                                f'제작 완료 · 예상 비주얼 API 비용 ${result.estimated_visual_cost_usd:.3f}',
+                                type='positive',
+                            )
                         else:
                             ui.notify(f'제작 실패: {result.error}', type='negative')
                     except Exception as e:
@@ -161,10 +164,14 @@ def render_main_page() -> None:
             with ui.element('div').classes(CONFIG_PANEL_RIGHT):
                 ui.label('Model Settings').classes('text-xs font-bold text-slate-400 uppercase tracking-widest mb-4')
 
-                # Generation Mode (Video vs Image)
+                # Generation Mode
                 ui.label('MODEL TYPE').classes('text-[10px] text-slate-500 font-semibold mb-1')
                 mode_select = ui.select(
-                    options={'video': 'Google Veo 3.1 (Video)', 'image': 'Google Imagen 3 (Image)'},
+                    options={
+                        'hybrid': 'Hybrid · Veo hook + Gemini images',
+                        'image': 'Gemini images',
+                        'video': 'Google Veo 3.1 videos',
+                    },
                     value=state.mode
                 ).props('outlined dense dark').classes('w-full mb-4')
 

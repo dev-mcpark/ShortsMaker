@@ -9,7 +9,7 @@ config/
 ├── .env.example          # 환경변수 템플릿 (이 파일을 복사하여 사용)
 ├── .env                  # 실제 환경변수 (Git 제외)
 ├── credentials/          # 인증 파일 폴더
-│   ├── service_account.json   # GCP 서비스 계정 (Veo/Imagen용)
+│   ├── service_account.json   # GCP 서비스 계정 (Veo/Gemini용)
 │   ├── client_secrets.json    # YouTube OAuth (선택)
 │   └── token.json             # YouTube 토큰 (자동 생성)
 └── README.md             # 이 파일
@@ -53,7 +53,7 @@ OPENAI_API_KEY="sk-proj-xxxxxxxxxxxxxxxx"
 
 ## 2. Google Cloud Platform (필수)
 
-**용도:** Veo (AI 영상 생성), Imagen (AI 이미지 생성)
+**용도:** Veo (AI 영상 생성), Gemini (AI 이미지 생성)
 
 ### 2-1. GCP 프로젝트 생성
 
@@ -87,8 +87,9 @@ mv ~/Downloads/my-project-xxxxx.json config/credentials/service_account.json
 ```
 
 ### 예상 비용
-- Veo: 영상 1개당 약 $0.05~0.15
-- Imagen: 이미지 1개당 약 $0.01~0.02
+- Veo 3.1 Fast (720p, 무음): 생성 영상 1초당 약 $0.08
+- Gemini 3.1 Flash Lite Image (1K): 계획용 보수 추정 이미지 1장당 $0.034
+- 현재 가격과 사용 가능 지역은 [Vertex AI 가격표](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing)를 확인하세요.
 
 ---
 

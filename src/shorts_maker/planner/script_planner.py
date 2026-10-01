@@ -45,7 +45,7 @@ class ScriptPlanner:
         self.history_file = str(settings.topic_history_file)
         self.url_history_file = str(settings.url_history_file)
         self.script_output_dir = str(settings.scripts_dir)
-        self.generation_mode = generation_mode # 'image' or 'video'
+        self.generation_mode = generation_mode # 'image', 'video' or 'hybrid'
 
         # Expanded Moods for diverse storytelling
         self.allowed_moods = [
@@ -283,7 +283,7 @@ class ScriptPlanner:
         """
         try:
             response = await self.client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"}
             )
@@ -669,6 +669,13 @@ class ScriptPlanner:
 
             **IMPORTANT:** Motion should be SUBTLE and CINEMATIC, not chaotic. The presenter in the corner has separate minimal motion.
             """
+        elif self.generation_mode == "hybrid":
+            visual_instruction = """
+            **Visuals (HYBRID MODE):**
+            - Scene 1 is the moving hook: set visual_mode to "video". Describe a specific 9:16 background scene and subtle camera motion in motion_instruction.
+            - All later scenes are still images: set visual_mode to "image". Describe concrete objects, composition and lighting; avoid motion language and text inside the image.
+            - Spend video generation only where movement makes the opening clearer or more compelling.
+            """
         else: # image mode
             visual_instruction = """
             **Visuals (IMAGE MODE):**
@@ -730,6 +737,7 @@ class ScriptPlanner:
             "scenes": [
                 {{
                     "scene_number": 1,
+                    "visual_mode": "{'video' if self.generation_mode in ('video', 'hybrid') else 'image'}",
                     "visual_description": "Smooth tracking shot moving through a massive server room with towering racks of blinking equipment extending into the distance. Cool blue LED lights pulse rhythmically across thousands of machines. Transparent holographic displays float showing data streams. Cooling mist rises from floor vents creating atmospheric depth and volumetric lighting effects. Cyberpunk aesthetic with cyan and magenta accent lighting. Professional broadcast quality, 4k resolution, cinematic color grading.",
                     "motion_instruction": "Camera slowly pushes forward through the server corridor. LED lights flicker and pulse. Holographic displays animate with flowing data. Mist swirls gently around the equipment.",
                     "script_text": "요즘 AI 데이터센터가 엄청난 전기를 소비하고 있다는 사실, 알고 계셨나요?",
@@ -737,7 +745,8 @@ class ScriptPlanner:
                 }},
                 {{
                     "scene_number": 2,
-                    "visual_description": "Aerial drone shot descending over a vast solar panel farm stretching to the horizon under golden hour sunlight. Thousands of panels glisten with reflections creating a sea of geometric patterns. Gentle wind causes subtle ripples across the installation. Distant mountains frame the background. Warm amber and orange tones dominate the color palette. Professional broadcast quality, 4k resolution, cinematic color grading.",
+                    "visual_mode": "{'video' if self.generation_mode == 'video' else 'image'}",
+                    "visual_description": "A vast solar panel farm stretching to the horizon under golden hour sunlight. Thousands of panels glisten with reflections creating a sea of geometric patterns. Distant mountains frame the background. Warm amber and orange tones dominate the color palette. Professional broadcast quality, photorealistic detail.",
                     "motion_instruction": "Drone descends smoothly revealing the scale of the solar farm. Panels subtly shift tracking the sun. Camera rotates slightly showing the mountain backdrop.",
                     "script_text": "하지만 동시에 재생에너지 투자도 역대 최고치를 기록했습니다.",
                     "duration_seconds": 6.0

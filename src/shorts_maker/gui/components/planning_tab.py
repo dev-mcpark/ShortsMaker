@@ -58,8 +58,9 @@ def render_planning_tab(state: 'AppState') -> None:
                         ui.label(script.title).classes('text-lg font-bold text-white leading-tight')
                         ui.label(script.description).classes('text-xs text-slate-400 leading-relaxed mt-1')
 
-                    mode_color = 'bg-violet-600' if getattr(script, 'generation_mode', 'image') == 'video' else 'bg-blue-600'
-                    mode_text = 'VIDEO (VEO)' if getattr(script, 'generation_mode', 'image') == 'video' else 'IMAGE (IMAGEN)'
+                    mode = getattr(script, 'generation_mode', 'image')
+                    mode_color = 'bg-violet-600' if mode == 'video' else 'bg-teal-600' if mode == 'hybrid' else 'bg-blue-600'
+                    mode_text = {'video': 'VIDEO (VEO)', 'hybrid': 'HYBRID', 'image': 'IMAGE (GEMINI)'}.get(mode, mode.upper())
                     ui.badge(mode_text).classes(f'{mode_color} text-white text-[10px] font-semibold px-3 py-0.5 rounded shrink-0')
 
                 ui.separator().classes('bg-slate-800/80 my-3')
