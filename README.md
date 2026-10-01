@@ -1,5 +1,7 @@
 # ShortsMaker 🎬
 
+Development map and agent handoff: [docs/README.md](docs/README.md), [docs/STATUS.md](docs/STATUS.md), and [docs/DECISIONS.md](docs/DECISIONS.md). Codex and Claude Code share [AGENTS.md](AGENTS.md) as the project instruction entry.
+
 AI-powered YouTube Shorts automation pipeline using **Google Veo 3.1** and **Gemini image generation**.
 ShortsMaker automatically researches, writes scripts, generates visuals, and uploads content to YouTube, allowing for a fully hands-off content creation experience.
 
@@ -7,7 +9,7 @@ ShortsMaker automatically researches, writes scripts, generates visuals, and upl
 
 ## ✨ Key Features
 
-- **Deep Content Research:** A 3-stage enrichment pipeline (Extraction, Analysis, Enrichment) that gathers deep context, expert quotes, and supplementary web data.
+- **Deep Content Research:** A 3-stage enrichment pipeline (Extraction, Analysis, Enrichment) gathers context and web leads. Script validation compares concrete claims with the selected primary source excerpt.
 - **Smart Storytelling:** Automatically structures scripts into high-retention formats (Hook -> Mystery -> Secret -> Impact).
 - **Flexible Visuals:** A short Veo opening followed by Gemini images by default; full-image and full-video modes remain available.
 - **Automated Composition:** Native integration with `moviepy` for seamless audio-visual merging, subtitling, and BGM.
@@ -39,6 +41,9 @@ separate server instances when different users need different credentials.
 An article enters topic history only after its script passes validation. Studio progress
 tracks completed editing work and finishes after an optional upload. Stop requests wait
 for the current external API call to return before the run is released.
+Planning rejects scripts without source text and asks the editorial validator to reject
+claims absent from the supplied excerpt. This is an LLM review, not independent fact
+verification; review published material against its source.
 
 Production estimates new visual API output cost before narration or media generation and
 stops if it exceeds `MAX_VISUAL_COST_USD`. This is a planning limit, not a provider billing

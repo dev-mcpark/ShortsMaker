@@ -16,6 +16,7 @@ from shorts_maker.generator.video_generator import VideoGenerator
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.content_enricher import ContentEnricher
 from shorts_maker.planner.models import ShortsScript, VideoScene
+from shorts_maker.planner.script_planner import ScriptPlanner
 from shorts_maker.planner.script_validator import ScriptValidator
 from shorts_maker.services.production_service import ProductionService
 from shorts_maker.utils.character_overlay import CharacterOverlay
@@ -256,6 +257,8 @@ class ReviewRegressions(unittest.TestCase):
         with self.assertRaises(ValueError):
             VideoScene(scene_number=1, visual_description="visual", script_text="words", duration_seconds=0)
         with self.assertRaises(ValueError):
+            VideoScene(scene_number=1, visual_description="  ", script_text="words")
+        with self.assertRaises(ValueError):
             ShortsScript(
                 title="title", description="desc", tags=[], mood="calm", style="news",
                 source_name="source", source_url="https://example.com", generation_mode="image",
@@ -280,6 +283,51 @@ class ReviewRegressions(unittest.TestCase):
         response.choices[0].message.content = '{"is_valid": true, "score": 90, "reason": "advertising_content"}'
         script.scenes[0].duration_seconds = 5
         self.assertFalse(asyncio.run(validator.validate_script(script)).is_valid)
+
+    def test_source_excerpt_reaches_validator_as_untrusted_data(self):
+        validator = object.__new__(ScriptValidator)
+        validator.logger = Mock()
+        completion = AsyncMock(return_value=SimpleNamespace(choices=[
+            SimpleNamespace(message=SimpleNamespace(content=(
+                '{"is_valid": true, "score": 90, "reason": "unsupported_claim", '
+                '"feedback": "30% increase is absent from source"}'
+            ))),
+        ]))
+        validator.client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=completion),
+        ))
+        script = ShortsScript(
+            title="30% increase", description="", tags=[], mood="calm", style="news",
+            source_name="source", source_url="https://example.com", generation_mode="image",
+            scenes=[VideoScene(scene_number=1, visual_description="factory", script_text="30% increase")],
+        )
+        result = asyncio.run(validator.validate_script(script, source_text="The factory expanded."))
+        self.assertFalse(result.is_valid)
+        self.assertEqual(result.reason, "unsupported_claim")
+        request = completion.await_args.kwargs["messages"]
+        self.assertIn("Source grounding", request[0]["content"])
+        self.assertIn("The factory expanded.", request[1]["content"])
+        self.assertIn("30% increase", request[1]["content"])
+
+    def test_planner_requires_source_before_approving_script(self):
+        script = ShortsScript(
+            title="Factory", description="", tags=[], mood="calm", style="news",
+            source_name="source", source_url="https://example.com", generation_mode="image",
+            scenes=[VideoScene(scene_number=1, visual_description="factory", script_text="The factory expanded")],
+        )
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.validator = SimpleNamespace(validate_script=AsyncMock(return_value=SimpleNamespace(is_valid=True)))
+        with tempfile.TemporaryDirectory() as directory:
+            planner.script_output_dir = directory
+            self.assertIsNone(asyncio.run(planner._validate_and_save(script, {"content": "  "})))
+            planner.validator.validate_script.assert_not_awaited()
+            self.assertIs(asyncio.run(planner._validate_and_save(
+                script, {"content": "The factory expanded."},
+            )), script)
+        planner.validator.validate_script.assert_awaited_once_with(
+            script, source_text="The factory expanded.",
+        )
 
     def test_subtitle_failure_is_not_silently_accepted(self):
         editor = object.__new__(VideoEditor)

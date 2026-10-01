@@ -1,7 +1,7 @@
 """Pydantic models for script planning"""
 
 from dataclasses import dataclass, field
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import List, Optional, Dict, Any, Literal
 
 
@@ -31,6 +31,13 @@ class VideoScene(BaseModel):
     script_text: str
     duration_seconds: float = Field(default=5.0, gt=0)
     visual_mode: Optional[Literal["image", "video"]] = None  # hybrid 모드에서만 적용
+
+    @field_validator("visual_description", "script_text")
+    @classmethod
+    def nonempty_content(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("씬 비주얼과 내레이션은 비어 있을 수 없습니다.")
+        return value.strip()
 
 
 class ShortsScript(BaseModel):

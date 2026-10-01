@@ -29,7 +29,10 @@ temp/
 logs/
 .idea/
 .claude/
-docs/
+docs/.DS_Store
+docs/.bkit-memory.json
+docs/.pdca-status.json
+docs/.pdca-snapshots/
 # Data & History (Private)
 rss_sources.json
 schedules.json

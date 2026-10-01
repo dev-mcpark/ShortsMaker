@@ -464,8 +464,11 @@ class ScriptPlanner:
 
     async def _validate_and_save(self, script: ShortsScript, selection: Dict) -> Optional[ShortsScript]:
         """Helper to validate script and save to disk if valid."""
-        # Validate
-        validation = await self.validator.validate_script(script)
+        source_text = (selection.get("content") or "").strip()
+        if not source_text:
+            self.logger.warning("Script rejected: no source material to verify claims against")
+            return None
+        validation = await self.validator.validate_script(script, source_text=source_text)
 
         # Simple Retry Loop for the SAME topic if validation fails (Optional optimization)
         # For now, if invalid, we return None to trigger topic switch in RSS mode.
@@ -543,7 +546,7 @@ class ScriptPlanner:
                 enhanced_context += "\n### SUPPLEMENTARY INFORMATION (FROM WEB SEARCH):\n"
                 for point in enriched_info:
                     enhanced_context += f"- {point}\n"
-                enhanced_context += "\n*Integrate these facts seamlessly into the script to improve depth.*\n"
+                enhanced_context += "\n*Use these snippets as leads only. Include factual claims only when the primary source article supports them.*\n"
         else:
             # Fallback: Phase 1 정보만 활용
             if item.get('quotes'):
