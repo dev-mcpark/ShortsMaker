@@ -15,7 +15,7 @@ NiceGUI / scheduler
   -> visual cost preflight -> narration duration check
   -> VideoGenerator: per-scene Veo or Gemini, with visual cache
   -> VideoEditor: narration, subtitles, music, render
-  -> rendered-file quality check -> optional YouTube upload
+  -> rendered-file quality check + local production sidecar -> optional YouTube upload
 ```
 
 The app is a Python modular monolith. `ProductionService` owns orchestration, progress, cancellation, scene routing, and upload readiness. External API and media details stay in their own modules. The scheduler invokes the same service without browser state.
@@ -36,6 +36,7 @@ The app is a Python modular monolith. `ProductionService` owns orchestration, pr
 
 - Settings load from `config/.env` or root `.env`; use `config/.env.example` as the template. Secrets are not tracked.
 - `outputs/`, `temp/`, `logs/`, and local histories are runtime data, not project docs.
+- `ProductionService` writes a neighboring `*.production.json` record for each new rendered MP4 when the output directory is writable; keep these local with the video.
 - `AppState` is in-memory browser-session state. API settings are process-wide.
 - External calls are OpenAI for planning/narration, Brave when configured for enrichment, Google for visuals, and YouTube for upload. Unit tests mock those calls.
 - The test suite uses `unittest`; a local `.venv` may exist. Run the command in `AGENTS.md` after changes.

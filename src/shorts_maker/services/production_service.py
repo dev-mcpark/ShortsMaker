@@ -10,6 +10,7 @@ import os
 import shutil
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Callable, Tuple
 from dataclasses import dataclass, field
@@ -107,6 +108,7 @@ class ProductionResult:
     estimated_visual_cost_usd: float = 0.0
     generated_scenes: int = 0
     reused_scenes: int = 0
+    report_path: Optional[str] = None
 
 
 class ProductionService:
@@ -347,6 +349,37 @@ class ProductionService:
         finally:
             temporary.unlink(missing_ok=True)
         return str(destination)
+
+    def _write_report(self, video_path: str, report: Dict[str, Any]) -> Optional[str]:
+        path = Path(video_path).with_suffix(".production.json")
+        temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            with temporary.open("w", encoding="utf-8") as file:
+                json.dump(report, file, ensure_ascii=False, indent=2)
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(temporary, path)
+            return str(path)
+        except (OSError, TypeError, ValueError) as error:
+            self.logger.warning(f"제작 기록 저장 실패: {error}")
+            return None
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _record_upload(self, video_path: str, video_id: str) -> Optional[str]:
+        path = Path(video_path).with_suffix(".production.json")
+        if not path.is_file():
+            return None
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(report, dict) or report.get("video_path") != video_path:
+                raise ValueError("영상 경로가 일치하지 않는 제작 기록")
+        except (OSError, ValueError, TypeError) as error:
+            self.logger.warning(f"제작 기록을 갱신할 수 없습니다: {error}")
+            return None
+        report["youtube_id"] = video_id
+        report["uploaded_at_utc"] = datetime.now(timezone.utc).isoformat()
+        return self._write_report(video_path, report)
 
     async def generate_script(
         self,
@@ -615,10 +648,52 @@ class ProductionService:
             if not video_path or not os.path.exists(video_path):
                 return self._failed_result("비디오 편집 실패", clips)
 
+            quality_error = None
             try:
                 await asyncio.to_thread(check_video_quality, video_path)
             except Exception as error:
-                return self._failed_result(f"영상 품질 검사 실패: {error}", clips, video_path)
+                quality_error = str(error)
+
+            script_key = hashlib.sha256(json.dumps({
+                "source_url": getattr(script, "source_url", None),
+                "title": getattr(script, "title", None),
+                "narration": [getattr(scene, "script_text", None) for scene in script.scenes],
+            }, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
+            report_path = await asyncio.to_thread(self._write_report, video_path, {
+                "schema_version": 1,
+                "completed_at_utc": datetime.now(timezone.utc).isoformat(),
+                "video_path": video_path,
+                "title": getattr(script, "title", None),
+                "source_url": getattr(script, "source_url", None),
+                "script_key": script_key,
+                "production_mode": self.mode,
+                "scenes": [
+                    {
+                        "number": scene.scene_number,
+                        "visual_mode": mode,
+                        "model_id": None if scene.scene_number in manual_paths else (
+                            settings.veo_model_id if mode == "video" else settings.image_model_id
+                        ),
+                        "source": "manual" if scene.scene_number in manual_paths else (
+                            "cache" if cached_paths[index] else "generated"
+                        ),
+                    }
+                    for index, (scene, mode) in enumerate(zip(script.scenes, visual_modes))
+                ],
+                "estimated_visual_output_cost_usd": round(estimated_cost, 4),
+                "generated_scenes": generated_scenes,
+                "reused_or_manual_scenes": reused_scenes,
+                "quality_passed": quality_error is None,
+                "quality_error": quality_error,
+                "youtube_id": None,
+            })
+            if quality_error:
+                result = self._failed_result(f"영상 품질 검사 실패: {quality_error}", clips, video_path)
+                result.report_path = report_path
+                result.estimated_visual_cost_usd = round(estimated_cost, 4)
+                result.generated_scenes = generated_scenes
+                result.reused_scenes = reused_scenes
+                return result
 
             self._update_progress(ProductionPhase.EDITING, 100, "✓ 편집 완료")
             if finish_phase:
@@ -633,6 +708,7 @@ class ProductionService:
                 estimated_visual_cost_usd=round(estimated_cost, 4),
                 generated_scenes=generated_scenes,
                 reused_scenes=reused_scenes,
+                report_path=report_path,
             )
 
         except Exception as e:
@@ -672,12 +748,14 @@ class ProductionService:
             video_id = await uploader.upload(video_path, metadata)
 
             if video_id:
+                report_path = await asyncio.to_thread(self._record_upload, video_path, video_id)
                 self._update_progress(ProductionPhase.COMPLETED, 100, f"업로드 완료: {video_id}")
                 return ProductionResult(
                     success=True,
                     video_path=video_path,
                     youtube_id=video_id,
                     ready_for_upload=True,
+                    report_path=report_path,
                 )
             else:
                 return self._failed_result("업로드 실패", video_path=video_path)

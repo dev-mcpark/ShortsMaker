@@ -1,6 +1,7 @@
 """Checks for resuming paid work and rejecting unfit output."""
 
 import asyncio
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -108,6 +109,13 @@ class ProductionGateTests(unittest.TestCase):
             self.assertAlmostEqual(result.estimated_visual_cost_usd, 0.514)
             calls = service._generator.generate_scene_clip.await_args_list
             self.assertEqual([call.kwargs["mode_override"] for call in calls], ["video", "image"])
+            report = json.loads(Path(result.report_path).read_text(encoding="utf-8"))
+            self.assertTrue(report["quality_passed"])
+            self.assertEqual(report["source_url"], script.source_url)
+            self.assertEqual(report["production_mode"], "hybrid")
+            self.assertEqual([scene["visual_mode"] for scene in report["scenes"]], ["video", "image"])
+            self.assertEqual([scene["source"] for scene in report["scenes"]], ["generated", "generated"])
+            self.assertAlmostEqual(report["estimated_visual_output_cost_usd"], 0.514)
 
     @patch("shorts_maker.services.production_service.check_video_quality")
     @patch("shorts_maker.services.production_service.asyncio.sleep", new_callable=AsyncMock)
@@ -167,6 +175,34 @@ class ProductionGateTests(unittest.TestCase):
             self.assertFalse(result.success)
             self.assertFalse(result.ready_for_upload)
             self.assertEqual(result.video_path, str(output))
+            self.assertAlmostEqual(result.estimated_visual_cost_usd, 0.068)
+            report = json.loads(Path(result.report_path).read_text(encoding="utf-8"))
+            self.assertFalse(report["quality_passed"])
+            self.assertEqual(report["quality_error"], "무음")
+            self.assertIsNone(report["youtube_id"])
+
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_upload_records_video_id_in_existing_report(self, _check):
+        with tempfile.TemporaryDirectory() as directory:
+            clip = Path(directory) / "scene.mp4"
+            output = Path(directory) / "output.mp4"
+            clip.touch()
+            output.touch()
+            service = ProductionService(mode="video")
+            service._editor = fake_editor(output)
+            service._uploader = SimpleNamespace(upload=AsyncMock(return_value="video-id"))
+            script = sample_script()
+            script.scenes = script.scenes[:1]
+            produced = asyncio.run(service.produce_video(script, manual_clip_paths={1: str(clip)}))
+            uploaded = asyncio.run(service.upload_to_youtube(str(output), {"title": script.title}))
+
+            self.assertTrue(produced.success)
+            self.assertTrue(uploaded.success)
+            report = json.loads(Path(produced.report_path).read_text(encoding="utf-8"))
+            self.assertEqual(report["scenes"][0]["source"], "manual")
+            self.assertEqual(report["estimated_visual_output_cost_usd"], 0)
+            self.assertEqual(report["youtube_id"], "video-id")
+            self.assertIn("uploaded_at_utc", report)
 
     def test_narration_duration_limit_and_audio_reuse(self):
         editor = object.__new__(VideoEditor)
