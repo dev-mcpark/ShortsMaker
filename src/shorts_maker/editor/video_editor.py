@@ -207,7 +207,9 @@ class VideoEditor:
                     layers.extend(subtitle_clips)
 
                 # [FIX] Explicit duration for composite clip
-                final_scene_clip = CompositeVideoClip(layers).with_duration(duration)
+                final_scene_clip = CompositeVideoClip(
+                    layers, size=(settings.video_width, settings.video_height),
+                ).with_duration(duration)
             
                 # Fade In
                 if i > 0:

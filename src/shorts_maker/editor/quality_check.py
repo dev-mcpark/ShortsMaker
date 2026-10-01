@@ -12,7 +12,7 @@ def check_video_quality(path: str) -> None:
         duration = clip.duration
         if not duration or duration < 1 or duration > settings.max_shorts_duration + 0.25:
             raise ValueError(f"영상 길이가 유효하지 않습니다: {duration}초")
-        if abs(clip.w / clip.h - 9 / 16) > 0.01:
+        if abs(clip.w / clip.h - 9 / 16) > 0.002:
             raise ValueError(f"세로형 9:16 영상이 아닙니다: {clip.w}x{clip.h}")
         if clip.audio is None:
             raise ValueError("오디오 트랙이 없습니다")

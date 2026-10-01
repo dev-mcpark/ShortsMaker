@@ -2,6 +2,8 @@
 
 This is the code map for Codex, Claude Code, and contributors. For what is currently working or next, read [STATUS.md](STATUS.md). For why durable choices were made, read [DECISIONS.md](DECISIONS.md). Root [README.md](../README.md) owns setup and user-facing behavior.
 
+The current evaluation method for finished videos is [QUALITY_EVALUATION.md](QUALITY_EVALUATION.md).
+
 Earlier PDCA plans, designs, analyses, and reports under `01-plan/` through `04-report/` and `archive/` are preserved as historical context. They describe past proposals and completion reports, not the current implementation contract. Verify them against code before reusing a pattern. Local `.pdca-*` snapshots and `.bkit-memory.json` are tool state and remain untracked.
 
 ## Production flow

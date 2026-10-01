@@ -21,3 +21,7 @@ Use Gemini 3.1 Flash-Lite Image through the `global` endpoint for 9:16 1K stills
 ## 2026-10-01 — Ground planned scripts in the primary article
 
 Pass up to 5,000 characters of the selected article or RSS summary to the existing GPT-4o editorial validator. Require it to reject unsupported concrete claims; a missing source stops planning before that call. Supplementary search snippets are leads only unless the primary article supports them. This reuses the existing review call and avoids a second paid fact-check request. It cannot independently prove the article true, so publication still needs editorial review and a measured scorecard.
+
+## 2026-10-01 — Fix the render canvas and tighten aspect validation
+
+A local audit found a legacy 1062×1920 output that passed the former loose ratio tolerance. Set every composed scene's canvas to the configured 1080×1920 and reduce the quality-check ratio tolerance to 0.002. The stricter check rejects the legacy file; it does not alter files already rendered. Keep the tolerance small enough for encoder rounding while rejecting visibly incorrect framing.

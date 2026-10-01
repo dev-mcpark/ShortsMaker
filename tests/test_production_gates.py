@@ -223,6 +223,11 @@ class ProductionGateTests(unittest.TestCase):
         clip.duration = 70
         with self.assertRaisesRegex(ValueError, "영상 길이"):
             check_video_quality("output.mp4")
+        clip.duration = 30
+        clip.w = 1062
+        clip.h = 1920
+        with self.assertRaisesRegex(ValueError, "9:16"):
+            check_video_quality("output.mp4")
 
     def test_quality_check_reads_rendered_media(self):
         with tempfile.TemporaryDirectory() as directory:
