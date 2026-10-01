@@ -117,6 +117,19 @@ class ReviewRegressions(unittest.TestCase):
                 manager.create_schedule("Broken", "25:99")
             self.assertFalse(path.exists())
 
+    def test_billing_disabled_pauses_repeating_schedule(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("Pilot", "09:00")
+            failed = ProductionService()._failed_result("403 BILLING_DISABLED: verbose provider details")
+            self.assertNotIn("verbose provider details", failed.error)
+            with patch("shorts_maker.services.production_service.ProductionService.full_pipeline",
+                       new_callable=AsyncMock, return_value=failed):
+                asyncio.run(manager._execute_pipeline(schedule))
+            stored = manager.get_schedule(schedule["id"])
+            self.assertFalse(stored["enabled"])
+            self.assertEqual(stored["last_result"], "billing_disabled")
+
     def test_enabled_image_overlay_changes_pixels(self):
         with tempfile.TemporaryDirectory() as directory:
             background = Path(directory) / "background.png"

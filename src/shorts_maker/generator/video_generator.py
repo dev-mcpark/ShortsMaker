@@ -19,6 +19,7 @@ class VideoGenerator:
         mode: str = "image",
         max_concurrent: int = 3,
         character_overlay_config: Optional[CharacterOverlayConfig] = None,
+        max_veo_attempts: int = 4,
     ):
         """
         VideoGenerator 초기화
@@ -31,6 +32,9 @@ class VideoGenerator:
         self.logger = get_logger(__name__)
         self.mode = mode
         self.max_concurrent = max_concurrent
+        if max_veo_attempts < 1:
+            raise ValueError("max_veo_attempts는 1 이상이어야 합니다.")
+        self.max_veo_attempts = max_veo_attempts
         self.project_id = settings.gcp_project_id
         self.location = settings.gcp_location
         self.image_client = None
@@ -287,6 +291,7 @@ class VideoGenerator:
 
         self._retry_veo_call(
             model_id, initial_prompt, output_path, fallback_prompt,
+            max_attempts=self.max_veo_attempts,
             duration_seconds=duration_seconds,
         )
 

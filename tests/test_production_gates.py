@@ -12,6 +12,7 @@ import numpy as np
 from PIL import Image
 from moviepy import AudioClip, ColorClip
 
+from scripts.paired_review import estimate_pair, render_pair
 from shorts_maker.editor.quality_check import check_video_quality
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.models import ShortsScript, VideoScene
@@ -39,6 +40,17 @@ def fake_editor(output):
 
 
 class ProductionGateTests(unittest.TestCase):
+    def test_pair_budget_stops_before_paid_narration(self):
+        script = sample_script()
+        script.scenes[0].visual_mode = "video"
+        script.scenes[1].visual_mode = "image"
+        image, hybrid = estimate_pair(script)
+        self.assertAlmostEqual(image + hybrid, 0.582)
+        with patch("scripts.paired_review.VideoEditor") as editor:
+            with self.assertRaisesRegex(ValueError, "비교 실험 상한"):
+                asyncio.run(render_pair(script, budget_usd=0.50))
+        editor.assert_not_called()
+
     @patch("shorts_maker.services.production_service.check_video_quality")
     @patch("shorts_maker.services.production_service.asyncio.sleep", new_callable=AsyncMock)
     def test_retry_only_generates_missing_scene(self, _sleep, _check):
@@ -228,6 +240,45 @@ class ProductionGateTests(unittest.TestCase):
                     audio_paths=["one.mp3", "two.mp3"], is_cancelled=lambda: True,
                 ))
         editor._generate_tts.assert_not_awaited()
+
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    @patch("shorts_maker.services.production_service.asyncio.sleep", new_callable=AsyncMock)
+    def test_prepared_narration_skips_tts_and_remains_caller_owned(self, _sleep, _check):
+        with tempfile.TemporaryDirectory() as directory, patch.object(settings, "clips_dir", Path(directory)):
+            source = Path(directory) / "scene.png"
+            output = Path(directory) / "output.mp4"
+            audio = Path(directory) / "narration.mp3"
+            Image.new("RGB", (4, 8), "red").save(source)
+            output.touch()
+            audio.write_bytes(b"caller-owned")
+            service = ProductionService()
+            service._editor = fake_editor(output)
+            service._editor.validate_narration = Mock()
+            service._generator = SimpleNamespace(generate_scene_clip=AsyncMock(return_value=str(source)))
+
+            result = asyncio.run(service.produce_video(
+                sample_script(), prepared_audio_paths=[str(audio), str(audio)],
+            ))
+
+            self.assertTrue(result.success)
+            service._editor.prepare_narration.assert_not_awaited()
+            service._editor.validate_narration.assert_called_once()
+            self.assertEqual(service._editor.compose_video.await_args.kwargs["audio_paths"], [str(audio)] * 2)
+            service._editor.cleanup_temp_files.assert_not_called()
+            self.assertTrue(audio.exists())
+
+            editor = object.__new__(VideoEditor)
+            editor._temp_files = []
+            editor.logger = Mock()
+            editor.cleanup_old_temp_files = Mock()
+            editor._get_voice_for_mood = Mock(return_value="alloy")
+            editor._create_visual_clip = Mock(side_effect=RuntimeError("stop before render"))
+            one_scene_script = sample_script()
+            one_scene_script.scenes = one_scene_script.scenes[:1]
+            with patch("shorts_maker.editor.video_editor.AudioFileClip", return_value=SimpleNamespace(duration=1, close=Mock())):
+                with self.assertRaisesRegex(RuntimeError, "stop before render"):
+                    asyncio.run(editor.compose_video([str(source)], one_scene_script, audio_paths=[str(audio)]))
+            self.assertTrue(audio.exists())
 
     def test_subtitle_is_placed_inside_frame(self):
         editor = object.__new__(VideoEditor)

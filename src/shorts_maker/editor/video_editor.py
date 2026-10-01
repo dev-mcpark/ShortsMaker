@@ -137,28 +137,31 @@ class VideoEditor:
     async def prepare_narration(self, script) -> List[str]:
         """Generate narration once, before the costly visual generation step."""
         audio_paths = []
-        total_duration = 0.0
         voice = self._get_voice_for_mood(getattr(script, 'mood', 'cinematic'))
         try:
             for index, scene in enumerate(script.scenes):
                 path = await self._generate_tts(scene.script_text, index, voice)
                 audio_paths.append(path)
-                audio = AudioFileClip(path)
-                try:
-                    total_duration += audio.duration + 0.5
-                finally:
-                    audio.close()
-            # Reject long narration before paying for visuals or speeding speech up heavily.
-            limit = settings.max_shorts_duration
-            if total_duration > limit:
-                raise ValueError(
-                    f"내레이션이 {total_duration:.1f}초로 너무 깁니다. "
-                    f"{limit:.1f}초 이하가 되도록 스크립트를 줄여주세요."
-                )
+            self.validate_narration(audio_paths)
             return audio_paths
         except Exception:
             self.cleanup_temp_files()
             raise
+
+    @staticmethod
+    def validate_narration(audio_paths: List[str]) -> None:
+        total_duration = 0.0
+        for path in audio_paths:
+            audio = AudioFileClip(path)
+            try:
+                total_duration += audio.duration + 0.5
+            finally:
+                audio.close()
+        if total_duration > settings.max_shorts_duration:
+            raise ValueError(
+                f"내레이션이 {total_duration:.1f}초로 너무 깁니다. "
+                f"{settings.max_shorts_duration:.1f}초 이하가 되도록 스크립트를 줄여주세요."
+            )
 
     async def compose_video(
         self,
@@ -189,7 +192,6 @@ class VideoEditor:
                 audio_path = audio_paths[i] if audio_paths is not None else await self._generate_tts(scene.script_text, i, voice_name)
                 if is_cancelled and is_cancelled():
                     raise RuntimeError("사용자에 의해 취소됨")
-                self._track_temp_file(audio_path)  # 임시 파일 추적
                 audio = AudioFileClip(audio_path)
                 duration = audio.duration + 0.5
             

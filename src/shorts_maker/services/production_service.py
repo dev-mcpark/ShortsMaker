@@ -143,7 +143,8 @@ class ProductionService:
 
     def __init__(self, mode: str = "image", parallel_clips: bool = False,
                  character_overlay_config: Optional[CharacterOverlayConfig] = None,
-                 editor_options: Optional[Dict[str, Any]] = None):
+                 editor_options: Optional[Dict[str, Any]] = None,
+                 max_veo_attempts: int = 4):
         """
         ProductionService 초기화
 
@@ -157,6 +158,7 @@ class ProductionService:
         self.parallel_clips = parallel_clips
         self.character_overlay_config = character_overlay_config
         self.editor_options = editor_options or {}
+        self.max_veo_attempts = max_veo_attempts
         self._progress = ProductionProgress()
         self._cancelled = False
 
@@ -271,7 +273,8 @@ class ProductionService:
         if self._generator is None:
             self._generator = VideoGenerator(
                 mode=self.mode,
-                character_overlay_config=self.character_overlay_config
+                character_overlay_config=self.character_overlay_config,
+                max_veo_attempts=self.max_veo_attempts,
             )
         return self._generator
 
@@ -291,6 +294,8 @@ class ProductionService:
         self, error: str, clips: Optional[List[str]] = None,
         video_path: Optional[str] = None,
     ) -> ProductionResult:
+        if "BILLING_DISABLED" in error:
+            error = "BILLING_DISABLED: Google Cloud 프로젝트의 결제 계정을 활성화하고 예산을 확인하세요."
         self._progress.error = error
         self._update_progress(ProductionPhase.FAILED, 0, f"오류: {error}")
         return ProductionResult(success=False, video_path=video_path, clips=clips or [], error=error)
@@ -484,6 +489,7 @@ class ProductionService:
         script: ShortsScript,
         manual_clip_paths: Optional[Dict[int, str]] = None,
         finish_phase: bool = True,
+        prepared_audio_paths: Optional[List[str]] = None,
     ) -> ProductionResult:
         """
         스크립트에서 비디오 생성
@@ -492,6 +498,7 @@ class ProductionService:
             script: 비디오를 생성할 ShortsScript
             manual_clip_paths: 수동 모드 시 {scene_number: file_path} 딕셔너리.
                                None이면 VEO API를 통한 자동 생성.
+            prepared_audio_paths: 재사용할 씬별 내레이션 파일. 호출자가 보관/삭제합니다.
 
         Returns:
             ProductionResult 객체
@@ -548,7 +555,13 @@ class ProductionService:
             if isinstance(script, ShortsScript):
                 self._update_progress(ProductionPhase.GENERATING, 0, "내레이션 길이 확인 중...")
                 editor = self._get_editor()
-                audio_paths = await editor.prepare_narration(script)
+                if prepared_audio_paths is None:
+                    audio_paths = await editor.prepare_narration(script)
+                else:
+                    if len(prepared_audio_paths) != num_scenes:
+                        raise ValueError("씬 수와 내레이션 수가 일치하지 않습니다.")
+                    await asyncio.to_thread(editor.validate_narration, prepared_audio_paths)
+                    audio_paths = prepared_audio_paths
                 if self.is_cancelled():
                     return self._failed_result("사용자에 의해 취소됨", clips)
 
@@ -715,7 +728,7 @@ class ProductionService:
             self.logger.error(f"비디오 프로덕션 오류: {e}")
             return self._failed_result(str(e), clips)
         finally:
-            if audio_paths and editor:
+            if audio_paths and editor and prepared_audio_paths is None:
                 editor.cleanup_temp_files()
 
     async def upload_to_youtube(

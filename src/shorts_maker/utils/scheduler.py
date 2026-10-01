@@ -342,12 +342,16 @@ class ScheduleManager:
                 auto_upload=schedule.get('auto_upload', False)
             )
 
-            # 실행 기록 업데이트
-            self.update_schedule(schedule['id'], {
+            billing_disabled = "BILLING_DISABLED" in (result.error or "")
+            # 결제 중단은 반복 실행해도 해결되지 않으므로 예약을 멈춘다.
+            updates = {
                 'last_run': datetime.now().isoformat(),
                 'run_count': schedule.get('run_count', 0) + 1,
-                'last_result': 'success' if result.success else 'failed'
-            })
+                'last_result': 'billing_disabled' if billing_disabled else 'success' if result.success else 'failed',
+            }
+            if billing_disabled:
+                updates['enabled'] = False
+            self.update_schedule(schedule['id'], updates)
 
             if result.success:
                 self.logger.info(f"Scheduled pipeline completed: {result.video_path}")

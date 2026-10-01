@@ -69,7 +69,7 @@ OPENAI_API_KEY="sk-proj-xxxxxxxxxxxxxxxx"
 
 1. GCP Console에서 "APIs & Services" → "Library" 이동
 2. "Vertex AI API" 검색 후 활성화
-3. 결제 계정 연결 필요 (무료 크레딧 $300 제공)
+3. 이 프로젝트에 활성 결제 계정을 연결합니다. 무료 크레딧 적용 여부는 계정 상태와 [Google Cloud 공식 가격표](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing)에서 확인하세요.
 
 ### 2-3. 서비스 계정 생성
 
@@ -209,6 +209,11 @@ python -m shorts_maker.utils.config --validate
 ### "Vertex AI API not enabled" 오류
 - GCP Console에서 Vertex AI API 활성화 여부 확인
 - 결제 계정 연결 여부 확인
+
+### `BILLING_DISABLED` 오류
+- `GCP_PROJECT_ID`가 서비스 계정 JSON의 `project_id`와 같은 프로젝트인지 확인
+- 해당 프로젝트에 활성 결제 계정이 연결됐는지 Cloud Console에서 확인
+- 앱의 `MAX_VISUAL_COST_USD`는 사전 출력 추정 상한이며 실제 청구를 차단하는 계정 예산이 아닙니다. 별도의 Cloud Billing 예산과 알림도 설정하세요.
 
 ### YouTube 업로드 실패
 - `client_secrets.json` 파일 확인
