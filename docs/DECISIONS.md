@@ -71,3 +71,7 @@ The editor had no publishable BGM candidate, and the Studio's fixed `calm` selec
 ## 2026-10-02 — Carry AI disclosure into private uploads
 
 [YouTube's policy](https://support.google.com/youtube/answer/14328491?hl=en) requires disclosure for realistic AI-generated or meaningfully altered content, while obvious animation and script assistance alone do not require it. The API accepts [the disclosure in `status.containsSyntheticMedia`](https://developers.google.com/youtube/v3/docs/videos). The automatic pipeline creates AI visuals and cannot reliably judge their realism, so default its private API uploads to disclosure. A manual uploader must choose yes or no after reviewing the actual cut. Keep the result private until the source, visual rights, metadata, and label are checked; allow a deliberate false value for a non-realistic manual cut.
+
+## 2026-10-02 — Distinguish source photos from explanation graphics
+
+The NASA A/B review cuts used a `NASA ASTRA` banner that could suggest official production even though they are independent explanations. Keep the source credit, but label the local storyboard as a field-test explanation and distinguish actual source photos from conceptual diagrams in each scene. Preserve the older renders privately for audit; compare the corrected cuts before commissioning final narration or visuals.
