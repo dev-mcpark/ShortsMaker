@@ -59,7 +59,7 @@ To retry a failed scene from the full pipeline, keep the
 script and run **Start Production** in the Generation tab; a new full pipeline run
 plans a new script. Before completion and again before upload, the rendered video is
 checked for Shorts length, 9:16 framing, an audio track, silent audio, and black frames.
-Subtitles are kept inside the rendered frame. If a check fails, the video is retained
+Subtitles appear phrase by phrase inside the rendered frame; their timing is estimated from narration length and needs playback review. If a check fails, the video is retained
 for preview but is not marked ready for upload.
 
 ---

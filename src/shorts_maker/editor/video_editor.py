@@ -9,7 +9,6 @@ from typing import Callable, List, Optional
 from moviepy import VideoFileClip, TextClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip, ImageClip, CompositeAudioClip
 from moviepy.config import FFMPEG_BINARY
 import moviepy.video.fx as vfx
-from moviepy.video.fx import FadeIn
 from gtts import gTTS
 from openai import AsyncOpenAI
 from PIL import ImageFont
@@ -234,10 +233,6 @@ class VideoEditor:
                     layers, size=(settings.video_width, settings.video_height),
                 ).with_duration(duration)
             
-                # Fade In
-                if i > 0:
-                    final_scene_clip = final_scene_clip.with_effects([FadeIn(duration=0.5)])
-            
                 processed_clips.append(final_scene_clip)
                 if progress_callback:
                     progress_callback(5 + 65 * (i + 1) / len(script.scenes), f"씬 {i + 1}/{len(script.scenes)} 편집 완료")
@@ -379,49 +374,81 @@ class VideoEditor:
             lines.append(line)
         return "\n".join(lines)
 
+    @staticmethod
+    def _caption_segments(text: str, duration: float) -> List[tuple[str, float, float]]:
+        """Keep one short phrase on screen at a time."""
+        if duration <= 0:
+            return []
+        chunks = []
+        current = ""
+        for word in text.split():
+            candidate = f"{current} {word}" if current else word
+            if current and len(candidate) > 26:
+                chunks.append(current)
+                current = word
+            else:
+                current = candidate
+            if current.endswith((".", ",", "?", "!", "。", "？", "！")):
+                chunks.append(current)
+                current = ""
+        if current:
+            chunks.append(current)
+        if not chunks:
+            return []
+
+        # ponytail: character-weighted timing is a draft; use word timestamps for final sync.
+        spoken_duration = max(duration - 0.5, duration * 0.8)
+        weights = [len(chunk.replace(" ", "")) for chunk in chunks]
+        total = sum(weights)
+        elapsed = 0
+        segments = []
+        for index, (chunk, weight) in enumerate(zip(chunks, weights)):
+            start = spoken_duration * elapsed / total
+            elapsed += weight
+            end = duration if index == len(chunks) - 1 else spoken_duration * elapsed / total
+            segments.append((chunk, start, end - start))
+        return segments
+
     def _create_subtitle_clips(self, text, duration) -> List:
         """Returns a list of clips for clean subtitle rendering using user-configurable settings."""
-        def place(clip):
+        def place(clip, start, length):
             margin = 80
             if clip.h > settings.video_height - 2 * margin:
                 raise ValueError("자막이 화면 높이를 초과합니다. 문장을 줄여주세요.")
             y = min(max(margin, self.subtitle_y_position), settings.video_height - clip.h - margin)
-            return clip.with_position(('center', y)).with_duration(duration)
+            return clip.with_position(('center', y)).with_start(start).with_duration(length)
+
+        segments = self._caption_segments(text, duration)
+        if not segments:
+            return []
+
+        def render(font_name, font_size, color, stroke_width):
+            clips = []
+            try:
+                for phrase, start, length in segments:
+                    clip = TextClip(
+                        text=self._wrap_subtitle(phrase, font_name, font_size),
+                        font_size=font_size,
+                        color=color,
+                        font=font_name,
+                        method='caption',
+                        size=(900, None),
+                        text_align='center',
+                        stroke_color='black',
+                        stroke_width=stroke_width,
+                    )
+                    clips.append(place(clip, start, length))
+                return clips
+            except Exception:
+                self._cleanup_clips(clips)
+                raise
 
         try:
-            # Main Text with user-configurable color, size, and position
-            font_name = 'AppleGothic'
-
-            txt_clip = TextClip(
-                text=self._wrap_subtitle(text, font_name, self.subtitle_size),
-                font_size=self.subtitle_size,
-                color=self.subtitle_color,
-                font=font_name,
-                method='caption',
-                size=(900, None),
-                text_align='center',
-                stroke_color='black',
-                stroke_width=3  # Slightly thicker for better readability
-            )
-
-            # No shadow - clean border is sufficient for readability
-            return [place(txt_clip)]
-
+            return render('AppleGothic', self.subtitle_size, self.subtitle_color, 3)
         except Exception as e:
             self.logger.error(f"❌ Subtitle error: {e}")
             try:
-                # Fallback with default settings
-                fallback = TextClip(
-                    text=self._wrap_subtitle(text, 'Arial', 50),
-                    font_size=50,
-                    color='white',
-                    font='Arial',
-                    method='caption',
-                    size=(900, None),
-                    stroke_color='black',
-                    stroke_width=1
-                )
-                return [place(fallback)]
+                return render('Arial', 50, 'white', 1)
             except Exception as fallback_error:
                 self.logger.error(f"자막 폴백도 실패: {fallback_error}")
                 raise

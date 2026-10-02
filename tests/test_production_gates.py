@@ -394,6 +394,17 @@ class ProductionGateTests(unittest.TestCase):
             editor._create_subtitle_clips("Caption", 3)
         clip.with_position.assert_called_once_with(("center", settings.video_height - 500 - 80))
 
+    def test_caption_segments_reveal_without_early_payoff(self):
+        text = "드론이 새 지점을 찾았습니다. 하던 임무는 멈춰야 할까요?"
+        segments = VideoEditor._caption_segments(text, 4.0)
+        self.assertEqual([part for part, _, _ in segments], [
+            "드론이 새 지점을 찾았습니다.", "하던 임무는 멈춰야 할까요?",
+        ])
+        self.assertEqual(segments[0][1], 0)
+        self.assertGreater(segments[1][1], 0)
+        self.assertAlmostEqual(segments[-1][1] + segments[-1][2], 4.0)
+        self.assertTrue(all(length > 0 for _, _, length in segments))
+
     def test_korean_subtitle_keeps_punctuation_with_word(self):
         text = "올여름 NASA 팀은 드론 한 대와 로버 두 대의 협업을 시험했습니다."
         wrapped = VideoEditor._wrap_subtitle(text, "AppleGothic", 60)
