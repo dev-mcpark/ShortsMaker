@@ -1,10 +1,13 @@
 import os
 import asyncio
+import subprocess
 import time
 import glob
 from contextlib import suppress
+from pathlib import Path
 from typing import Callable, List, Optional
 from moviepy import VideoFileClip, TextClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip, ImageClip, CompositeAudioClip
+from moviepy.config import FFMPEG_BINARY
 import moviepy.video.fx as vfx
 from moviepy.video.fx import FadeIn
 from gtts import gTTS
@@ -278,6 +281,7 @@ class VideoEditor:
                 codec="libx264",
                 audio_codec="aac",
             )
+            await asyncio.to_thread(self._normalize_output_audio, output_filename)
             return output_filename
         finally:
             self._cleanup_clips(processed_clips)
@@ -285,6 +289,23 @@ class VideoEditor:
                 with suppress(Exception):
                     final_video.close()
             self.cleanup_temp_files()
+
+    @staticmethod
+    def _normalize_output_audio(path: str) -> None:
+        output = Path(path)
+        normalized = output.with_name(f"{output.stem}.normalized.mp4")
+        try:
+            result = subprocess.run([
+                FFMPEG_BINARY, "-y", "-hide_banner", "-loglevel", "error",
+                "-i", str(output), "-map", "0:v:0", "-map", "0:a:0",
+                "-c:v", "copy", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+                "-c:a", "aac", "-b:a", "192k", "-shortest", str(normalized),
+            ], capture_output=True, text=True)
+            if result.returncode:
+                raise RuntimeError(f"오디오 음량 보정 실패: {result.stderr.strip()[-500:]}")
+            os.replace(normalized, output)
+        finally:
+            normalized.unlink(missing_ok=True)
 
     def _create_visual_clip(self, path, duration):
         clip = None

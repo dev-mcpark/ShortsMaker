@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import numpy as np
 from PIL import Image
-from moviepy import AudioClip, ColorClip
+from moviepy import AudioClip, ColorClip, VideoFileClip
 
 from scripts.paired_review import estimate_pair, render_pair
 from shorts_maker.editor.quality_check import check_video_quality
@@ -40,6 +40,28 @@ def fake_editor(output):
 
 
 class ProductionGateTests(unittest.TestCase):
+    def test_rendered_audio_is_normalized_without_reencoding_video(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "quiet.mp4"
+            audio = AudioClip(lambda t: 0.02 * np.sin(2 * np.pi * 220 * t), duration=3, fps=8000)
+            video = ColorClip((108, 192), color=(60, 90, 120), duration=3).with_audio(audio)
+            try:
+                video.write_videofile(str(output), fps=4, codec="libx264", audio_codec="aac", logger=None)
+            finally:
+                video.close()
+                audio.close()
+
+            with VideoFileClip(str(output)) as rendered:
+                before = np.sqrt(np.mean(rendered.audio.to_soundarray(fps=8000) ** 2))
+            VideoEditor._normalize_output_audio(str(output))
+            with VideoFileClip(str(output)) as normalized:
+                after = np.sqrt(np.mean(normalized.audio.to_soundarray(fps=8000) ** 2))
+                self.assertAlmostEqual(normalized.duration, 3, delta=0.1)
+                self.assertEqual((normalized.w, normalized.h), (108, 192))
+            self.assertGreater(after, before * 5)
+            self.assertLess(after, 0.7)
+            self.assertFalse((Path(directory) / "quiet.normalized.mp4").exists())
+
     def test_veo_prompt_version_only_invalidates_video_cache(self):
         service = object.__new__(ProductionService)
         service.character_overlay_config = None

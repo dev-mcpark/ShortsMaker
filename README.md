@@ -53,6 +53,7 @@ cap: prompt tokens, GPT, TTS, retries, and taxes are excluded. It then checks na
 requesting Veo or Gemini media. Scene files in `outputs/clips/scenes/` are keyed by the
 visual prompt, model, duration, and character overlay, so narration edits reuse them.
 Changes to the Veo prompt wrapper invalidate only Veo scene cache entries.
+The editor normalizes the final audio locally after rendering; this adds no API request.
 To retry a failed scene from the full pipeline, keep the
 script and run **Start Production** in the Generation tab; a new full pipeline run
 plans a new script. Before completion and again before upload, the rendered video is

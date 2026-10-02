@@ -14,7 +14,7 @@ After verifying a script against its source, run `python scripts/paired_review.p
 
 | Check | What to record |
 | --- | --- |
-| Technical gate | `check_video_quality` result, duration, width × height, audible narration, visible scene defects |
+| Technical gate | `check_video_quality` result, duration, width × height, audible narration, final audio loudness, visible scene defects |
 | Source accuracy | Each concrete number, quote, named entity, and causal claim checked against the primary source; count unsupported claims |
 | First five seconds | Whether the opening states a specific reason to keep watching without a generic intro |
 | Narration and pacing | Intelligibility, awkward speed changes, pauses, subtitle timing |
