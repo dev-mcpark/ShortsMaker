@@ -401,6 +401,19 @@ class VideoEditor:
         if not chunks:
             return []
 
+        index = 1
+        while index < len(chunks):
+            if (len(chunks[index].split()) == 1 and len(chunks[index]) <= 7
+                    and not chunks[index - 1].endswith((".", ",", "?", "!", "。", "？", "！"))):
+                head, separator, tail = chunks[index - 1].rpartition(" ")
+                if separator and " " in head:
+                    chunks[index - 1] = head
+                    chunks[index] = f"{tail} {chunks[index]}"
+                else:
+                    chunks[index - 1] += f" {chunks.pop(index)}"
+                    continue
+            index += 1
+
         # ponytail: character-weighted timing is a draft; use word timestamps for final sync.
         spoken_duration = max(duration - 0.5, duration * 0.8)
         weights = [len(chunk.replace(" ", "")) for chunk in chunks]

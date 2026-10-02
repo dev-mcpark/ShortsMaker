@@ -420,6 +420,14 @@ class ProductionGateTests(unittest.TestCase):
         self.assertAlmostEqual(segments[-1][1] + segments[-1][2], 4.0)
         self.assertTrue(all(length > 0 for _, _, length in segments))
 
+        widow = "AI가 사람의 우선순위에 맞춰 팀을 재배치한 겁니다. 아직은 지구 시험이죠."
+        phrases = [part for part, _, _ in VideoEditor._caption_segments(widow, 5.38)]
+        self.assertEqual(phrases[0:2], ["AI가 사람의 우선순위에 맞춰 팀을", "재배치한 겁니다."])
+        self.assertNotIn("겁니다.", phrases)
+        short_previous = "가나다라마바사아자차카타파하 가나다라마바사 겁니다."
+        phrases = [part for part, _, _ in VideoEditor._caption_segments(short_previous, 3.0)]
+        self.assertEqual(phrases, [short_previous])
+
     def test_korean_subtitle_keeps_punctuation_with_word(self):
         text = "올여름 NASA 팀은 드론 한 대와 로버 두 대의 협업을 시험했습니다."
         wrapped = VideoEditor._wrap_subtitle(text, "AppleGothic", 60)
