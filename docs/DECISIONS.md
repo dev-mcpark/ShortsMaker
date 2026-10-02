@@ -87,3 +87,7 @@ The editor previously retried every OpenAI TTS failure three times on top of the
 ## 2026-10-03 — Reserve Veo retry exposure before narration
 
 The regular pipeline allowed four Veo attempts while its visual preflight priced one output. Use one attempt by default, as the paired comparison already does. If a caller explicitly requests more attempts, multiply each uncached Veo scene's output estimate by that limit before narration or generation. Cached and manual scenes reserve nothing. This is a conservative request reserve, not an actual bill or protection from provider-side retries and other unpriced inputs.
+
+## 2026-10-03 — Keep the question-first tone for the NASA pilot
+
+The owner preferred A's question-first storytelling voice over B's result-first voice. Continue the NASA pilot with A's specific dilemma, early observed choice, and causal explanation. Correct factual phrasing against the primary article even when the preferred cut needs revision: the drone briefly paused but did not abandon its original task. This preference applies to the current pilot; test other topics before making question-first delivery a universal rule. Full editorial and publication acceptance remain separate decisions.
