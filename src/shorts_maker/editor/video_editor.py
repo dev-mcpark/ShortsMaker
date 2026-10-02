@@ -25,7 +25,7 @@ class VideoEditor:
     def __init__(
         self,
         tts_voice: str = "alloy",
-        bgm_volume: float = 0.15,
+        bgm_volume: float = 0.4,
         subtitle_color: str = "#FFD700",
         subtitle_size: int = 60,
         subtitle_y_position: int = 1300,
@@ -87,7 +87,8 @@ class VideoEditor:
         if getattr(self, "bgm_volume", 0) <= 0:
             self.selected_bgm_path = None
             return None
-        mood = self.bgm_mood or getattr(script, "mood", "cinematic")
+        mood = (getattr(script, "mood", "cinematic") if self.bgm_mood in (None, "", "auto")
+                else self.bgm_mood)
         self.selected_bgm_path = self.bgm_manager.get_bgm_path(mood)
         if not self.selected_bgm_path:
             raise ValueError(

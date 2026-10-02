@@ -234,10 +234,16 @@ def render_main_page() -> None:
 
                 ui.label('BGM MOOD').classes('text-[10px] text-slate-500 font-semibold mb-1')
                 bgm_select = ui.select(
-                    options={'calm': 'Calm & Soft', 'energetic': 'Energetic Pop', 'dark': 'Dark Mystery', 'synthwave': 'Retro Synthwave'},
+                    options={'auto': 'Follow Script', 'calm': 'Calm & Soft', 'sci-fi': 'Sci-Fi', 'mysterious': 'Mysterious', 'energetic': 'Energetic Pop', 'dark': 'Dark Mystery', 'synthwave': 'Retro Synthwave'},
                     value=state.bgm_mood
                 ).props('outlined dense dark').classes('w-full mb-3')
                 bgm_select.bind_value(state, 'bgm_mood')
+
+                ui.label('BGM LEVEL').classes('text-[10px] text-slate-500 font-semibold mb-1')
+                bgm_slider = ui.slider(min=0, max=1, step=0.05, value=state.bgm_volume).props('color=violet')
+                bgm_label = ui.label(f'{int(state.bgm_volume * 100)}%').classes('text-xs text-slate-400 self-end -mt-2 mb-3')
+                bgm_slider.bind_value(state, 'bgm_volume')
+                bgm_slider.on('change', lambda e: bgm_label.set_text(f'{int(e.value * 100)}%'))
 
                 ui.separator().classes('bg-slate-800 my-2')
 

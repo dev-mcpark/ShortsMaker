@@ -57,12 +57,14 @@ class ProductionGateTests(unittest.TestCase):
                 "sha256": hashlib.sha256(track.read_bytes()).hexdigest(),
             }), encoding="utf-8")
             self.assertEqual(manager.get_bgm_path("calm"), str(track))
-            track.write_bytes(b"replaced music")
-            self.assertIsNone(manager.get_bgm_path("calm"))
             editor = object.__new__(VideoEditor)
             editor.bgm_manager = manager
+            editor.bgm_mood = "auto"
+            editor.bgm_volume = 0.4
+            self.assertEqual(editor.preflight_music(sample_script()), str(track))
             editor.bgm_mood = "calm"
-            editor.bgm_volume = 0.15
+            track.write_bytes(b"replaced music")
+            self.assertIsNone(manager.get_bgm_path("calm"))
             with self.assertRaisesRegex(ValueError, "사용 권한이 기록된 BGM"):
                 editor.preflight_music(sample_script())
             editor.bgm_volume = 0
@@ -83,6 +85,19 @@ class ProductionGateTests(unittest.TestCase):
         planning._planner = SimpleNamespace(plan_content=AsyncMock())
         self.assertEqual(asyncio.run(planning.generate_script()), (None, None))
         planning._planner.plan_content.assert_not_awaited()
+
+        with patch.object(BGMManager, "has_documented_track", return_value=False):
+            automatic_mood = ProductionService(editor_options={"bgm_mood": "auto"})
+            automatic_mood._planner = SimpleNamespace(plan_content=AsyncMock())
+            self.assertEqual(asyncio.run(automatic_mood.generate_script()), (None, None))
+            automatic_mood._planner.plan_content.assert_not_awaited()
+        with patch.object(BGMManager, "has_documented_track", return_value=True):
+            automatic_mood = ProductionService(editor_options={"bgm_mood": "auto"})
+            automatic_mood._editor = SimpleNamespace(preflight_music=Mock())
+            automatic_mood._planner = SimpleNamespace(
+                plan_content=AsyncMock(return_value=(sample_script(), None)))
+            self.assertEqual(asyncio.run(automatic_mood.generate_script())[0].mood, "calm")
+            automatic_mood._editor.preflight_music.assert_not_called()
 
     def test_youtube_refresh_failure_preserves_saved_token(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -24,6 +24,7 @@ from shorts_maker.generator.video_generator import VIDEO_PROMPT_VERSION, VideoGe
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.uploader.youtube_uploader import YouTubeUploader
 from shorts_maker.utils.logger import get_logger
+from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
 from shorts_maker.utils.config import settings
 from shorts_maker.editor.quality_check import check_video_quality
@@ -412,8 +413,12 @@ class ProductionService:
                 self._update_progress(ProductionPhase.FAILED, 0, "사용자에 의해 취소됨")
                 return None, None
 
-            if self.editor_options.get("bgm_mood") and self.editor_options.get("bgm_volume", 0.15) > 0:
-                self._get_editor().preflight_music(None)
+            if self.editor_options.get("bgm_volume", 0.4) > 0:
+                if self.editor_options.get("bgm_mood") in (None, "", "auto"):
+                    if not BGMManager().has_documented_track():
+                        raise ValueError("사용 권한이 기록된 BGM이 없습니다")
+                else:
+                    self._get_editor().preflight_music(None)
 
             planner = self._get_planner()
 

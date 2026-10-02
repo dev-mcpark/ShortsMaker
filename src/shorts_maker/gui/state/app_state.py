@@ -62,8 +62,8 @@ class AppState:
     tts_voice: str = "alloy"
 
     # Editing Options - BGM
-    bgm_mood: str = "calm"
-    bgm_volume: float = 0.15
+    bgm_mood: str = "auto"
+    bgm_volume: float = 0.4
 
     # Editing Options - Subtitles
     subtitle_color: str = "#FFFF00"
