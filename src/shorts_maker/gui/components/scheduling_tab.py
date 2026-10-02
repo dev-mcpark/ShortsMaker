@@ -167,7 +167,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
 
                         with ui.column().classes('gap-1'):
                             ui.label('YouTube').classes('text-xs text-gray-500')
-                            auto_upload_check = ui.switch('Auto-Upload').props('color=red dense')
+                            auto_upload_check = ui.switch('Private Auto-Upload').props('color=red dense')
 
                     # Create Button
                     def create_schedule():

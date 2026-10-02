@@ -31,6 +31,9 @@ class BGMManager:
         except (OSError, ValueError, KeyError, TypeError):
             return False
 
+    def has_documented_track(self) -> bool:
+        return any(self._documented(track) for track in self.bgm_dir.glob("*.mp3"))
+
     def get_bgm_path(self, mood: str) -> Optional[str]:
         mood = mood.lower()
         category = {

@@ -99,7 +99,7 @@ def render_pipeline_tab(
             with ui.column().classes('w-full gap-2'):
                 ui.label('퍼블리싱 & 하이퍼파라미터').classes('text-[10px] text-slate-500 font-bold uppercase tracking-widest')
 
-                auto_upload = ui.switch('유튜브 자동 업로드').props('color=red dense').classes('text-xs text-slate-400')
+                auto_upload = ui.switch('유튜브에 비공개 자동 업로드').props('color=red dense').classes('text-xs text-slate-400')
                 parallel_clips = ui.switch('미디어 병렬 고속 생성').props('color=violet dense').classes('text-xs text-slate-400')
 
                 character_overlay = ui.switch('캐릭터 아바타 오버레이').props('color=violet dense').classes('text-xs text-slate-400')

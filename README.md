@@ -4,6 +4,7 @@ Development map and agent handoff: [docs/README.md](docs/README.md), [docs/STATU
 
 AI-powered YouTube Shorts automation pipeline using **Google Veo 3.1** and **Gemini image generation**.
 ShortsMaker researches, writes scripts, generates visuals, and can upload content to YouTube. Review source claims and the finished video before scaling publication.
+Automatic uploads are private review copies; public publication remains a separate editorial decision.
 
 ---
 
@@ -106,7 +107,7 @@ Place a track named for the selected mood (for example, `bgm/calm_review.mp3`) b
 }
 ```
 
-Run `shasum -a 256 bgm/calm_review.mp3` to obtain the hash. The code checks that the record matches the file; it cannot verify a license claim for you. [YouTube's Audio Library guide](https://support.google.com/youtube/answer/3376882?hl=en) explains its attribution filters. If no matching documented track exists, production stops before narration or visual generation rather than producing a silent video. With an explicitly selected mood, it also stops before paid script planning. Set BGM volume to `0` only for a deliberate silent draft. Older local MP3s without records are not selected.
+Run `shasum -a 256 bgm/calm_review.mp3` to obtain the hash. The code checks that the record matches the file; it cannot verify a license claim for you. [YouTube's Audio Library guide](https://support.google.com/youtube/answer/3376882?hl=en) explains its attribution filters. If no matching documented track exists, production stops before narration or visual generation rather than producing a silent video. With an explicitly selected mood, it also stops before paid script planning. Scheduled runs pause when no documented music is available or the requested mood has none, so they do not repeat avoidable paid attempts. Set BGM volume to `0` only for a deliberate silent draft. Older local MP3s without records are not selected.
 
 ### 4. Run ShortsMaker Studio
 ```bash

@@ -330,10 +330,21 @@ class ScheduleManager:
     async def _execute_pipeline(self, schedule: Dict[str, Any]):
         """스케줄된 파이프라인 실행"""
         from shorts_maker.services.production_service import ProductionService
+        from shorts_maker.utils.bgm_manager import BGMManager
 
         self.logger.info(f"=== Executing scheduled pipeline: {schedule['name']} ===")
 
         try:
+            if not BGMManager().has_documented_track():
+                self.update_schedule(schedule['id'], {
+                    'last_run': datetime.now().isoformat(),
+                    'run_count': schedule.get('run_count', 0) + 1,
+                    'last_result': 'music_missing',
+                    'enabled': False,
+                })
+                self.logger.warning("Scheduled pipeline paused: documented BGM missing")
+                return
+
             service = ProductionService(mode=schedule.get('mode', 'image'))
 
             result = await service.full_pipeline(
@@ -343,13 +354,19 @@ class ScheduleManager:
             )
 
             billing_disabled = "BILLING_DISABLED" in (result.error or "")
-            # 결제 중단은 반복 실행해도 해결되지 않으므로 예약을 멈춘다.
+            music_missing = "사용 권한이 기록된 BGM이 없습니다" in (result.error or "")
+            # 영구 사전 조건이 충족될 때까지 유료 계획을 반복하지 않는다.
+            last_result = 'success' if result.success else 'failed'
+            if billing_disabled:
+                last_result = 'billing_disabled'
+            elif music_missing:
+                last_result = 'music_missing'
             updates = {
                 'last_run': datetime.now().isoformat(),
                 'run_count': schedule.get('run_count', 0) + 1,
-                'last_result': 'billing_disabled' if billing_disabled else 'success' if result.success else 'failed',
+                'last_result': last_result,
             }
-            if billing_disabled:
+            if billing_disabled or music_missing:
                 updates['enabled'] = False
             self.update_schedule(schedule['id'], updates)
 

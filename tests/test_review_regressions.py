@@ -124,12 +124,37 @@ class ReviewRegressions(unittest.TestCase):
             schedule = manager.create_schedule("Pilot", "09:00")
             failed = ProductionService()._failed_result("403 BILLING_DISABLED: verbose provider details")
             self.assertNotIn("verbose provider details", failed.error)
-            with patch("shorts_maker.services.production_service.ProductionService.full_pipeline",
-                       new_callable=AsyncMock, return_value=failed):
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, return_value=failed,
+            ):
                 asyncio.run(manager._execute_pipeline(schedule))
             stored = manager.get_schedule(schedule["id"])
             self.assertFalse(stored["enabled"])
             self.assertEqual(stored["last_result"], "billing_disabled")
+
+    def test_schedule_pauses_before_paid_planning_when_music_is_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("Pilot", "09:00")
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=False), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock,
+            ) as pipeline:
+                asyncio.run(manager._execute_pipeline(schedule))
+            stored = manager.get_schedule(schedule["id"])
+            self.assertFalse(stored["enabled"])
+            self.assertEqual(stored["last_result"], "music_missing")
+            pipeline.assert_not_awaited()
+
+            another = manager.create_schedule("Other mood", "10:00")
+            failed = ProductionService()._failed_result("'sci-fi' 분위기의 사용 권한이 기록된 BGM이 없습니다")
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, return_value=failed,
+            ):
+                asyncio.run(manager._execute_pipeline(another))
+            self.assertFalse(manager.get_schedule(another["id"])["enabled"])
 
     def test_enabled_image_overlay_changes_pixels(self):
         with tempfile.TemporaryDirectory() as directory:
