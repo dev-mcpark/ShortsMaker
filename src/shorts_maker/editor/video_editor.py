@@ -10,8 +10,7 @@ from moviepy import VideoFileClip, TextClip, AudioFileClip, concatenate_videocli
 from moviepy.config import FFMPEG_BINARY
 import moviepy.video.fx as vfx
 from moviepy.audio.fx import AudioFadeIn, AudioFadeOut
-from gtts import gTTS
-from openai import AsyncOpenAI
+from openai import APIConnectionError, AsyncOpenAI, InternalServerError
 from PIL import ImageFont
 from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.logger import get_logger
@@ -45,14 +44,7 @@ class VideoEditor:
         self.logger = get_logger(__name__)
         self.bgm_manager = BGMManager()
 
-        # API 키 검증
-        if not settings.openai_api_key:
-            raise ValueError(
-                "OPENAI_API_KEY is not configured. "
-                "Please set it in .env file or config/.env"
-            )
-
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        self.client = None  # Local edits with prepared narration need no API key.
         self._temp_files: List[str] = []  # 임시 파일 추적
 
         # User-configurable options
@@ -484,15 +476,16 @@ class VideoEditor:
                 raise
 
     async def _generate_tts(self, text: str, scene_idx: int, voice: str) -> str:
+        if self.client is None:
+            if not settings.openai_api_key:
+                raise ValueError("OPENAI_API_KEY is required to generate narration.")
+            self.client = AsyncOpenAI(api_key=settings.openai_api_key, max_retries=0)
         settings.temp_dir.mkdir(parents=True, exist_ok=True)
         output_path = str(settings.temp_dir / f"audio_{scene_idx}_{time.time_ns()}.mp3")
         self._track_temp_file(output_path)
         self.logger.info(f"Generating OpenAI TTS ({voice}) for scene {scene_idx}...")
 
-        max_retries = 3
-        retry_delay = 5
-        
-        for attempt in range(max_retries):
+        for attempt in range(2):
             try:
                 response = await self.client.audio.speech.create(
                     model="tts-1",
@@ -501,19 +494,8 @@ class VideoEditor:
                 )
                 await asyncio.to_thread(response.stream_to_file, output_path)
                 return output_path
-            except Exception as e:
-                self.logger.warning(f"⚠️ OpenAI TTS Attempt {attempt+1} Failed ({e}).")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(retry_delay)
-                    retry_delay *= 2
-                else:
-                    self.logger.info("Switching to gTTS fallback...")
-                    loop = asyncio.get_running_loop()
-                    await loop.run_in_executor(None, self._run_gtts, text, output_path)
-                    return output_path
-        
-        return output_path
-
-    def _run_gtts(self, text, output_path):
-        tts = gTTS(text=text, lang='ko', slow=False)
-        tts.save(output_path)
+            except (APIConnectionError, InternalServerError) as error:
+                if attempt:
+                    raise
+                self.logger.warning("OpenAI TTS transient failure; retrying once: %s", error)
+                await asyncio.sleep(2)

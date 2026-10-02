@@ -56,6 +56,7 @@ requesting Veo or Gemini media. It also checks for documented music before TTS o
 visual prompt, model, duration, and character overlay, so narration edits reuse them.
 Changes to the Veo prompt wrapper invalidate only Veo scene cache entries.
 The editor fades the selected BGM at the start and end, then normalizes the final audio locally after rendering; this adds no API request.
+Automatic narration uses OpenAI. It retries a transient connection or server failure once, then stops with the original error; it does not silently switch to a different voice provider.
 To retry a failed scene from the full pipeline, keep the
 script and run **Start Production** in the Generation tab; a new full pipeline run
 plans a new script. Before completion and again before upload, the rendered video is
@@ -120,7 +121,7 @@ Prepare a source-checked script JSON, one `scene_N.mp4` for each scene in a clip
 python scripts/local_review.py path/to/script.json path/to/clips path/to/audio --bgm-volume 0.4
 ```
 
-The command requires every clip and narration file before starting, reuses `ProductionService` for captions, documented BGM, final quality checks, and the local sidecar, and makes no planning, TTS, visual API, or upload request. Use `--bgm-volume 0` for a deliberate silent draft. Its output is a private review file; check source claims, caption timing, speech, and music by playback before treating it as a publication candidate.
+The command requires every clip and narration file before starting, reuses `ProductionService` for captions, documented BGM, final quality checks, and the local sidecar, and makes no planning, TTS, visual API, or upload request. It works without `OPENAI_API_KEY` when narration files are prepared. Use `--bgm-volume 0` for a deliberate silent draft. Its output is a private review file; check source claims, caption timing, speech, and music by playback before treating it as a publication candidate.
 
 ### 4. Run ShortsMaker Studio
 ```bash

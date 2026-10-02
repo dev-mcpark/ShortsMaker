@@ -29,7 +29,6 @@ dependencies = [
     "openai",
     "trafilatura",
     "feedparser",
-    "gtts",
     "google-genai",
     "beautifulsoup4",
     "googlesearch-python",

@@ -811,19 +811,6 @@ wheels = [
 ]
 
 [[package]]
-name = "gtts"
-version = "2.5.4"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "click" },
-    { name = "requests" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/57/79/5ddb1dfcd663581d0d3fca34ccb1d8d841b47c22a24dc8dce416e3d87dfa/gtts-2.5.4.tar.gz", hash = "sha256:f5737b585f6442f677dbe8773424fd50697c75bdf3e36443585e30a8d48c1884", size = 24018, upload-time = "2024-11-10T21:58:00.358Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e3/6c/8b8b1fdcaee7e268536f1bb00183a5894627726b54a9ddc6fc9909888447/gTTS-2.5.4-py3-none-any.whl", hash = "sha256:5dd579377f9f5546893bc26315ab1f846933dc27a054764b168f141065ca8436", size = 29184, upload-time = "2024-11-10T21:57:58.448Z" },
-]
-
-[[package]]
 name = "h11"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2150,7 +2137,6 @@ dependencies = [
     { name = "google-cloud-aiplatform" },
     { name = "google-genai" },
     { name = "googlesearch-python" },
-    { name = "gtts" },
     { name = "httpx" },
     { name = "lxml" },
     { name = "moviepy" },
@@ -2175,7 +2161,6 @@ requires-dist = [
     { name = "google-cloud-aiplatform" },
     { name = "google-genai" },
     { name = "googlesearch-python" },
-    { name = "gtts" },
     { name = "httpx" },
     { name = "lxml" },
     { name = "moviepy", specifier = ">=2.0.0" },

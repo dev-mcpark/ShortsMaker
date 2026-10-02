@@ -9,7 +9,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+import httpx
 import numpy as np
+from openai import APIConnectionError, BadRequestError, RateLimitError
 from PIL import Image
 from moviepy import AudioClip, ColorClip, VideoFileClip
 
@@ -43,6 +45,65 @@ def fake_editor(output):
 
 
 class ProductionGateTests(unittest.TestCase):
+    def test_local_editor_needs_no_openai_key_until_tts(self):
+        with patch.object(settings, "openai_api_key", ""), patch(
+            "shorts_maker.editor.video_editor.AsyncOpenAI"
+        ) as client_class:
+            editor = VideoEditor(bgm_volume=0)
+            self.assertIsNone(editor.preflight_music(sample_script()))
+            with self.assertRaisesRegex(ValueError, "OPENAI_API_KEY is required"):
+                asyncio.run(editor._generate_tts("확인", 0, "nova"))
+            client_class.assert_not_called()
+
+    def test_tts_retries_only_transient_failure_and_keeps_voice(self):
+        request = httpx.Request("POST", "https://api.openai.com/v1/audio/speech")
+        with patch.object(settings, "openai_api_key", "test-key"), patch(
+            "shorts_maker.editor.video_editor.AsyncOpenAI"
+        ) as client_class:
+            editor = VideoEditor(bgm_volume=0)
+            client_class.assert_not_called()
+            client_class.return_value = SimpleNamespace(
+                audio=SimpleNamespace(speech=SimpleNamespace(create=AsyncMock(
+                    return_value=SimpleNamespace(stream_to_file=Mock())
+                )))
+            )
+            with tempfile.TemporaryDirectory() as directory, patch.object(settings, "temp_dir", Path(directory)):
+                asyncio.run(editor._generate_tts("확인", 0, "nova"))
+            client_class.assert_called_once_with(api_key="test-key", max_retries=0)
+
+        editor = object.__new__(VideoEditor)
+        editor.logger = Mock()
+        editor._temp_files = []
+        response = SimpleNamespace(stream_to_file=Mock())
+        create = AsyncMock(side_effect=[APIConnectionError(request=request), response])
+        editor.client = SimpleNamespace(audio=SimpleNamespace(speech=SimpleNamespace(create=create)))
+        with tempfile.TemporaryDirectory() as directory, patch.object(settings, "temp_dir", Path(directory)):
+            with patch("shorts_maker.editor.video_editor.asyncio.sleep", new_callable=AsyncMock) as sleep:
+                asyncio.run(editor._generate_tts("확인", 0, "nova"))
+            self.assertEqual(create.await_count, 2)
+            sleep.assert_awaited_once_with(2)
+            self.assertEqual(create.await_args.kwargs["voice"], "nova")
+
+            for error in (
+                BadRequestError("bad request", response=httpx.Response(400, request=request), body=None),
+                RateLimitError("quota", response=httpx.Response(429, request=request), body=None),
+            ):
+                create.reset_mock()
+                create.side_effect = error
+                with patch("shorts_maker.editor.video_editor.asyncio.sleep", new_callable=AsyncMock) as sleep:
+                    with self.assertRaises(type(error)):
+                        asyncio.run(editor._generate_tts("확인", 1, "nova"))
+                create.assert_awaited_once()
+                sleep.assert_not_awaited()
+
+            create.reset_mock()
+            create.side_effect = APIConnectionError(request=request)
+            with patch("shorts_maker.editor.video_editor.asyncio.sleep", new_callable=AsyncMock) as sleep:
+                with self.assertRaises(APIConnectionError):
+                    asyncio.run(editor._generate_tts("확인", 2, "nova"))
+            self.assertEqual(create.await_count, 2)
+            sleep.assert_awaited_once_with(2)
+
     def test_music_requires_matching_documented_track_before_paid_work(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(settings, "bgm_dir", Path(directory)):
             track = Path(directory) / "calm_review.mp3"

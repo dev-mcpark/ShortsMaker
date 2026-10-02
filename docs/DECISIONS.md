@@ -79,3 +79,7 @@ The NASA A/B review cuts used a `NASA ASTRA` banner that could suggest official 
 ## 2026-10-03 — Require complete local inputs for a free edit review
 
 The NASA review files were rendered by ignored, topic-specific scripts, while the Studio's manual-clip route can still request fresh narration and a partially supplied clip set can fall through to visual generation. Add a small `scripts/local_review.py` entry that requires a clip and one prepared narration file for every scene before calling the existing `ProductionService`. Keep the media and script local; let the service apply the same music, caption, technical, and sidecar gates. The command does not upload. This makes the zero-provider-call review step reusable without changing the partial-manual behavior of the Studio.
+
+## 2026-10-03 — Keep narration retries bounded and voice consistent
+
+The editor previously retried every OpenAI TTS failure three times on top of the SDK's own retries, then silently switched to gTTS. This could repeat permanent failures and change the voice in a finished cut. Create the OpenAI client only when narration generation is requested so a complete local edit works without an API key. Disable SDK retries and retry only a transient connection or server error once; propagate authentication, quota, validation, and exhausted transient errors. Remove the unused gTTS fallback. Prepared narration remains the no-API review path.
