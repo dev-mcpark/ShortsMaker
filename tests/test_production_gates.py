@@ -291,6 +291,13 @@ class ProductionGateTests(unittest.TestCase):
             editor._create_subtitle_clips("Caption", 3)
         clip.with_position.assert_called_once_with(("center", settings.video_height - 500 - 80))
 
+    def test_korean_subtitle_keeps_punctuation_with_word(self):
+        text = "올여름 NASA 팀은 드론 한 대와 로버 두 대의 협업을 시험했습니다."
+        wrapped = VideoEditor._wrap_subtitle(text, "AppleGothic", 60)
+        self.assertGreater(len(wrapped.splitlines()), 1)
+        self.assertEqual(wrapped.replace("\n", " "), text)
+        self.assertNotIn("\n.", wrapped)
+
     @patch("shorts_maker.editor.quality_check.VideoFileClip")
     def test_quality_check_rejects_silent_video(self, open_video):
         clip = SimpleNamespace(

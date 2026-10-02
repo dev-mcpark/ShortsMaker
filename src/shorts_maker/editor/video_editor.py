@@ -9,6 +9,7 @@ import moviepy.video.fx as vfx
 from moviepy.video.fx import FadeIn
 from gtts import gTTS
 from openai import AsyncOpenAI
+from PIL import ImageFont
 from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
@@ -332,6 +333,23 @@ class VideoEditor:
                     pass
             raise
 
+    @staticmethod
+    def _wrap_subtitle(text: str, font_name: str, font_size: int) -> str:
+        """Keep Korean words and their punctuation together within the caption width."""
+        font = ImageFont.truetype(font_name, font_size)
+        lines = []
+        for paragraph in text.splitlines():
+            line = ""
+            for word in paragraph.split():
+                candidate = f"{line} {word}" if line else word
+                if line and font.getlength(candidate) > 860:
+                    lines.append(line)
+                    line = word
+                else:
+                    line = candidate
+            lines.append(line)
+        return "\n".join(lines)
+
     def _create_subtitle_clips(self, text, duration) -> List:
         """Returns a list of clips for clean subtitle rendering using user-configurable settings."""
         def place(clip):
@@ -346,7 +364,7 @@ class VideoEditor:
             font_name = 'AppleGothic'
 
             txt_clip = TextClip(
-                text=text,
+                text=self._wrap_subtitle(text, font_name, self.subtitle_size),
                 font_size=self.subtitle_size,
                 color=self.subtitle_color,
                 font=font_name,
@@ -365,7 +383,7 @@ class VideoEditor:
             try:
                 # Fallback with default settings
                 fallback = TextClip(
-                    text=text,
+                    text=self._wrap_subtitle(text, 'Arial', 50),
                     font_size=50,
                     color='white',
                     font='Arial',
