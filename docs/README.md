@@ -2,7 +2,7 @@
 
 This is the code map for Codex, Claude Code, and contributors. For what is currently working or next, read [STATUS.md](STATUS.md). For why durable choices were made, read [DECISIONS.md](DECISIONS.md). Root [README.md](../README.md) owns setup and user-facing behavior.
 
-The current evaluation method for finished videos is [QUALITY_EVALUATION.md](QUALITY_EVALUATION.md). The repeatable paired renderer is `scripts/paired_review.py`; the private outcome summary is `src/shorts_maker/services/scorecard.py`.
+The current evaluation method for finished videos is [QUALITY_EVALUATION.md](QUALITY_EVALUATION.md). `scripts/local_review.py` renders a zero-provider-call edit from complete local scene clips and narration; `scripts/paired_review.py` runs the budgeted image/hybrid comparison. The private outcome summary is `src/shorts_maker/services/scorecard.py`.
 The curated visual prompt rules and official source links are in [VISUAL_PROMPTING.md](VISUAL_PROMPTING.md).
 The source-grounded story, motion, music, and spending recipe is [CREATIVE_FORMAT.md](CREATIVE_FORMAT.md).
 
@@ -32,7 +32,7 @@ The app is a Python modular monolith. `ProductionService` owns orchestration, pr
 | Scene reuse, narration preflight, and upload sequence | `src/shorts_maker/services/production_service.py` | `tests/test_production_gates.py`, `tests/test_workflows.py` |
 | Rendered video and quality gate | `src/shorts_maker/editor/video_editor.py`, `quality_check.py` | `tests/test_production_gates.py` |
 | Music provenance and selection | `src/shorts_maker/utils/bgm_manager.py`, `editor/video_editor.py` | `tests/test_production_gates.py` |
-| Paired production and outcome scorecard | `scripts/paired_review.py`, `src/shorts_maker/services/scorecard.py` | `tests/test_production_gates.py`, `tests/test_scorecard.py` |
+| Local edit review, paired production, and outcome scorecard | `scripts/local_review.py`, `scripts/paired_review.py`, `src/shorts_maker/services/scorecard.py` | `tests/test_local_review.py`, `tests/test_production_gates.py`, `tests/test_scorecard.py` |
 | Browser state and controls | `src/shorts_maker/gui/state/app_state.py`, `gui/pages/`, `gui/components/` | `tests/test_workflows.py` |
 | Scheduled runs | `src/shorts_maker/utils/scheduler.py` | `tests/test_review_regressions.py` |
 | Upload | `src/shorts_maker/uploader/youtube_uploader.py` | `tests/test_production_gates.py` |

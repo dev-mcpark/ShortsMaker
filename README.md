@@ -112,6 +112,16 @@ Run `shasum -a 256 bgm/calm_review.mp3` to obtain the hash. The code checks that
 
 The current NASA review cut uses [Mixkit's “Feedback Dreams” by Eugenio Mininni](https://mixkit.co/free-stock-music/atmospheres/) under its [Stock Music Free License](https://mixkit.co/license/modal/musicFree/). Its checked record is `bgm/mysterious_feedback_dreams.mp3.license.json`; the MP3 is kept out of Git. On a new checkout, download that exact track from Mixkit as `bgm/mysterious_feedback_dreams.mp3` and confirm its SHA-256 matches the record. Mixkit says its free music can be used in commercial YouTube videos without attribution, subject to its terms; the record is provenance for review, not a guarantee against a claim. The Studio now follows the script mood by default and exposes a BGM level slider. The 40% starting level was auditioned with this track and must be checked by ear for any replacement.
 
+### Free local edit review
+
+Prepare a source-checked script JSON, one `scene_N.mp4` for each scene in a clips directory, and exactly one `scene_N.aiff`, `.wav`, `.mp3`, or `.m4a` narration file per scene in an audio directory. Then run:
+
+```bash
+python scripts/local_review.py path/to/script.json path/to/clips path/to/audio --bgm-volume 0.4
+```
+
+The command requires every clip and narration file before starting, reuses `ProductionService` for captions, documented BGM, final quality checks, and the local sidecar, and makes no planning, TTS, visual API, or upload request. Use `--bgm-volume 0` for a deliberate silent draft. Its output is a private review file; check source claims, caption timing, speech, and music by playback before treating it as a publication candidate.
+
 ### 4. Run ShortsMaker Studio
 ```bash
 # Start the GUI

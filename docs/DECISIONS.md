@@ -75,3 +75,7 @@ The editor had no publishable BGM candidate, and the Studio's fixed `calm` selec
 ## 2026-10-02 — Distinguish source photos from explanation graphics
 
 The NASA A/B review cuts used a `NASA ASTRA` banner that could suggest official production even though they are independent explanations. Keep the source credit, but label the local storyboard as a field-test explanation and distinguish actual source photos from conceptual diagrams in each scene. Preserve the older renders privately for audit; compare the corrected cuts before commissioning final narration or visuals.
+
+## 2026-10-03 — Require complete local inputs for a free edit review
+
+The NASA review files were rendered by ignored, topic-specific scripts, while the Studio's manual-clip route can still request fresh narration and a partially supplied clip set can fall through to visual generation. Add a small `scripts/local_review.py` entry that requires a clip and one prepared narration file for every scene before calling the existing `ProductionService`. Keep the media and script local; let the service apply the same music, caption, technical, and sidecar gates. The command does not upload. This makes the zero-provider-call review step reusable without changing the partial-manual behavior of the Studio.
