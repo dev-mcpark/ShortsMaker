@@ -76,7 +76,8 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
 
     grouped = defaultdict(lambda: defaultdict(list))
     for path, report in reports.items():
-        if report.get("production_mode") in {"image", "hybrid"}:
+        if (report.get("production_mode") in {"image", "hybrid"}
+                and report.get("paired_comparison_eligible", True)):
             grouped[report["script_key"]][report["production_mode"]].append(path)
 
     totals = {mode: {"accepted": 0, "cost": 0.0} for mode in ("image", "hybrid")}

@@ -6,6 +6,8 @@ This is the repeatable review method for stage 3. [STATUS.md](STATUS.md) owns cu
 
 Keep the source article, final script, rendered video, visual mode, generation settings, and provider charges together in a private local record. Each newly rendered video gets a local `*.production.json` file beside its MP4. The file records the source URL, script key, scene modes/models, generated versus reused/manual scenes, preflight visual output estimate, quality gate result, and YouTube ID if uploaded. A failed quality check after rendering also gets a record. Runs that stop before rendering do not. For an image-versus-hybrid comparison, use the same script, narration, subtitles, and editing settings; change only the visual mode. Match runs by `script_key` and start with three different topics before drawing a directional conclusion.
 
+Manual editorial re-cuts remain in the local evidence but have `paired_comparison_eligible=false` in their sidecar, so a corrected cut with the same script key does not invalidate the original mode pair. Only compare runs where visual mode is the intended difference. If multiple eligible renders of one script and mode exist, the scorecard skips that ambiguous pair; resolve the run grouping before drawing a conclusion.
+
 After verifying a script against its source, run `python scripts/paired_review.py path/to/script.json --budget-usd 1.25`. The command checks a conservative visual upper estimate before TTS, creates one narration set, renders image then hybrid with that same audio, and allows one Veo request attempt. It produces local videos only. Its estimate can double-count images later reused from the scene cache; actual provider charges may also include retries and other calls outside this command.
 
 ## Record for each video

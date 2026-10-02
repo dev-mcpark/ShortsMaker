@@ -51,8 +51,13 @@ class ScorecardTests(unittest.TestCase):
                 "production_mode": "image", "quality_passed": True,
             }), encoding="utf-8")
             self.assertEqual(init_reviews(outputs, reviews), 1)
+            (outputs / "editorial_cut.production.json").write_text(json.dumps({
+                "schema_version": 1, "script_key": "robot", "production_mode": "image",
+                "paired_comparison_eligible": False, "quality_passed": True,
+            }), encoding="utf-8")
+            self.assertEqual(init_reviews(outputs, reviews), 1)
             summary = summarize(outputs, reviews)
-            self.assertEqual(summary["rendered_reports"], 5)
+            self.assertEqual(summary["rendered_reports"], 6)
             self.assertEqual(summary["paired_scripts"], 2)
             self.assertEqual(summary["complete_cost_pairs"], 2)
             self.assertEqual(summary["modes"]["image"]["accepted_rate"], 1)

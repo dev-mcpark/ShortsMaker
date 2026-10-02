@@ -680,6 +680,7 @@ class ProductionService:
                 "source_url": getattr(script, "source_url", None),
                 "script_key": script_key,
                 "production_mode": self.mode,
+                "paired_comparison_eligible": not bool(manual_paths),
                 "scenes": [
                     {
                         "number": scene.scene_number,
