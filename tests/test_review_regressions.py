@@ -279,6 +279,8 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("primary article's real location", prompt)
         self.assertIn("clearly illustrative diagram", prompt)
         self.assertIn("one coherent shot", prompt)
+        self.assertIn("source-supported dilemma, decision, and result", prompt)
+        self.assertIn("Reveal what actually happened", prompt)
         self.assertNotIn("4k resolution", prompt.lower())
         self.assertNotIn("15%", prompt)
 

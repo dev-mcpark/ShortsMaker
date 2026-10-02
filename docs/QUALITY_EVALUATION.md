@@ -17,8 +17,11 @@ After verifying a script against its source, run `python scripts/paired_review.p
 | Technical gate | `check_video_quality` result, duration, width × height, audible narration, final audio loudness, visible scene defects |
 | Source accuracy | Each concrete number, quote, named entity, and causal claim checked against the primary source; count unsupported claims |
 | First five seconds | Whether the opening states a specific reason to keep watching without a generic intro |
+| Story turn and payoff | A source-supported dilemma, the actual decision or result revealed early, and a clear conclusion; reject a chronological list of facts without a turn |
 | Narration and pacing | Intelligibility, awkward speed changes, pauses, subtitle timing |
 | Visual relevance | Before spending, whether each prompt specifies one source-grounded moment with correct setting, counts, and roles; after rendering, whether visuals explain the claim, avoid invented labels, and clearly distinguish AI reconstruction from actual footage |
+| Visual rhythm | Distinct composition or meaningful motion across scenes; note repeated photos and static stretches even when every individual frame is accurate |
+| Music | Whether a suitable bed is audible under speech, does not mask narration, and has documented rights for publication; intentional silence needs an editorial reason |
 | Cost | Sidecar's preflight visual output estimate, actual provider charge attributable to the run, rejected generations, and production time |
 | Outcome, if published | Video ID, publish date, retention and revenue after a consistent observation window |
 

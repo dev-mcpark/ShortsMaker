@@ -613,11 +613,12 @@ class ScriptPlanner:
         - **Depth:** Explain one source-supported mechanism or relationship. Give numbers only when the source provides them.
         - **Length:** Aim for roughly 200-260 Korean narration characters; the TTS duration check is authoritative.
         - **TIMING:** The total spoken duration MUST be under **50 seconds**. This is a HARD LIMIT.
+        - **Story spine:** Choose one source-supported dilemma, decision, and result. Each scene must change what the viewer understands; do not list facts or robot roles in article order.
         - **Structure:**
-          1. **Hook (0-5s):** A surprising fact or counter-intuitive statement.
-          2. **The 'Secret' (5-15s):** What is the specific hidden detail/tech?
-          3. **Deep Analysis (15-35s):** How does it work? Why is it different?
-          4. **Impact (35-50s):** A sharp, non-obvious conclusion.
+          1. **Hook (0-5s):** Show the concrete dilemma or unexpected choice, with a reason to keep watching. Do not invent danger or conflict.
+          2. **Turn (5-15s):** Reveal what actually happened in the source instead of delaying the answer with a vague teaser.
+          3. **Mechanism (15-35s):** Explain only the two or three details needed to understand that choice, using cause and effect.
+          4. **Payoff (35-50s):** State what this specific result changes or demonstrates. Distinguish a field test from a future mission; avoid generic future promises.
         - **Scenes:** Generate 6-8 scenes with one point each. Keep the sum of scene durations under 50 seconds.
         - **Duration:** Plan about 5-8 seconds per scene; the renderer uses measured narration duration.
 
