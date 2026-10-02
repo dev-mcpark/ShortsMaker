@@ -17,6 +17,7 @@ from shorts_maker.editor.quality_check import check_video_quality
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.services.production_service import ProductionService
+from shorts_maker.uploader.youtube_uploader import YouTubeUploader
 from shorts_maker.utils.config import settings
 
 
@@ -40,6 +41,29 @@ def fake_editor(output):
 
 
 class ProductionGateTests(unittest.TestCase):
+    def test_youtube_refresh_failure_preserves_saved_token(self):
+        with tempfile.TemporaryDirectory() as directory:
+            token = Path(directory) / "token.json"
+            token.write_text("{}", encoding="utf-8")
+            secrets = Path(directory) / "client_secrets.json"
+            secrets.write_text("{}", encoding="utf-8")
+            uploader = object.__new__(YouTubeUploader)
+            uploader.token_file = str(token)
+            uploader.client_secrets_file = str(secrets)
+            uploader.scopes = ["https://www.googleapis.com/auth/youtube.upload"]
+            uploader.logger = Mock()
+            credentials = SimpleNamespace(
+                valid=False, expired=True, refresh_token="saved",
+                refresh=Mock(side_effect=OSError("offline")),
+            )
+            with patch("shorts_maker.uploader.youtube_uploader.Credentials.from_authorized_user_info", return_value=credentials):
+                with patch("shorts_maker.uploader.youtube_uploader.InstalledAppFlow.from_client_secrets_file") as login:
+                    login.return_value.run_local_server.side_effect = OSError("offline")
+                    with self.assertRaisesRegex(OSError, "offline"):
+                        uploader.get_authenticated_service()
+            self.assertEqual(token.read_text(encoding="utf-8"), "{}")
+            login.assert_called_once()
+
     def test_rendered_audio_is_normalized_without_reencoding_video(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "quiet.mp4"

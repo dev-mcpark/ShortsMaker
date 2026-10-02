@@ -38,10 +38,9 @@ class YouTubeUploader:
                     creds.refresh(Request())
                 except Exception as e:
                     self.logger.warning(f"토큰 갱신 실패, 재인증 진행: {e}")
-                    os.remove(self.token_file)
                     creds = None
 
-            if creds is None:
+            if not creds or not creds.valid:
                 if not os.path.exists(self.client_secrets_file):
                     raise FileNotFoundError(f"{self.client_secrets_file} 파일이 없습니다. Google Console에서 다운로드해주세요.")
 
