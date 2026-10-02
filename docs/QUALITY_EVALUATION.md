@@ -20,6 +20,7 @@ After verifying a script against its source, run `python scripts/paired_review.p
 | Story turn and payoff | A source-supported dilemma, the actual decision or result revealed early, and a clear conclusion; reject a chronological list of facts without a turn |
 | Narration and pacing | Intelligibility, awkward speed changes, pauses, phrase caption timing, one-word orphan captions, whether text reveals a later fact early, and dark frames at scene cuts |
 | Visual relevance | Before spending, whether each prompt specifies one source-grounded moment with correct setting, counts, and roles; after rendering, whether visuals explain the claim, avoid invented labels, and clearly distinguish AI reconstruction from actual footage |
+| Visual rights | Original source and credit for each photo or clip, publisher usage terms and any third-party exception, recognizable people or protected logos, and whether the video implies an agency's endorsement |
 | Visual rhythm | Distinct composition or meaningful motion across scenes; note repeated photos and static stretches even when every individual frame is accurate |
 | Music | Whether a suitable bed is audible under speech, does not mask narration, and has documented rights for publication; intentional silence needs an editorial reason |
 | Cost | Sidecar's preflight visual output estimate, actual provider charge attributable to the run, rejected generations, and production time |
