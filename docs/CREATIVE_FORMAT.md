@@ -1,0 +1,21 @@
+# Source-grounded Shorts format
+
+This is the editorial recipe for the next review cut, not a claim that it already performs well. [STATUS.md](STATUS.md) owns the current experiment and results; [QUALITY_EVALUATION.md](QUALITY_EVALUATION.md) owns how to score them.
+
+## Build the story before buying visuals
+
+1. Keep the primary article URL and extract its **question, observed decision, evidence, and limit**. A specific first-second question is a working hypothesis drawn from [YouTube's Shorts deep dive](https://blog.youtube/creator-and-artist-stories/youtube-shorts-deep-dive/) and [Korean creator workshop](https://blog.youtube/intl/ko-kr/creator-and-artist-stories/shorts-workshop-kr-2025/); do not add a dilemma absent from the source.
+2. Reveal the actual decision early, then explain why it was interesting. For the [NASA field test](https://science.nasa.gov/blogs/planetary-expeditions/2026/09/15/nasa-field-tests-ai-fleet-capability-for-science-exploration/), the drone's new point of interest did **not** cancel the original objective: another robot investigated it. End with the limit that this was a Virginia Earth test, not mission footage from another world.
+3. Map each sentence to one visual proof: the credited source photo for what was photographed, or an explicitly labeled diagram for the choice, branch, or changing state. Reveal diagram elements as the narration reaches them. A camera move alone is not explanatory motion. Do not imply invented AI scenery is documentary footage.
+4. Make a no-API storyboard with local speech and motion first. Inspect the first five seconds, subtitle safe area, factual labels, each scene's distinct composition, and the complete sound mix. One human rejection is cheaper than another paid render.
+5. Only after the story and visual beats work, record one final narration set and reuse it. Add music with a recorded source, license, and attribution requirement; choose the track intentionally and check that speech stays intelligible. The [YouTube Audio Library help](https://support.google.com/youtube/answer/3376882?hl=en-uk) describes its platform licensing and attribution filters. Existing `bgm/*.mp3` files have no provenance record and are for local audition only.
+
+## Budget and acceptance
+
+The default for this milestone is **$0 in new paid calls** until the owner sets a round limit. Reuse local source material, audio, and cached clips. `MAX_VISUAL_COST_USD` only estimates **new visual output**, so record OpenAI, Google input/output, failed calls, retries, taxes, and any music license separately before comparing against the round cap. Google Cloud's ₩10,000 monthly email budget is alerts-only and does not cap either provider's spending. Check current rates just before a paid run.
+
+For scale, the published rates checked on 2026-10-02 were about **$0.004** for 260 characters of [OpenAI `tts-1`](https://developers.openai.com/api/docs/models/tts-1), **$0.034 plus input tokens** for one 1K Gemini 3.1 Flash-Lite image, and **$0.48** for six seconds of Veo 3.1 Fast video-only 720p ([Google Cloud pricing](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing)). These are component estimates, not a run total or a billing guarantee.
+
+Do not buy a generated visual merely to create movement. Buy one only when it communicates a source-grounded moment better than a photo or diagram and its estimated worst case fits the round limit. The first accepted outcome is an owner-approved private review cut that passes technical and factual checks. Public publication comes later. [YouTube's monetization policy](https://support.google.com/youtube/answer/1311392?hl=en-gb) flags repetitive mass-produced slideshows with little original narrative value, so the production target is an explanation with a distinct story and meaningful visual evidence.
+
+For published videos, compare first-second hold or viewed-versus-swiped where available, average view duration or retention, factual/editorial acceptance, and billed cost per accepted video over the same observation window. [YouTube's Shorts analytics guide](https://support.google.com/youtube/answer/12942217?co=YOUTUBE._YTVideoType%3Dshorts&hl=en) explains the viewed-versus-swiped metric. Treat early numbers as observations, not proof from one video.
