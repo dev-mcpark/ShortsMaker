@@ -42,7 +42,9 @@ An article enters topic history only after its script passes validation. Studio 
 tracks completed editing work and finishes after an optional upload. Stop requests wait
 for the current external API call to return before the run is released.
 Planning rejects scripts without source text and asks the editorial validator to reject
-claims absent from the supplied excerpt. This is an LLM review, not independent fact
+claims or visual scenes that conflict with the supplied excerpt. Generated visual briefs
+favor one source-grounded moment and illustrative diagrams when a realistic reconstruction
+could be mistaken for actual footage. This is an LLM review, not independent fact
 verification; review published material against its source.
 
 Production estimates new visual API output cost before narration or media generation and
@@ -50,6 +52,7 @@ stops if it exceeds `MAX_VISUAL_COST_USD`. This is a planning limit, not a provi
 cap: prompt tokens, GPT, TTS, retries, and taxes are excluded. It then checks narration length before
 requesting Veo or Gemini media. Scene files in `outputs/clips/scenes/` are keyed by the
 visual prompt, model, duration, and character overlay, so narration edits reuse them.
+Changes to the Veo prompt wrapper invalidate only Veo scene cache entries.
 To retry a failed scene from the full pipeline, keep the
 script and run **Start Production** in the Generation tab; a new full pipeline run
 plans a new script. Before completion and again before upload, the rendered video is
@@ -99,7 +102,7 @@ Launch your browser and go to `http://localhost:8080`.
 ## 🛠️ Production plan and visual cost
 
 1. **Generate a sourced, reviewable script.** Keep the existing content checks and review the hook, facts, and originality before publishing.
-2. **Choose visuals by scene.** The default `hybrid` mode uses one 6-second silent Veo hook and Gemini stills for later scenes. Each scene can set `visual_mode` to `image` or `video`; manual clips can replace individual scenes.
+2. **Choose visuals by scene.** The default `hybrid` mode plans one 6-second silent Veo hook and Gemini stills for later scenes. The planner can choose a still hook when motion would imply undocumented footage. Each scene can set `visual_mode` to `image` or `video`; manual clips can replace individual scenes.
 3. **Check expected spend, then reuse work.** The run stops before paid generation if new visual outputs exceed `MAX_VISUAL_COST_USD` (default $1). Completed scenes survive a failed run and narration changes.
 4. **Inspect the finished video.** The editor checks length, framing, audio, and black frames before upload. The result shows expected visual API cost and reused scene count. Compare those estimates with the provider bill and YouTube retention data before increasing volume.
 

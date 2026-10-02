@@ -12,6 +12,8 @@ from shorts_maker.utils.config import settings
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
 from shorts_maker.services.visual_cost import scene_mode
 
+VIDEO_PROMPT_VERSION = 2
+
 
 class VideoGenerator:
     def __init__(
@@ -272,21 +274,18 @@ class VideoGenerator:
             f"--> Generating background-only video for Scene {scene.scene_number}"
         )
 
-        original_prompt = scene.visual_description
-        motion_desc = getattr(scene, "motion_instruction", "Smooth cinematic movement")
+        original_prompt = scene.visual_description.strip().rstrip(".")
+        motion_desc = (getattr(scene, "motion_instruction", "") or "").strip().rstrip(".")
 
         initial_prompt = (
-            f"Cinematic news broadcast background scene: {original_prompt}. "
-            f"Motion style: {motion_desc}. "
-            f"Full-screen background footage with dynamic camera movement. "
-            f"Atmospheric lighting, detailed environment, immersive depth. "
-            f"Professional broadcast quality, 4K resolution, smooth motion. "
-            f"This is a B-roll background shot - no people, no presenter, just the scene itself. "
-            f"Focus on environmental storytelling and visual atmosphere."
+            f"One continuous vertical 9:16 shot. {original_prompt}. "
+            f"Motion: {motion_desc + '.' if motion_desc else 'Steady camera.'} "
+            "Plain unlettered surfaces and an uncluttered lower third for captions added in editing. "
+            "Silent background footage."
         )
         fallback_prompt = (
-            f"A cinematic establishing shot: {original_prompt}. "
-            f"Beautiful atmospheric scene, professional quality, no people."
+            f"One simple vertical shot. {original_prompt}. "
+            "Steady camera, plain unlettered surfaces, uncluttered lower third."
         )
 
         self._retry_veo_call(

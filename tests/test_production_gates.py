@@ -40,6 +40,18 @@ def fake_editor(output):
 
 
 class ProductionGateTests(unittest.TestCase):
+    def test_veo_prompt_version_only_invalidates_video_cache(self):
+        service = object.__new__(ProductionService)
+        service.character_overlay_config = None
+        service.mode = "hybrid"
+        scene = sample_script().scenes[0]
+        image_key = service._scene_cache_dir(scene, "image")
+        video_key = service._scene_cache_dir(scene, "video")
+
+        with patch("shorts_maker.services.production_service.VIDEO_PROMPT_VERSION", 999):
+            self.assertEqual(service._scene_cache_dir(scene, "image"), image_key)
+            self.assertNotEqual(service._scene_cache_dir(scene, "video"), video_key)
+
     def test_pair_budget_stops_before_paid_narration(self):
         script = sample_script()
         script.scenes[0].visual_mode = "video"

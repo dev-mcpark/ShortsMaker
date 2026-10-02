@@ -20,7 +20,7 @@ from moviepy import VideoFileClip
 
 from shorts_maker.planner.script_planner import ScriptPlanner, ShortsScript
 from shorts_maker.planner.models import ScriptGenerationContext
-from shorts_maker.generator.video_generator import VideoGenerator
+from shorts_maker.generator.video_generator import VIDEO_PROMPT_VERSION, VideoGenerator
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.uploader.youtube_uploader import YouTubeUploader
 from shorts_maker.utils.logger import get_logger
@@ -307,7 +307,7 @@ class ProductionService:
             if path and Path(path).is_file():
                 stat = Path(path).stat()
                 overlay[f"{key}_version"] = (stat.st_size, stat.st_mtime_ns)
-        identity = json.dumps({
+        identity_data = {
             "visual_description": scene.visual_description,
             "motion_instruction": scene.motion_instruction if mode == "video" else None,
             "mode": mode,
@@ -316,7 +316,10 @@ class ProductionService:
             "duration": (settings.hybrid_veo_duration_seconds if self.mode == "hybrid"
                          else settings.veo_duration_seconds) if mode == "video" else None,
             "overlay": overlay,
-        }, sort_keys=True, ensure_ascii=False)
+        }
+        if mode == "video":
+            identity_data["prompt_version"] = VIDEO_PROMPT_VERSION
+        identity = json.dumps(identity_data, sort_keys=True, ensure_ascii=False)
         digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
         return settings.clips_dir / "scenes" / digest
 

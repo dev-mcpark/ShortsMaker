@@ -2,6 +2,7 @@
 
 import asyncio
 import importlib
+import json
 import tempfile
 import threading
 import unittest
@@ -225,6 +226,62 @@ class ReviewRegressions(unittest.TestCase):
             ))
         character_generator.client.models.generate_videos.assert_called_once()
 
+    def test_veo_prompt_keeps_one_silent_shot_without_fake_quality_claims(self):
+        generator = object.__new__(VideoGenerator)
+        generator.logger = Mock()
+        generator.max_veo_attempts = 1
+        generator._retry_veo_call = Mock()
+        scene = SimpleNamespace(
+            scene_number=1,
+            visual_description="One drone above two rovers on a Virginia lawn",
+            motion_instruction="The camera slowly pushes toward the fleet",
+        )
+
+        generator._run_veo_background_only("model", scene, "clip.mp4", 6)
+
+        prompt = generator._retry_veo_call.call_args.args[1]
+        self.assertIn("One continuous vertical 9:16 shot", prompt)
+        self.assertIn(scene.visual_description, prompt)
+        self.assertIn(scene.motion_instruction, prompt)
+        self.assertIn("Silent background footage", prompt)
+        self.assertNotIn("4K", prompt)
+        self.assertNotIn("no people", prompt)
+
+    def test_planner_visual_brief_requires_source_matched_setting(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.allowed_moods = ["calm"]
+        planner.generation_mode = "hybrid"
+        script = {
+            "title": "드론 현장 시험", "description": "출처 NASA", "tags": [],
+            "mood": "calm", "style": "The Info Curator", "source_name": "NASA",
+            "source_url": "https://example.com", "generation_mode": "hybrid",
+            "scenes": [{"scene_number": 1, "visual_mode": "image",
+                        "visual_description": "Illustrative robot diagram",
+                        "script_text": "로봇 세 대가 함께 시험했습니다.",
+                        "duration_seconds": 6}],
+        }
+        completion = AsyncMock(return_value=SimpleNamespace(choices=[
+            SimpleNamespace(message=SimpleNamespace(content=json.dumps(script))),
+        ]))
+        planner.client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=completion),
+        ))
+
+        result = asyncio.run(planner._write_script({
+            "category": "Tech", "title": "ASTRA field test",
+            "content": "Three robots were tested in Virginia.",
+            "source": "NASA", "url": "https://example.com/source",
+        }))
+
+        self.assertEqual(result.scenes[0].visual_mode, "image")
+        prompt = completion.await_args.kwargs["messages"][0]["content"]
+        self.assertIn("primary article's real location", prompt)
+        self.assertIn("clearly illustrative diagram", prompt)
+        self.assertIn("one coherent shot", prompt)
+        self.assertNotIn("4k resolution", prompt.lower())
+        self.assertNotIn("15%", prompt)
+
     def test_scene_error_stops_before_editing(self):
         service = ProductionService(mode="image")
         generator = SimpleNamespace(
@@ -321,6 +378,30 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("Source grounding", request[0]["content"])
         self.assertIn("The factory expanded.", request[1]["content"])
         self.assertIn("30% increase", request[1]["content"])
+
+    def test_validator_rejects_misleading_visual_reason(self):
+        validator = object.__new__(ScriptValidator)
+        validator.logger = Mock()
+        completion = AsyncMock(return_value=SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content=json.dumps({
+                "is_valid": True, "score": 90, "reason": "unsupported_visual",
+                "feedback": "Scene 1 depicts a desert instead of Virginia",
+            })),
+        )]))
+        validator.client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=completion),
+        ))
+        script = ShortsScript(
+            title="실험", description="", tags=[], mood="calm", style="news",
+            source_name="NASA", source_url="https://example.com", generation_mode="image",
+            scenes=[VideoScene(scene_number=1, visual_description="desert", script_text="지상 시험")],
+        )
+
+        result = asyncio.run(validator.validate_script(
+            script, source_text="The field test took place in Virginia.",
+        ))
+        self.assertFalse(result.is_valid)
+        self.assertEqual(result.reason, "unsupported_visual")
 
     def test_planner_requires_source_before_approving_script(self):
         script = ShortsScript(

@@ -44,7 +44,11 @@ class ScriptValidator:
            too thin to judge a claim, reject it rather than guess. Use reason
            `unsupported_claim` or `insufficient_source` and name the claim in feedback.
            Do not use outside knowledge as evidence. Visuals may be illustrative,
-           but must not present invented footage as a real event.
+           but must not present invented footage as a real event. Compare visual
+           descriptions and motion instructions with the source's location,
+           terrain, participant count, equipment, roles, and timeline. Reject a
+           mismatch, invented readable label, or unmarked future reconstruction
+           with reason `unsupported_visual` and describe the offending scene.
             """
 
         prompt = f"""
@@ -87,6 +91,7 @@ class ScriptValidator:
         - Abstract Visuals -> Fail
         - Advertising/Promotional Content -> Fail (reason: "advertising_content")
         - Unsupported factual claim -> Fail (reason: "unsupported_claim")
+        - Unsupported or misleading visual -> Fail (reason: "unsupported_visual")
         """
 
         try:
@@ -110,7 +115,8 @@ class ScriptValidator:
             result = ValidationResult(**result_data)
             if result.reason.lower() in {
                 "advertising_content", "promotional_tone", "promotional_content",
-                "policy_violation", "unsupported_claim", "insufficient_source", "weak_hook",
+                "policy_violation", "unsupported_claim", "unsupported_visual",
+                "insufficient_source", "weak_hook",
             }:
                 result.is_valid = False
             if result.is_valid and result.score < 70:
