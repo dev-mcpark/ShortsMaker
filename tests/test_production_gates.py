@@ -298,6 +298,20 @@ class ProductionGateTests(unittest.TestCase):
         service._editor.prepare_narration.assert_not_awaited()
         service._generator.generate_scene_clip.assert_not_awaited()
 
+    def test_veo_retry_reserve_blocks_before_paid_work(self):
+        self.assertEqual(ProductionService(mode="hybrid").max_veo_attempts, 1)
+        with self.assertRaisesRegex(ValueError, "max_veo_attempts"):
+            ProductionService(mode="hybrid", max_veo_attempts=0)
+        service = ProductionService(mode="hybrid", max_veo_attempts=2)
+        service._editor = fake_editor("unused.mp4")
+        service._generator = SimpleNamespace(generate_scene_clip=AsyncMock())
+        with patch.object(settings, "max_visual_cost_usd", 0.90):
+            result = asyncio.run(service.produce_video(sample_script()))
+        self.assertFalse(result.success)
+        self.assertIn("$0.994", result.error)
+        service._editor.prepare_narration.assert_not_awaited()
+        service._generator.generate_scene_clip.assert_not_awaited()
+
     @patch("shorts_maker.services.production_service.check_video_quality")
     @patch("shorts_maker.services.production_service.asyncio.sleep", new_callable=AsyncMock)
     def test_hybrid_generates_video_hook_and_image_remainder(self, _sleep, _check):

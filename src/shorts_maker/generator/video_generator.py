@@ -21,7 +21,7 @@ class VideoGenerator:
         mode: str = "image",
         max_concurrent: int = 3,
         character_overlay_config: Optional[CharacterOverlayConfig] = None,
-        max_veo_attempts: int = 4,
+        max_veo_attempts: int = 1,
     ):
         """
         VideoGenerator 초기화
@@ -202,13 +202,13 @@ class VideoGenerator:
         initial_prompt: str,
         output_path: str,
         fallback_prompt: str,
-        max_attempts: int = 4,
+        max_attempts: int = 1,
         duration_seconds: Optional[int] = None,
     ) -> None:
         """Veo API 호출을 재시도 로직과 함께 실행.
 
-        서버 에러(500/internal) 시 30초 대기 후 재시도,
-        안전 위반(violate) 시 fallback_prompt로 전환 후 재시도합니다.
+        max_attempts가 2 이상이면 서버 오류를 대기 후 재시도하고,
+        안전 위반 시 fallback_prompt로 전환합니다.
         """
         current_prompt = initial_prompt
 

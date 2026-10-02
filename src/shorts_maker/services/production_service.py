@@ -145,7 +145,7 @@ class ProductionService:
     def __init__(self, mode: str = "image", parallel_clips: bool = False,
                  character_overlay_config: Optional[CharacterOverlayConfig] = None,
                  editor_options: Optional[Dict[str, Any]] = None,
-                 max_veo_attempts: int = 4):
+                 max_veo_attempts: int = 1):
         """
         ProductionService 초기화
 
@@ -159,6 +159,8 @@ class ProductionService:
         self.parallel_clips = parallel_clips
         self.character_overlay_config = character_overlay_config
         self.editor_options = editor_options or {}
+        if max_veo_attempts < 1:
+            raise ValueError("max_veo_attempts는 1 이상이어야 합니다.")
         self.max_veo_attempts = max_veo_attempts
         self._progress = ProductionProgress()
         self._cancelled = False
@@ -556,7 +558,8 @@ class ProductionService:
                     model = settings.veo_model_id if mode == "video" else settings.image_model_id
                     duration = (settings.hybrid_veo_duration_seconds if self.mode == "hybrid"
                                 else settings.veo_duration_seconds)
-                    estimated_cost += estimated_scene_cost(mode, model, duration)
+                    attempts = self.max_veo_attempts if mode == "video" else 1
+                    estimated_cost += attempts * estimated_scene_cost(mode, model, duration)
             if estimated_cost > settings.max_visual_cost_usd:
                 return self._failed_result(
                     f"예상 비주얼 비용 ${estimated_cost:.3f}가 설정 상한 "

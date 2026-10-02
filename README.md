@@ -50,8 +50,9 @@ could be mistaken for actual footage. This is an LLM review, not independent fac
 verification; review published material against its source.
 
 Production estimates new visual API output cost before narration or media generation and
-stops if it exceeds `MAX_VISUAL_COST_USD`. This is a planning limit, not a provider billing
-cap: prompt tokens, GPT, TTS, retries, and taxes are excluded. It then checks narration length before
+stops if it exceeds `MAX_VISUAL_COST_USD`. Veo makes one attempt by default; an explicitly
+higher attempt count reserves that many outputs in the estimate. This is a planning limit, not a provider billing
+cap: prompt tokens, GPT, TTS, provider-side retries, and taxes are excluded. It then checks narration length before
 requesting Veo or Gemini media. It also checks for documented music before TTS or visual requests. Scene files in `outputs/clips/scenes/` are keyed by the
 visual prompt, model, duration, and character overlay, so narration edits reuse them.
 Changes to the Veo prompt wrapper invalidate only Veo scene cache entries.
@@ -136,7 +137,7 @@ Launch your browser and go to `http://localhost:8080`.
 
 1. **Generate a sourced, reviewable script.** Keep the existing content checks and review the hook, facts, and originality before publishing.
 2. **Choose visuals by scene.** The default `hybrid` mode plans one 6-second silent Veo hook and Gemini stills for later scenes. The planner can choose a still hook when motion would imply undocumented footage. Each scene can set `visual_mode` to `image` or `video`; manual clips can replace individual scenes.
-3. **Check expected spend, then reuse work.** The run stops before paid generation if new visual outputs exceed `MAX_VISUAL_COST_USD` (default $1). Completed scenes survive a failed run and narration changes.
+3. **Check expected spend, then reuse work.** The run stops before paid generation if new visual outputs, including any explicit Veo attempt reserve, exceed `MAX_VISUAL_COST_USD` (default $1). Completed scenes survive a failed run and narration changes.
 4. **Inspect the finished video.** The editor checks length, framing, audio, and black frames before upload. The result shows expected visual API cost and reused scene count. Compare those estimates with the provider bill and YouTube retention data before increasing volume.
 
 Using the configured models, a new 6-scene hybrid video is estimated at about **$0.65** for visuals (6 seconds of Veo Fast at $0.08/second plus five Gemini images estimated at $0.034 each). Six still images are about **$0.20**; six 8-second Veo Fast clips are about **$3.84**. These are illustrative October 2026 planning rates, not full production costs. Check [Vertex AI pricing](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing) and [model lifecycle dates](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions) before raising budgets. A Google Cloud spend cap and OpenAI account spending limit should also be configured separately.
