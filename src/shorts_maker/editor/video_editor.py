@@ -9,6 +9,7 @@ from typing import Callable, List, Optional
 from moviepy import VideoFileClip, TextClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip, ImageClip, CompositeAudioClip
 from moviepy.config import FFMPEG_BINARY
 import moviepy.video.fx as vfx
+from moviepy.audio.fx import AudioFadeIn, AudioFadeOut
 from gtts import gTTS
 from openai import AsyncOpenAI
 from PIL import ImageFont
@@ -269,7 +270,10 @@ class VideoEditor:
                     bgm = bgm.with_effects([AudioLoop(duration=final_video.duration)])
                 else:
                     bgm = bgm.subclipped(0, final_video.duration)
-                bgm = bgm.with_volume_scaled(self.bgm_volume)
+                fade = min(0.8, final_video.duration / 4)
+                bgm = bgm.with_volume_scaled(self.bgm_volume).with_effects(
+                    [AudioFadeIn(min(0.2, fade)), AudioFadeOut(fade)]
+                )
                 final_video = final_video.with_audio(CompositeAudioClip([final_video.audio, bgm]))
 
             settings.output_dir.mkdir(parents=True, exist_ok=True)
