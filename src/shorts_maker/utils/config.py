@@ -63,7 +63,6 @@ class Settings:
     openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
     gcp_project_id: str = field(default_factory=lambda: os.getenv("GCP_PROJECT_ID", ""))
     gcp_location: str = field(default_factory=lambda: os.getenv("GCP_LOCATION", "us-central1"))
-    pixabay_api_key: str = field(default_factory=lambda: os.getenv("PIXABAY_API_KEY", ""))
 
     # Character Assets
     character_image_path: Path = field(
@@ -201,13 +200,6 @@ class Settings:
             print(f"   OpenAI:   ✅ {masked}")
         else:
             print("   OpenAI:   ❌ Not set")
-
-        if self.pixabay_api_key:
-            masked = self.pixabay_api_key[:10] + "..." + self.pixabay_api_key[-4:]
-            print(f"   Pixabay:  ✅ {masked}")
-        else:
-            print("   Pixabay:  ⚠️  Not set (optional)")
-        print()
 
         # Google Cloud
         print("☁️  Google Cloud:")

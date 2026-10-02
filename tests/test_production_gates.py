@@ -1,6 +1,7 @@
 """Checks for resuming paid work and rejecting unfit output."""
 
 import asyncio
+import hashlib
 import json
 import tempfile
 import unittest
@@ -18,6 +19,7 @@ from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.services.production_service import ProductionService
 from shorts_maker.uploader.youtube_uploader import YouTubeUploader
+from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.config import settings
 
 
@@ -41,6 +43,47 @@ def fake_editor(output):
 
 
 class ProductionGateTests(unittest.TestCase):
+    def test_music_requires_matching_documented_track_before_paid_work(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(settings, "bgm_dir", Path(directory)):
+            track = Path(directory) / "calm_review.mp3"
+            track.write_bytes(b"local music sample")
+            manager = BGMManager()
+            self.assertIsNone(manager.get_bgm_path("calm"))
+            record = Path(f"{track}.license.json")
+            record.write_text(json.dumps({
+                "title": "Review track", "artist": "Example artist",
+                "source_url": "https://example.com/music", "license": "No attribution required",
+                "attribution_required": False,
+                "sha256": hashlib.sha256(track.read_bytes()).hexdigest(),
+            }), encoding="utf-8")
+            self.assertEqual(manager.get_bgm_path("calm"), str(track))
+            track.write_bytes(b"replaced music")
+            self.assertIsNone(manager.get_bgm_path("calm"))
+            editor = object.__new__(VideoEditor)
+            editor.bgm_manager = manager
+            editor.bgm_mood = "calm"
+            editor.bgm_volume = 0.15
+            with self.assertRaisesRegex(ValueError, "사용 권한이 기록된 BGM"):
+                editor.preflight_music(sample_script())
+            editor.bgm_volume = 0
+            self.assertIsNone(editor.preflight_music(sample_script()))
+
+        service = ProductionService()
+        service._editor = fake_editor("unused.mp4")
+        service._editor.preflight_music = Mock(side_effect=ValueError("documented BGM missing"))
+        service._generator = SimpleNamespace(generate_scene_clip=AsyncMock())
+        result = asyncio.run(service.produce_video(sample_script()))
+        self.assertFalse(result.success)
+        self.assertIn("documented BGM missing", result.error)
+        service._editor.prepare_narration.assert_not_awaited()
+        service._generator.generate_scene_clip.assert_not_awaited()
+
+        planning = ProductionService(editor_options={"bgm_mood": "calm"})
+        planning._editor = SimpleNamespace(preflight_music=Mock(side_effect=ValueError("music missing")))
+        planning._planner = SimpleNamespace(plan_content=AsyncMock())
+        self.assertEqual(asyncio.run(planning.generate_script()), (None, None))
+        planning._planner.plan_content.assert_not_awaited()
+
     def test_youtube_refresh_failure_preserves_saved_token(self):
         with tempfile.TemporaryDirectory() as directory:
             token = Path(directory) / "token.json"

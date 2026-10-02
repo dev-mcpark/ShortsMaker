@@ -131,18 +131,9 @@ mv ~/Downloads/my-project-xxxxx.json config/credentials/service_account.json
 
 ---
 
-## 4. Pixabay API (선택)
+## 4. BGM 파일
 
-**용도:** BGM 및 스톡 이미지 검색
-
-1. https://pixabay.com/api/docs/ 접속
-2. 회원가입 후 API Key 확인
-3. `.env`에 입력:
-   ```env
-   PIXABAY_API_KEY="your-pixabay-key"
-   ```
-
-> 미설정 시 `bgm/` 폴더의 기본 BGM이 사용됩니다.
+현재 Pixabay 연동은 없습니다. BGM은 로컬 `bgm/` 폴더에서 선택하며, 곡의 출처와 사용 조건을 기록한 `.license.json`이 필요합니다. 형식과 해시 확인 방법은 루트 [README.md](../README.md#music-for-a-reviewable-render)를 참고하세요. 기록이 없는 곡은 자동 제작에 사용되지 않습니다.
 
 ---
 
@@ -162,7 +153,6 @@ python -m shorts_maker.utils.config --validate
 
 📌 API Keys:
    OpenAI:   ✅ sk-proj-...xxxx
-   Pixabay:  ✅ 54133958...5463
 
 ☁️ Google Cloud:
    Project:  my-shorts-maker-12345

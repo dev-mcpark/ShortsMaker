@@ -412,6 +412,9 @@ class ProductionService:
                 self._update_progress(ProductionPhase.FAILED, 0, "사용자에 의해 취소됨")
                 return None, None
 
+            if self.editor_options.get("bgm_mood") and self.editor_options.get("bgm_volume", 0.15) > 0:
+                self._get_editor().preflight_music(None)
+
             planner = self._get_planner()
 
             self._update_progress(ProductionPhase.PLANNING, 30, "RSS 피드 스캔 중...")
@@ -558,6 +561,8 @@ class ProductionService:
             if isinstance(script, ShortsScript):
                 self._update_progress(ProductionPhase.GENERATING, 0, "내레이션 길이 확인 중...")
                 editor = self._get_editor()
+                if hasattr(editor, "preflight_music"):
+                    editor.preflight_music(script)
                 if prepared_audio_paths is None:
                     audio_paths = await editor.prepare_narration(script)
                 else:
@@ -698,6 +703,7 @@ class ProductionService:
                     for index, (scene, mode) in enumerate(zip(script.scenes, visual_modes))
                 ],
                 "estimated_visual_output_cost_usd": round(estimated_cost, 4),
+                "bgm_track": Path(editor.selected_bgm_path).name if getattr(editor, "selected_bgm_path", None) else None,
                 "generated_scenes": generated_scenes,
                 "reused_or_manual_scenes": reused_scenes,
                 "quality_passed": quality_error is None,

@@ -59,6 +59,7 @@ class VideoEditor:
         self.tts_voice = tts_voice
         self.bgm_volume = bgm_volume
         self.bgm_mood = bgm_mood
+        self.selected_bgm_path: Optional[str] = None
         self.subtitle_color = subtitle_color
         self.subtitle_size = subtitle_size
         self.subtitle_y_position = subtitle_y_position
@@ -81,6 +82,20 @@ class VideoEditor:
         if self.tts_voice and self.tts_voice != "auto":
             return self.tts_voice
         return self.voice_map.get(mood.lower(), 'alloy')
+
+    def preflight_music(self, script) -> Optional[str]:
+        """Resolve documented music before narration or visual API calls."""
+        if getattr(self, "bgm_volume", 0) <= 0:
+            self.selected_bgm_path = None
+            return None
+        mood = self.bgm_mood or getattr(script, "mood", "cinematic")
+        self.selected_bgm_path = self.bgm_manager.get_bgm_path(mood)
+        if not self.selected_bgm_path:
+            raise ValueError(
+                f"'{mood}' 분위기의 사용 권한이 기록된 BGM이 없습니다. "
+                "bgm/*.mp3.license.json을 확인하거나 BGM 음량을 0으로 설정하세요."
+            )
+        return self.selected_bgm_path
 
     def _track_temp_file(self, path: str):
         """임시 파일 추적에 추가"""
@@ -140,6 +155,7 @@ class VideoEditor:
 
     async def prepare_narration(self, script) -> List[str]:
         """Generate narration once, before the costly visual generation step."""
+        self.preflight_music(script)
         audio_paths = []
         voice = self._get_voice_for_mood(getattr(script, 'mood', 'cinematic'))
         try:
@@ -179,6 +195,7 @@ class VideoEditor:
             raise ValueError("씬 수와 클립 수가 일치하지 않습니다.")
         if audio_paths is not None and len(audio_paths) != len(script.scenes):
             raise ValueError("씬 수와 내레이션 수가 일치하지 않습니다.")
+        bgm_path = self.preflight_music(script)
         # 시작 시 오래된 임시 파일 정리
         self.cleanup_old_temp_files()
 
@@ -249,24 +266,15 @@ class VideoEditor:
             # 4. BGM
             if progress_callback:
                 progress_callback(75, "BGM 합성 중...")
-            try:
-                mood = self.bgm_mood or getattr(script, 'mood', 'cinematic')
-                bgm_path = self.bgm_manager.get_bgm_path(mood)
-                if bgm_path and os.path.exists(bgm_path):
-                    bgm = AudioFileClip(bgm_path)
-                    # Loop BGM if needed using new syntax
-                    if bgm.duration < final_video.duration:
-                        # AudioFileClip might not support with_effects(Loop) same way?
-                        # Actually audio looping in moviepy is mostly done via audio_loop from afx
-                        from moviepy.audio.fx import AudioLoop
-                        bgm = bgm.with_effects([AudioLoop(duration=final_video.duration)])
-                    else:
-                        bgm = bgm.subclipped(0, final_video.duration)
-                
-                    bgm = bgm.with_volume_scaled(self.bgm_volume)
-                    final_video = final_video.with_audio(CompositeAudioClip([final_video.audio, bgm]))
-            except Exception as e:
-                self.logger.error(f"Error adding BGM: {e}")
+            if bgm_path:
+                bgm = AudioFileClip(bgm_path)
+                if bgm.duration < final_video.duration:
+                    from moviepy.audio.fx import AudioLoop
+                    bgm = bgm.with_effects([AudioLoop(duration=final_video.duration)])
+                else:
+                    bgm = bgm.subclipped(0, final_video.duration)
+                bgm = bgm.with_volume_scaled(self.bgm_volume)
+                final_video = final_video.with_audio(CompositeAudioClip([final_video.audio, bgm]))
 
             settings.output_dir.mkdir(parents=True, exist_ok=True)
             output_filename = str(settings.output_dir / f"final_shorts_{time.time_ns()}.mp4")

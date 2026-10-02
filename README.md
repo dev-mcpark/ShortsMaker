@@ -50,7 +50,7 @@ verification; review published material against its source.
 Production estimates new visual API output cost before narration or media generation and
 stops if it exceeds `MAX_VISUAL_COST_USD`. This is a planning limit, not a provider billing
 cap: prompt tokens, GPT, TTS, retries, and taxes are excluded. It then checks narration length before
-requesting Veo or Gemini media. Scene files in `outputs/clips/scenes/` are keyed by the
+requesting Veo or Gemini media. It also checks for documented music before TTS or visual requests. Scene files in `outputs/clips/scenes/` are keyed by the
 visual prompt, model, duration, and character overlay, so narration edits reuse them.
 Changes to the Veo prompt wrapper invalidate only Veo scene cache entries.
 The editor normalizes the final audio locally after rendering; this adds no API request.
@@ -90,6 +90,23 @@ Configure your API keys in `config/.env`:
 OPENAI_API_KEY=sk-...
 GCP_PROJECT_ID=your-project-id
 ```
+
+### Music for a reviewable render
+
+Place a track named for the selected mood (for example, `bgm/calm_review.mp3`) beside `bgm/calm_review.mp3.license.json`. The editor uses only tracks with a documented **no-attribution** license and a matching SHA-256 hash. Record the real title, artist, source page, and license after checking the source yourself:
+
+```json
+{
+  "title": "Track title",
+  "artist": "Artist name",
+  "source_url": "https://www.youtube.com/audiolibrary",
+  "license": "YouTube Audio Library standard license",
+  "attribution_required": false,
+  "sha256": "64-character SHA-256 of the exact MP3 file"
+}
+```
+
+Run `shasum -a 256 bgm/calm_review.mp3` to obtain the hash. The code checks that the record matches the file; it cannot verify a license claim for you. [YouTube's Audio Library guide](https://support.google.com/youtube/answer/3376882?hl=en) explains its attribution filters. If no matching documented track exists, production stops before narration or visual generation rather than producing a silent video. With an explicitly selected mood, it also stops before paid script planning. Set BGM volume to `0` only for a deliberate silent draft. Older local MP3s without records are not selected.
 
 ### 4. Run ShortsMaker Studio
 ```bash

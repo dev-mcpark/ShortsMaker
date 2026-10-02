@@ -34,7 +34,7 @@ async def render_pair(script: ShortsScript, budget_usd: float) -> None:
         raise ValueError("영상별 비주얼 비용 상한을 넘습니다.")
     print(f"Pair visual upper estimate: ${image_estimate + hybrid_estimate:.3f}", flush=True)
 
-    narrator = VideoEditor()
+    narrator = VideoEditor(bgm_volume=0.0)
     audio_paths = await narrator.prepare_narration(script)
     try:
         for mode in ("image", "hybrid"):

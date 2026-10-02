@@ -31,6 +31,7 @@ The app is a Python modular monolith. `ProductionService` owns orchestration, pr
 | Visual model, duration, or output cost | `src/shorts_maker/services/visual_cost.py`, `generator/video_generator.py`, `utils/config.py` | `tests/test_production_gates.py`, `tests/test_review_regressions.py` |
 | Scene reuse, narration preflight, and upload sequence | `src/shorts_maker/services/production_service.py` | `tests/test_production_gates.py`, `tests/test_workflows.py` |
 | Rendered video and quality gate | `src/shorts_maker/editor/video_editor.py`, `quality_check.py` | `tests/test_production_gates.py` |
+| Music provenance and selection | `src/shorts_maker/utils/bgm_manager.py`, `editor/video_editor.py` | `tests/test_production_gates.py` |
 | Paired production and outcome scorecard | `scripts/paired_review.py`, `src/shorts_maker/services/scorecard.py` | `tests/test_production_gates.py`, `tests/test_scorecard.py` |
 | Browser state and controls | `src/shorts_maker/gui/state/app_state.py`, `gui/pages/`, `gui/components/` | `tests/test_workflows.py` |
 | Scheduled runs | `src/shorts_maker/utils/scheduler.py` | `tests/test_review_regressions.py` |
