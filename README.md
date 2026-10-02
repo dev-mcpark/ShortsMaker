@@ -5,6 +5,7 @@ Development map and agent handoff: [docs/README.md](docs/README.md), [docs/STATU
 AI-powered YouTube Shorts automation pipeline using **Google Veo 3.1** and **Gemini image generation**.
 ShortsMaker researches, writes scripts, generates visuals, and can upload content to YouTube. Review source claims and the finished video before scaling publication.
 Automatic uploads are private review copies; public publication remains a separate editorial decision.
+Automatic API uploads conservatively mark AI-generated visuals for YouTube's synthetic-media disclosure. The manual Publishing tab requires an explicit yes/no choice about realistic AI-generated or altered scenes; review that choice again before making a video public.
 
 ---
 

@@ -181,6 +181,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn(ProductionPhase.UPLOADING, phases)
         self.assertEqual(phases[-1], ProductionPhase.COMPLETED)
         self.assertNotIn(ProductionPhase.COMPLETED, phases[:phases.index(ProductionPhase.UPLOADING)])
+        self.assertIs(service._uploader.upload.await_args.args[1]["contains_synthetic_media"], True)
 
     @patch("shorts_maker.services.production_service.check_video_quality")
     def test_upload_failure_sets_failed_phase(self, _check):

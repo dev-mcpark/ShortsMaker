@@ -23,6 +23,11 @@ def render_publishing_tab(state: 'AppState') -> None:
                 title_input = ui.input('Video Title').props('outlined dark').classes('w-full mb-4')
                 desc_input = ui.textarea('Description').props('outlined dark').classes('w-full h-32 mb-4')
                 tags_input = ui.input('Tags (comma separated)').props('outlined dark').classes('w-full mb-6')
+                ui.label('YouTube AI 사용 공개 선택 (필수)').classes('text-sm text-gray-300')
+                synthetic_input = ui.radio({
+                    'yes': '예: 실제처럼 보이는 AI 생성·변형 장면이 있음',
+                    'no': '아니요: 그런 장면이 없음',
+                }).props('color=red').classes('w-full mb-4')
 
                 def load_metadata():
                     """스크립트에서 메타데이터 로드"""
@@ -43,6 +48,9 @@ def render_publishing_tab(state: 'AppState') -> None:
                     if not state.final_video_path:
                         safe_notify("No video to upload", type='warning')
                         return
+                    if synthetic_input.value not in ('yes', 'no'):
+                        safe_notify('AI 사용 공개 여부를 선택하세요', type='warning')
+                        return
 
                     safe_notify("Uploading...", type='info')
 
@@ -50,7 +58,8 @@ def render_publishing_tab(state: 'AppState') -> None:
                         meta = {
                             "title": title_input.value,
                             "description": desc_input.value,
-                            "tags": [t.strip() for t in tags_input.value.split(',')]
+                            "tags": [t.strip() for t in tags_input.value.split(',')],
+                            "contains_synthetic_media": synthetic_input.value == 'yes',
                         }
 
                         result = await state.get_or_create_service().upload_to_youtube(state.final_video_path, meta)
@@ -92,4 +101,4 @@ def render_publishing_tab(state: 'AppState') -> None:
             with ui.column().classes('gap-2'):
                 ui.label('• YouTube OAuth credentials required (client_secrets.json)').classes('text-xs text-gray-400')
                 ui.label('• Video must be generated first in Pipeline or Generation tab').classes('text-xs text-gray-400')
-                ui.label('• Max duration for Shorts: 60 seconds').classes('text-xs text-gray-400')
+                ui.label('• Current ShortsMaker production limit: 59 seconds').classes('text-xs text-gray-400')

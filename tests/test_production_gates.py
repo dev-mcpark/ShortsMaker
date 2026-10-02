@@ -122,6 +122,25 @@ class ProductionGateTests(unittest.TestCase):
             self.assertEqual(token.read_text(encoding="utf-8"), "{}")
             login.assert_called_once()
 
+    def test_youtube_upload_sends_private_synthetic_disclosure(self):
+        uploader = object.__new__(YouTubeUploader)
+        uploader.logger = Mock()
+        youtube = Mock()
+        youtube.videos.return_value.insert.return_value.next_chunk.return_value = (None, {"id": "video-id"})
+        uploader.get_authenticated_service = Mock(return_value=youtube)
+        with patch("shorts_maker.uploader.youtube_uploader.MediaFileUpload"):
+            for metadata, expected in (
+                ({"title": "Generated"}, True),
+                ({"title": "Documentary", "contains_synthetic_media": False}, False),
+            ):
+                self.assertEqual(uploader._upload_sync("review.mp4", metadata), "video-id")
+                body = youtube.videos.return_value.insert.call_args.kwargs["body"]
+                self.assertEqual(body["status"]["privacyStatus"], "private")
+                self.assertIs(body["status"]["containsSyntheticMedia"], expected)
+            uploader.get_authenticated_service.reset_mock()
+            self.assertIsNone(uploader._upload_sync("review.mp4", {"contains_synthetic_media": "no"}))
+            uploader.get_authenticated_service.assert_not_called()
+
     def test_rendered_audio_is_normalized_without_reencoding_video(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "quiet.mp4"
@@ -332,6 +351,7 @@ class ProductionGateTests(unittest.TestCase):
             self.assertFalse(report["paired_comparison_eligible"])
             self.assertEqual(report["estimated_visual_output_cost_usd"], 0)
             self.assertEqual(report["youtube_id"], "video-id")
+            self.assertIs(report["contains_synthetic_media"], True)
             self.assertIn("uploaded_at_utc", report)
 
     def test_narration_duration_limit_and_audio_reuse(self):

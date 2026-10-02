@@ -61,6 +61,9 @@ class YouTubeUploader:
     def _upload_sync(self, video_path: str, metadata: dict):
         self.logger.info(f"Starting upload to YouTube: {video_path}")
         try:
+            synthetic_media = metadata.get("contains_synthetic_media", True)
+            if not isinstance(synthetic_media, bool):
+                raise ValueError("contains_synthetic_media must be a boolean")
             youtube = self.get_authenticated_service()
             
             body = {
@@ -72,7 +75,8 @@ class YouTubeUploader:
                 },
                 "status": {
                     "privacyStatus": "private", # 처음에는 안전하게 비공개로 업로드
-                    "selfDeclaredMadeForKids": False
+                    "selfDeclaredMadeForKids": False,
+                    "containsSyntheticMedia": synthetic_media,
                 }
             }
 

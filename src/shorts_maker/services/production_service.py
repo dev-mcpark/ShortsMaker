@@ -375,7 +375,7 @@ class ProductionService:
         finally:
             temporary.unlink(missing_ok=True)
 
-    def _record_upload(self, video_path: str, video_id: str) -> Optional[str]:
+    def _record_upload(self, video_path: str, video_id: str, contains_synthetic_media: bool) -> Optional[str]:
         path = Path(video_path).with_suffix(".production.json")
         if not path.is_file():
             return None
@@ -387,6 +387,7 @@ class ProductionService:
             self.logger.warning(f"제작 기록을 갱신할 수 없습니다: {error}")
             return None
         report["youtube_id"] = video_id
+        report["contains_synthetic_media"] = contains_synthetic_media
         report["uploaded_at_utc"] = datetime.now(timezone.utc).isoformat()
         return self._write_report(video_path, report)
 
@@ -776,7 +777,10 @@ class ProductionService:
             video_id = await uploader.upload(video_path, metadata)
 
             if video_id:
-                report_path = await asyncio.to_thread(self._record_upload, video_path, video_id)
+                report_path = await asyncio.to_thread(
+                    self._record_upload, video_path, video_id,
+                    metadata.get("contains_synthetic_media", True),
+                )
                 self._update_progress(ProductionPhase.COMPLETED, 100, f"업로드 완료: {video_id}")
                 return ProductionResult(
                     success=True,
@@ -827,7 +831,8 @@ class ProductionService:
             metadata = upload_metadata or {
                 "title": script.title,
                 "description": script.description,
-                "tags": script.tags
+                "tags": script.tags,
+                "contains_synthetic_media": True,
             }
             upload_result = await self.upload_to_youtube(result.video_path, metadata)
             result.success = upload_result.success
