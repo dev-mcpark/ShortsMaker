@@ -368,15 +368,27 @@ class VideoEditor:
         font = ImageFont.truetype(font_name, font_size)
         lines = []
         for paragraph in text.splitlines():
+            paragraph_lines = []
             line = ""
             for word in paragraph.split():
                 candidate = f"{line} {word}" if line else word
                 if line and font.getlength(candidate) > 860:
-                    lines.append(line)
+                    paragraph_lines.append(line)
                     line = word
                 else:
                     line = candidate
-            lines.append(line)
+            paragraph_lines.append(line)
+            # ponytail: rebalance only a short final word; inspect complex wraps in playback.
+            if len(paragraph_lines) > 1:
+                previous = paragraph_lines[-2].split()
+                last = paragraph_lines[-1]
+                if (len(previous) >= 3 and len(last.split()) == 1
+                        and font.getlength(last) < font_size * 4.5):
+                    balanced = f"{previous[-1]} {last}"
+                    if font.getlength(balanced) <= 860:
+                        paragraph_lines[-2] = " ".join(previous[:-1])
+                        paragraph_lines[-1] = balanced
+            lines.extend(paragraph_lines)
         return "\n".join(lines)
 
     @staticmethod

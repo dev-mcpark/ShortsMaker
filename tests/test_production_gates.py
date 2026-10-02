@@ -454,6 +454,10 @@ class ProductionGateTests(unittest.TestCase):
         self.assertGreater(len(wrapped.splitlines()), 1)
         self.assertEqual(wrapped.replace("\n", " "), text)
         self.assertNotIn("\n.", wrapped)
+        self.assertEqual(
+            VideoEditor._wrap_subtitle("AI가 사람의 우선순위에 맞춰 팀을", "AppleGothic", 60),
+            "AI가 사람의 우선순위에\n맞춰 팀을",
+        )
 
     @patch("shorts_maker.editor.quality_check.VideoFileClip")
     def test_quality_check_rejects_silent_video(self, open_video):
