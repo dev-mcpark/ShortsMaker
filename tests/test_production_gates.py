@@ -171,6 +171,9 @@ class ProductionGateTests(unittest.TestCase):
             }), encoding="utf-8")
             self.assertEqual(manager.get_bgm_path("calm"), str(track))
             self.assertEqual(manager.get_track_path("calm_review.mp3"), str(track))
+            self.assertEqual(manager.list_documented_tracks(), {
+                "calm_review.mp3": "Review track — Example artist",
+            })
             self.assertIsNone(manager.get_track_path("../calm_review.mp3"))
             self.assertIsNone(manager.get_track_path("other.mp3"))
             editor = object.__new__(VideoEditor)
@@ -182,6 +185,7 @@ class ProductionGateTests(unittest.TestCase):
             track.write_bytes(b"replaced music")
             self.assertIsNone(manager.get_bgm_path("calm"))
             self.assertIsNone(manager.get_track_path("calm_review.mp3"))
+            self.assertEqual(manager.list_documented_tracks(), {})
             with self.assertRaisesRegex(ValueError, "사용 권한이 기록된 BGM"):
                 editor.preflight_music(sample_script())
             editor.bgm_volume = 0

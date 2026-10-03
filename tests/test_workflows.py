@@ -72,7 +72,8 @@ class WorkflowTests(unittest.TestCase):
 
     @patch("shorts_maker.services.production_service.check_video_quality")
     def test_session_options_reach_editor_and_parallel_generator(self, _check):
-        state = AppState(mode="image", tts_voice="nova", bgm_mood="cinematic")
+        state = AppState(mode="image", tts_voice="nova", bgm_mood="cinematic",
+                         bgm_track="chosen.mp3")
         with patch.object(settings, "update_api_keys"):
             service = state.new_production_service(parallel_clips=True)
         self.assertIs(state.production_service, service)
@@ -81,6 +82,13 @@ class WorkflowTests(unittest.TestCase):
             service._get_editor()
         self.assertEqual(editor_class.call_args.kwargs["tts_voice"], "nova")
         self.assertEqual(editor_class.call_args.kwargs["bgm_mood"], "cinematic")
+        self.assertEqual(editor_class.call_args.kwargs["bgm_track"], "chosen.mp3")
+
+        state.bgm_track = "other.mp3"
+        with patch.object(settings, "update_api_keys"):
+            refreshed = state.get_or_create_service()
+        self.assertIsNot(refreshed, service)
+        self.assertEqual(refreshed.editor_options["bgm_track"], "other.mp3")
 
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "output.mp4"

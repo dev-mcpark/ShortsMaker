@@ -14,6 +14,7 @@ from shorts_maker.gui.components import (
 from shorts_maker.gui.config.constants import SIDEBAR_HEIGHT, PHASE_NAMES, PHASE_ICONS
 from shorts_maker.gui.config.ui_theme import PHASE_COLORS, SIDEBAR_LEFT, WORKSPACE_CENTER, CONFIG_PANEL_RIGHT
 from shorts_maker.services.production_service import ProductionPhase
+from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.logger import get_logger
 
@@ -238,6 +239,19 @@ def render_main_page() -> None:
                     value=state.bgm_mood
                 ).props('outlined dense dark').classes('w-full mb-3')
                 bgm_select.bind_value(state, 'bgm_mood')
+
+                ui.label('BGM TRACK').classes('text-[10px] text-slate-500 font-semibold mb-1')
+                track_options = {'': 'Auto by mood'}
+                track_options.update(BGMManager().list_documented_tracks())
+                if state.bgm_track and state.bgm_track not in track_options:
+                    track_options[state.bgm_track] = f'Unavailable: {state.bgm_track}'
+                bgm_track_select = ui.select(
+                    options=track_options,
+                    value=state.bgm_track,
+                ).props('outlined dense dark').classes('w-full mb-1')
+                bgm_track_select.bind_value(state, 'bgm_track')
+                ui.label('Choose an exact licensed track after listening; it overrides the mood.') \
+                    .classes('text-[10px] text-slate-500 mb-3')
 
                 ui.label('BGM LEVEL').classes('text-[10px] text-slate-500 font-semibold mb-1')
                 bgm_slider = ui.slider(min=0, max=1, step=0.05, value=state.bgm_volume).props('color=violet')

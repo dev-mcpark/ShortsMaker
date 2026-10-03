@@ -34,6 +34,19 @@ class BGMManager:
     def has_documented_track(self) -> bool:
         return any(self._documented(track) for track in self.bgm_dir.glob("*.mp3"))
 
+    def list_documented_tracks(self) -> dict[str, str]:
+        """Return verified filenames with human-readable credits for an exact choice."""
+        tracks = {}
+        for track in sorted(self.bgm_dir.glob("*.mp3")):
+            if not self._documented(track):
+                continue
+            try:
+                record = json.loads(Path(f"{track}.license.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+            tracks[track.name] = f"{record['title']} — {record['artist']}"
+        return tracks
+
     def get_track_path(self, filename: str) -> Optional[str]:
         """Select one documented filename without falling back to another track."""
         if Path(filename).name != filename or Path(filename).suffix.lower() != ".mp3":

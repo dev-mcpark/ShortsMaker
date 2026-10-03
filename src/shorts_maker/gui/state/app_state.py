@@ -63,6 +63,7 @@ class AppState:
 
     # Editing Options - BGM
     bgm_mood: str = "auto"
+    bgm_track: str = ""
     bgm_volume: float = 0.2
 
     # Editing Options - Subtitles
@@ -103,11 +104,23 @@ class AppState:
 
         if (self._production_service is None
                 or self._production_service.mode != self.mode
+                or self._production_service.editor_options != self._editor_options()
                 or self._production_service.is_cancelled()
                 or (self.openai_key and self.openai_key != settings.openai_api_key)
                 or (self.gcp_project and self.gcp_project != settings.gcp_project_id)):
             return self.new_production_service()
         return self._production_service
+
+    def _editor_options(self) -> Dict[str, Any]:
+        return {
+            "tts_voice": self.tts_voice,
+            "bgm_mood": self.bgm_mood,
+            "bgm_track": self.bgm_track or None,
+            "bgm_volume": self.bgm_volume,
+            "subtitle_color": self.subtitle_color,
+            "subtitle_size": self.subtitle_size,
+            "subtitle_y_position": self.subtitle_y_position,
+        }
 
     def new_production_service(self, parallel_clips: bool = False) -> "ProductionService":
         """Create one configured service for a new production run."""
@@ -119,14 +132,7 @@ class AppState:
             mode=self.mode,
             parallel_clips=parallel_clips,
             character_overlay_config=self.build_character_overlay_config(),
-            editor_options={
-                "tts_voice": self.tts_voice,
-                "bgm_mood": self.bgm_mood,
-                "bgm_volume": self.bgm_volume,
-                "subtitle_color": self.subtitle_color,
-                "subtitle_size": self.subtitle_size,
-                "subtitle_y_position": self.subtitle_y_position,
-            },
+            editor_options=self._editor_options(),
         )
         return self._production_service
 

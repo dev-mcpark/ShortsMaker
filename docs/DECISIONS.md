@@ -115,3 +115,7 @@ The working plan says $0 in new provider calls until a per-round budget is agree
 ## 2026-10-03 — Check the spending switch at direct provider requests
 
 The service-level switch left direct generator, narration, planner, character-video, and Brave search helpers able to issue provider calls. Add a small check immediately before each OpenAI, Google generation, and Brave request, so a direct CLI/helper call also respects `PAID_PRODUCTION_ENABLED=false`. The standalone character-video helper also drops its three automatic Veo attempts in favor of one explicit attempt. This closes a documented bypass without changing local editing or the service's preflight. The switch still has no monetary accounting; direct utilities need their own estimate before enabling it, and a request already in flight is not cancelled by turning it off.
+
+## 2026-10-03 — Let Studio name the reviewed music file
+
+The NASA critique showed that `sci-fi` can select a documented but mismatched song. Keep mood selection for automatic drafts, but list only hash-verified tracks with title and artist in Studio and allow an exact filename override. Preserve a missing prior choice visibly, so the existing preflight fails before paid planning instead of silently falling back to another track. When a session's editor choice changes, create a new production service rather than reusing its cached editor with the old music. This exposes an editorial decision; no metadata can prove musical fit without listening.
