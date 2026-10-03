@@ -23,7 +23,7 @@ After verifying a script against its source, run `python scripts/paired_review.p
 | Visual rights | Original source and credit for each photo or clip, publisher usage terms and any third-party exception, recognizable people or protected logos, and whether the video implies an agency's endorsement |
 | AI disclosure | Check whether any AI-generated or altered scene appears photorealistic or changes a real event/place. Record the YouTube AI-use choice and verify it before publication; obvious diagrams and script assistance alone do not require disclosure under [YouTube's guidance](https://support.google.com/youtube/answer/14328491?hl=en). |
 | Visual rhythm | Distinct composition or meaningful motion across scenes; note repeated photos and static stretches even when every individual frame is accurate |
-| Music | Whether a suitable bed is audible under speech, does not mask narration, and has documented rights for publication; intentional silence needs an editorial reason |
+| Music | Compare the script's `music_direction` with the selected track and the full rendered scene arc by ear; record whether the bed is audible under speech, avoids masking narration, and has documented rights for publication. Intentional silence needs an editorial reason. |
 | Cost | Sidecar's preflight visual output estimate, actual provider charge attributable to the run, rejected generations, and production time |
 | Outcome, if published | Video ID, publish date, retention and revenue after a consistent observation window |
 

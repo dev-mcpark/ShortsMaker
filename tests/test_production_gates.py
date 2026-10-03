@@ -450,6 +450,7 @@ class ProductionGateTests(unittest.TestCase):
             output = Path(directory) / "output.mp4"
             output.touch()
             script = sample_script()
+            script.music_direction = "조용한 호기심, 강한 드럼은 피함"
             service = ProductionService(mode="hybrid")
             service._editor = fake_editor(output)
             service._generator = SimpleNamespace(generate_scene_clip=AsyncMock(
@@ -466,6 +467,7 @@ class ProductionGateTests(unittest.TestCase):
             self.assertTrue(report["quality_passed"])
             self.assertEqual(report["source_url"], script.source_url)
             self.assertEqual(report["production_mode"], "hybrid")
+            self.assertEqual(report["music_direction"], script.music_direction)
             self.assertTrue(report["paired_comparison_eligible"])
             self.assertEqual([scene["visual_mode"] for scene in report["scenes"]], ["video", "image"])
             self.assertEqual([scene["source"] for scene in report["scenes"]], ["generated", "generated"])

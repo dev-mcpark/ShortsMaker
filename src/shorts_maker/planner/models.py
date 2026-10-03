@@ -47,6 +47,7 @@ class ShortsScript(BaseModel):
     tags: List[str]
     mood: str
     style: str
+    music_direction: str = ""
     source_name: str
     source_url: str
     generation_mode: str  # 'image', 'video' or 'hybrid'

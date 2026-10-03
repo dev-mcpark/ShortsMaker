@@ -302,6 +302,7 @@ class ReviewRegressions(unittest.TestCase):
         script = {
             "title": "드론 현장 시험", "description": "출처 NASA", "tags": [],
             "mood": "calm", "style": "The Info Curator", "source_name": "NASA",
+            "music_direction": "조용한 호기심, 강한 드럼은 피함",
             "source_url": "https://example.com", "generation_mode": "hybrid",
             "scenes": [{"scene_number": 1, "visual_mode": "image",
                         "visual_description": "Illustrative robot diagram",
@@ -322,7 +323,9 @@ class ReviewRegressions(unittest.TestCase):
         }))
 
         self.assertEqual(result.scenes[0].visual_mode, "image")
+        self.assertEqual(result.music_direction, "조용한 호기심, 강한 드럼은 피함")
         prompt = completion.await_args.kwargs["messages"][0]["content"]
+        self.assertIn("Music direction", prompt)
         self.assertIn("primary article's real location", prompt)
         self.assertIn("clearly illustrative diagram", prompt)
         self.assertIn("one coherent shot", prompt)
@@ -330,6 +333,10 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("Reveal what actually happened", prompt)
         self.assertNotIn("4k resolution", prompt.lower())
         self.assertNotIn("15%", prompt)
+
+        legacy = script.copy()
+        legacy.pop("music_direction")
+        self.assertEqual(ShortsScript.model_validate(legacy).music_direction, "")
 
     def test_scene_error_stops_before_editing(self):
         service = ProductionService(mode="image")

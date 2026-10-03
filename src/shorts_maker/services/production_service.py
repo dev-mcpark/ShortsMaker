@@ -726,6 +726,7 @@ class ProductionService:
                     for index, (scene, mode) in enumerate(zip(script.scenes, visual_modes))
                 ],
                 "estimated_visual_output_cost_usd": round(estimated_cost, 4),
+                "music_direction": getattr(script, "music_direction", ""),
                 "bgm_track": Path(editor.selected_bgm_path).name if getattr(editor, "selected_bgm_path", None) else None,
                 "subtitle_style": getattr(editor, "subtitle_style", "soft"),
                 "generated_scenes": generated_scenes,

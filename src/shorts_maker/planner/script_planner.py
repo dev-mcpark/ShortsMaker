@@ -632,6 +632,9 @@ class ScriptPlanner:
         - If realistic AI reconstruction is proposed, identify it as a reconstruction in the description. The upload disclosure choice remains a human review step.
 
         **Mood:** Choose best from [{mood_list_str}].
+        **Music direction:** Write one short Korean sentence for an editor choosing stock BGM.
+        Describe the story's emotional arc, how strong the beat should feel under narration,
+        and one mood to avoid. This is a review brief, not a claim that any track is approved.
 
         Output JSON with every placeholder replaced by source-specific content:
         {{
@@ -640,6 +643,7 @@ class ScriptPlanner:
             "tags": ["category_name", "shorts", "trend"],
             "mood": "energetic",
             "style": "The Info Curator",
+            "music_direction": "호기심 어린 낮은 박자로 시작해 발견 순간만 가볍게 고조하고, 과장된 승리감은 피함",
             "source_name": "Source Name",
             "source_url": "https://example.com",
             "generation_mode": "{self.generation_mode}",

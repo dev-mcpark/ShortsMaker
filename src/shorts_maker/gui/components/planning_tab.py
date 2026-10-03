@@ -57,6 +57,10 @@ def render_planning_tab(state: 'AppState') -> None:
                     with ui.column().classes('gap-1 flex-grow mr-4'):
                         ui.label(script.title).classes('text-lg font-bold text-white leading-tight')
                         ui.label(script.description).classes('text-xs text-slate-400 leading-relaxed mt-1')
+                        if script.music_direction:
+                            ui.label(f'음악 연출: {script.music_direction}').classes(
+                                'text-xs text-teal-300 leading-relaxed mt-2'
+                            )
 
                     mode = getattr(script, 'generation_mode', 'image')
                     mode_color = 'bg-violet-600' if mode == 'video' else 'bg-teal-600' if mode == 'hybrid' else 'bg-blue-600'
