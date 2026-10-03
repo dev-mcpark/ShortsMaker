@@ -127,3 +127,7 @@ A broad `mood` value did not explain why a track should fit the NASA A cut. Add 
 ## 2026-10-03 — Disable hidden OpenAI planning retries
 
 The installed OpenAI Python SDK defaults to two retries, while the planner, analyzer, enricher, and validator constructed clients without an override. Use `max_retries=0` for those four clients, matching the narration client's explicit retry accounting. A failed request may still have provider-side cost, and the planner can deliberately inspect another topic or be rerun, so this change bounds each SDK call rather than a whole production round. It improves cost predictability without changing prompts or source checks.
+
+## 2026-10-03 — Verify controlled music and caption comparisons
+
+A music choice and a caption treatment need separate listening and viewing judgments. Generate a local three-cut review page only after comparing encoded streams: the music alternate must keep the baseline video exactly, while the caption alternate must keep its audio exactly. `scripts/creative_review.py` makes this check reproducible and keeps the page with ignored video files. It is not a perceptual score or owner acceptance; neither an exact shared stream nor a license record can prove the song fits the story.
