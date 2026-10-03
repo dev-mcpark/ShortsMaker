@@ -34,6 +34,20 @@ class ReviewRegressions(unittest.TestCase):
         paid.start()
         self.addCleanup(paid.stop)
 
+    def test_planning_openai_clients_have_no_hidden_sdk_retries(self):
+        with patch.object(settings, "openai_api_key", "test-key"):
+            planner = ScriptPlanner()
+        clients = [
+            planner.client, planner.validator.client,
+            planner.content_analyzer.client, planner.content_enricher.client,
+        ]
+        self.assertEqual([client.max_retries for client in clients], [0, 0, 0, 0])
+
+        async def close_clients():
+            await asyncio.gather(*(client.close() for client in clients))
+
+        asyncio.run(close_clients())
+
     def test_project_root_does_not_depend_on_launch_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch("shorts_maker.utils.config.Path.cwd", return_value=Path(directory)):

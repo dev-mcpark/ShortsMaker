@@ -19,7 +19,7 @@ class ContentAnalyzer:
         if not settings.openai_api_key:
             raise ValueError("OPENAI_API_KEY is not configured.")
             
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        self.client = AsyncOpenAI(api_key=settings.openai_api_key, max_retries=0)
         self.model = "gpt-4o"  # 분석을 위해 강력한 모델 사용
 
     async def analyze_content(self, content: ArticleContent) -> Optional[ContentAnalysis]:

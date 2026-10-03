@@ -20,7 +20,7 @@ class ContentEnricher:
         if not settings.openai_api_key:
             raise ValueError("OPENAI_API_KEY is not configured.")
             
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        self.client = AsyncOpenAI(api_key=settings.openai_api_key, max_retries=0)
         
         # [TIP] 실제 사용 시 Brave Search API 등의 키를 설정에 추가하는 것을 권장합니다.
         # 현재는 별도의 키가 없을 때를 대비하여 Placeholder로 작동하거나 

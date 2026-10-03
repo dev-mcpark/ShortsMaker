@@ -123,3 +123,7 @@ The NASA critique showed that `sci-fi` can select a documented but mismatched so
 ## 2026-10-03 — Carry a music brief with the story
 
 A broad `mood` value did not explain why a track should fit the NASA A cut. Add an optional `music_direction` sentence to the script, request it in the existing planning call, show it in Studio, and copy it beside the selected track in the private production record. Older scripts default to an empty brief. For the NASA pilot, describe curious restraint, a small lift at the branch decision, and a calm Earth-test ending; avoid horror, triumphant scoring, and a beat that masks speech. The brief guides human listening and adds no API request, but it cannot certify suitability.
+
+## 2026-10-03 — Disable hidden OpenAI planning retries
+
+The installed OpenAI Python SDK defaults to two retries, while the planner, analyzer, enricher, and validator constructed clients without an override. Use `max_retries=0` for those four clients, matching the narration client's explicit retry accounting. A failed request may still have provider-side cost, and the planner can deliberately inspect another topic or be rerun, so this change bounds each SDK call rather than a whole production round. It improves cost predictability without changing prompts or source checks.

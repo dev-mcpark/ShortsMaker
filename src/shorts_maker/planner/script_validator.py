@@ -24,7 +24,7 @@ class ScriptValidator:
                 "Please set it in .env file or config/.env"
             )
 
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        self.client = AsyncOpenAI(api_key=settings.openai_api_key, max_retries=0)
 
     async def validate_script(self, script: Any, source_text: str = "") -> ValidationResult:
         """

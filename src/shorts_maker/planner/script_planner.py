@@ -42,7 +42,7 @@ class ScriptPlanner:
                 "Please set it in .env file or config/.env"
             )
 
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        self.client = AsyncOpenAI(api_key=settings.openai_api_key, max_retries=0)
         self.history_file = str(settings.topic_history_file)
         self.url_history_file = str(settings.url_history_file)
         self.script_output_dir = str(settings.scripts_dir)

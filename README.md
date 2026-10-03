@@ -58,6 +58,7 @@ visual prompt, model, duration, and character overlay, so narration edits reuse 
 Changes to the Veo prompt wrapper invalidate only Veo scene cache entries.
 The editor fades the selected BGM at the start and end, then normalizes the final audio locally after rendering; this adds no API request.
 Automatic narration uses OpenAI. It retries a transient connection or server failure once, then stops with the original error; it does not silently switch to a different voice provider.
+Planning, analysis, enrichment, and editorial validation disable OpenAI SDK automatic retries. A new candidate or manual rerun can still make a separate paid request, so check provider usage before another round.
 To retry a failed scene from the full pipeline, keep the
 script and run **Start Production** in the Generation tab; a new full pipeline run
 plans a new script. Before completion and again before upload, the rendered video is
