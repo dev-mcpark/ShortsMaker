@@ -34,6 +34,13 @@ class BGMManager:
     def has_documented_track(self) -> bool:
         return any(self._documented(track) for track in self.bgm_dir.glob("*.mp3"))
 
+    def get_track_path(self, filename: str) -> Optional[str]:
+        """Select one documented filename without falling back to another track."""
+        if Path(filename).name != filename or Path(filename).suffix.lower() != ".mp3":
+            return None
+        track = self.bgm_dir / filename
+        return str(track) if track.is_file() and self._documented(track) else None
+
     def get_bgm_path(self, mood: str) -> Optional[str]:
         mood = mood.lower()
         category = {

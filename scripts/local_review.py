@@ -31,11 +31,15 @@ def collect_local_inputs(script: ShortsScript, clips_dir: Path, audio_dir: Path)
     return clips, audio
 
 
-async def render_local(script: ShortsScript, clips_dir: Path, audio_dir: Path, bgm_volume: float):
+async def render_local(script: ShortsScript, clips_dir: Path, audio_dir: Path,
+                       bgm_volume: float, bgm_track: str | None = None):
     if not 0 <= bgm_volume <= 1:
         raise ValueError("BGM volume must be between 0 and 1")
     clips, audio = collect_local_inputs(script, clips_dir, audio_dir)
-    service = ProductionService(mode="video", editor_options={"bgm_mood": "auto", "bgm_volume": bgm_volume})
+    options = {"bgm_mood": "auto", "bgm_volume": bgm_volume}
+    if bgm_track:
+        options["bgm_track"] = bgm_track
+    service = ProductionService(mode="video", editor_options=options)
     result = await service.produce_video(script, manual_clip_paths=clips, prepared_audio_paths=audio)
     if not result.success:
         raise RuntimeError(result.error)
@@ -49,9 +53,10 @@ def main():
     parser.add_argument("clips_dir", type=Path)
     parser.add_argument("audio_dir", type=Path)
     parser.add_argument("--bgm-volume", type=float, default=0.2)
+    parser.add_argument("--bgm-track", help="Exact documented MP3 filename in bgm/")
     args = parser.parse_args()
     script = ShortsScript.model_validate_json(args.script.read_text(encoding="utf-8"))
-    asyncio.run(render_local(script, args.clips_dir, args.audio_dir, args.bgm_volume))
+    asyncio.run(render_local(script, args.clips_dir, args.audio_dir, args.bgm_volume, args.bgm_track))
 
 
 if __name__ == "__main__":

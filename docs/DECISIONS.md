@@ -99,3 +99,7 @@ The owner found the documented “Feedback Dreams” music wholly mismatched to 
 ## 2026-10-03 — Keep a capability distinct from an observed result
 
 In the NASA review script, “the rover collected a sample” converted the [source's description of its robotic-arm sampling role](https://science.nasa.gov/blogs/planetary-expeditions/2026/09/15/nasa-field-tests-ai-fleet-capability-for-science-exploration/) into a specific past event the article did not establish. Change the local narration to describe the role, and ask both the planner and existing validator to preserve this distinction. This adds no model call. The prompt rule reduces the risk but cannot verify generated scripts without a source check and human review.
+
+## 2026-10-03 — Let the local music review name one track
+
+A script mood is too broad to guarantee that a stock song fits an individual story. Keep mood selection for automatic drafts, but allow `scripts/local_review.py --bgm-track` to name one documented MP3 exactly. Resolve it before paid planning when used in production, and fail if it is missing or its hash differs instead of falling back to a mood match. This keeps stock music comparison local and free; the owner still decides musical fit by listening.

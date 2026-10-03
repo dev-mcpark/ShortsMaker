@@ -417,7 +417,8 @@ class ProductionService:
                 return None, None
 
             if self.editor_options.get("bgm_volume", 0.2) > 0:
-                if self.editor_options.get("bgm_mood") in (None, "", "auto"):
+                if (not self.editor_options.get("bgm_track")
+                        and self.editor_options.get("bgm_mood") in (None, "", "auto")):
                     if not BGMManager().has_documented_track():
                         raise ValueError("사용 권한이 기록된 BGM이 없습니다")
                 else:

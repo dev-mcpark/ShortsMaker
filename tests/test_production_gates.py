@@ -118,6 +118,9 @@ class ProductionGateTests(unittest.TestCase):
                 "sha256": hashlib.sha256(track.read_bytes()).hexdigest(),
             }), encoding="utf-8")
             self.assertEqual(manager.get_bgm_path("calm"), str(track))
+            self.assertEqual(manager.get_track_path("calm_review.mp3"), str(track))
+            self.assertIsNone(manager.get_track_path("../calm_review.mp3"))
+            self.assertIsNone(manager.get_track_path("other.mp3"))
             editor = object.__new__(VideoEditor)
             editor.bgm_manager = manager
             editor.bgm_mood = "auto"
@@ -126,6 +129,7 @@ class ProductionGateTests(unittest.TestCase):
             editor.bgm_mood = "calm"
             track.write_bytes(b"replaced music")
             self.assertIsNone(manager.get_bgm_path("calm"))
+            self.assertIsNone(manager.get_track_path("calm_review.mp3"))
             with self.assertRaisesRegex(ValueError, "사용 권한이 기록된 BGM"):
                 editor.preflight_music(sample_script())
             editor.bgm_volume = 0
@@ -146,6 +150,12 @@ class ProductionGateTests(unittest.TestCase):
         planning._planner = SimpleNamespace(plan_content=AsyncMock())
         self.assertEqual(asyncio.run(planning.generate_script()), (None, None))
         planning._planner.plan_content.assert_not_awaited()
+
+        exact_track = ProductionService(editor_options={"bgm_track": "missing.mp3"})
+        exact_track._editor = SimpleNamespace(preflight_music=Mock(side_effect=ValueError("exact music missing")))
+        exact_track._planner = SimpleNamespace(plan_content=AsyncMock())
+        self.assertEqual(asyncio.run(exact_track.generate_script()), (None, None))
+        exact_track._planner.plan_content.assert_not_awaited()
 
         with patch.object(BGMManager, "has_documented_track", return_value=False):
             automatic_mood = ProductionService(editor_options={"bgm_mood": "auto"})

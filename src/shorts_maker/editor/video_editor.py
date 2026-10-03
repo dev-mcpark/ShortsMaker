@@ -30,6 +30,7 @@ class VideoEditor:
         subtitle_size: int = 54,
         subtitle_y_position: int = 1300,
         bgm_mood: Optional[str] = None,
+        bgm_track: Optional[str] = None,
     ):
         """
         VideoEditor 초기화
@@ -51,6 +52,7 @@ class VideoEditor:
         self.tts_voice = tts_voice
         self.bgm_volume = bgm_volume
         self.bgm_mood = bgm_mood
+        self.bgm_track = bgm_track
         self.selected_bgm_path: Optional[str] = None
         self.subtitle_color = subtitle_color
         self.subtitle_size = subtitle_size
@@ -80,12 +82,14 @@ class VideoEditor:
         if getattr(self, "bgm_volume", 0) <= 0:
             self.selected_bgm_path = None
             return None
+        track = getattr(self, "bgm_track", None)
         mood = (getattr(script, "mood", "cinematic") if self.bgm_mood in (None, "", "auto")
                 else self.bgm_mood)
-        self.selected_bgm_path = self.bgm_manager.get_bgm_path(mood)
+        self.selected_bgm_path = (self.bgm_manager.get_track_path(track) if track
+                                  else self.bgm_manager.get_bgm_path(mood))
         if not self.selected_bgm_path:
             raise ValueError(
-                f"'{mood}' 분위기의 사용 권한이 기록된 BGM이 없습니다. "
+                f"'{track or mood}'의 사용 권한이 기록된 BGM이 없습니다. "
                 "bgm/*.mp3.license.json을 확인하거나 BGM 음량을 0으로 설정하세요."
             )
         return self.selected_bgm_path
