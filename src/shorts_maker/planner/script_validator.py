@@ -43,6 +43,9 @@ class ScriptValidator:
            numbers, dates, names, quotations, and causal claims. If the excerpt is
            too thin to judge a claim, reject it rather than guess. Use reason
            `unsupported_claim` or `insufficient_source` and name the claim in feedback.
+           Distinguish capability or assigned role from an observed action or result;
+           reject a past-tense event claim when the source only describes what a
+           device can do or was meant to do.
            Do not use outside knowledge as evidence. Visuals may be illustrative,
            but must not present invented footage as a real event. Compare visual
            descriptions and motion instructions with the source's location,
