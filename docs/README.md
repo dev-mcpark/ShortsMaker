@@ -5,6 +5,7 @@ This is the code map for Codex, Claude Code, and contributors. For what is curre
 The current evaluation method for finished videos is [QUALITY_EVALUATION.md](QUALITY_EVALUATION.md). `scripts/local_review.py` renders a zero-provider-call edit from complete local scene clips and narration; `scripts/paired_review.py` runs the budgeted image/hybrid comparison. The private outcome summary is `src/shorts_maker/services/scorecard.py`.
 The curated visual prompt rules and official source links are in [VISUAL_PROMPTING.md](VISUAL_PROMPTING.md).
 The source-grounded story, motion, music, and spending recipe is [CREATIVE_FORMAT.md](CREATIVE_FORMAT.md).
+The current NASA review's exact six-scene, source-checked narration and visual brief is [nasa_field_test_review.json](nasa_field_test_review.json). It is a shareable script for editorial handoff; its video clips, scratch voice, music MP3, sidecar, and review metrics stay local and ignored.
 
 Earlier PDCA plans, designs, analyses, and reports under `01-plan/` through `04-report/` and `archive/` are preserved as historical context. They describe past proposals and completion reports, not the current implementation contract. Verify them against code before reusing a pattern. Local `.pdca-*` snapshots and `.bkit-memory.json` are tool state and remain untracked.
 
