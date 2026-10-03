@@ -91,3 +91,7 @@ The regular pipeline allowed four Veo attempts while its visual preflight priced
 ## 2026-10-03 — Keep the question-first tone for the NASA pilot
 
 The owner preferred A's question-first storytelling voice over B's result-first voice. Continue the NASA pilot with A's specific dilemma, early observed choice, and causal explanation. Correct factual phrasing against the primary article even when the preferred cut needs revision: the drone briefly paused but did not abandon its original task. This preference applies to the current pilot; test other topics before making question-first delivery a universal rule. Full editorial and publication acceptance remain separate decisions.
+
+## 2026-10-03 — Change the NASA music bed and soften captions
+
+The owner found the documented “Feedback Dreams” music wholly mismatched to the NASA A story, while the visual rhythm was acceptable and caption styling felt rigid. Keep the visual timing. Route `sci-fi` to a documented [Mixkit “Digital Clouds” technology track](https://mixkit.co/free-stock-music/tag/technology/) and retain “Feedback Dreams” under `mysterious`. Use the existing [free stock music license](https://mixkit.co/license/modal/musicFree/) and local hash check instead of adding a paid music API. Start this louder track at 20% under speech, subject to playback review. Use softer white Korean captions with a slimmer dark outline and rebalance short final lines. This is one pilot treatment, not proof of musical fit, final voice clarity, or a universal style.

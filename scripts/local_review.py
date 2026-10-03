@@ -48,7 +48,7 @@ def main():
     parser.add_argument("script", type=Path)
     parser.add_argument("clips_dir", type=Path)
     parser.add_argument("audio_dir", type=Path)
-    parser.add_argument("--bgm-volume", type=float, default=0.4)
+    parser.add_argument("--bgm-volume", type=float, default=0.2)
     args = parser.parse_args()
     script = ShortsScript.model_validate_json(args.script.read_text(encoding="utf-8"))
     asyncio.run(render_local(script, args.clips_dir, args.audio_dir, args.bgm_volume))

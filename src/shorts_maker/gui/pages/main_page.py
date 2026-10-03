@@ -234,7 +234,7 @@ def render_main_page() -> None:
 
                 ui.label('BGM MOOD').classes('text-[10px] text-slate-500 font-semibold mb-1')
                 bgm_select = ui.select(
-                    options={'auto': 'Follow Script', 'calm': 'Calm & Soft', 'sci-fi': 'Sci-Fi', 'mysterious': 'Mysterious', 'energetic': 'Energetic Pop', 'dark': 'Dark Mystery', 'synthwave': 'Retro Synthwave'},
+                    options={'auto': 'Follow Script', 'calm': 'Calm & Soft', 'sci-fi': 'Sci-Fi', 'futuristic': 'Curious Tech', 'mysterious': 'Mysterious', 'energetic': 'Energetic Pop', 'dark': 'Dark Mystery', 'synthwave': 'Retro Synthwave'},
                     value=state.bgm_mood
                 ).props('outlined dense dark').classes('w-full mb-3')
                 bgm_select.bind_value(state, 'bgm_mood')

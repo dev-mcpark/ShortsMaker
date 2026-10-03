@@ -160,6 +160,22 @@ class ProductionGateTests(unittest.TestCase):
             self.assertEqual(asyncio.run(automatic_mood.generate_script())[0].mood, "calm")
             automatic_mood._editor.preflight_music.assert_not_called()
 
+    def test_sci_fi_music_prefers_documented_futuristic_track(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(settings, "bgm_dir", Path(directory)):
+            for mood in ("mysterious", "futuristic"):
+                track = Path(directory) / f"{mood}_sample.mp3"
+                track.write_bytes(mood.encode())
+                Path(f"{track}.license.json").write_text(json.dumps({
+                    "title": mood, "artist": "Test artist",
+                    "source_url": "https://example.com/music",
+                    "license": "No attribution required", "attribution_required": False,
+                    "sha256": hashlib.sha256(track.read_bytes()).hexdigest(),
+                }), encoding="utf-8")
+            self.assertEqual(
+                BGMManager().get_bgm_path("sci-fi"),
+                str(Path(directory) / "futuristic_sample.mp3"),
+            )
+
     def test_youtube_refresh_failure_preserves_saved_token(self):
         with tempfile.TemporaryDirectory() as directory:
             token = Path(directory) / "token.json"
@@ -532,6 +548,11 @@ class ProductionGateTests(unittest.TestCase):
         self.assertEqual(
             VideoEditor._wrap_subtitle("AI가 사람의 우선순위에 맞춰 팀을", "AppleGothic", 60),
             "AI가 사람의 우선순위에\n맞춰 팀을",
+        )
+        self.assertEqual(
+            VideoEditor._wrap_subtitle("2026년 버지니아에서 NASA는 드론 한 대와",
+                                        "/System/Library/Fonts/AppleSDGothicNeo.ttc", 54),
+            "2026년 버지니아에서 NASA는\n드론 한 대와",
         )
 
     @patch("shorts_maker.editor.quality_check.VideoFileClip")

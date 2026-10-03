@@ -25,9 +25,9 @@ class VideoEditor:
     def __init__(
         self,
         tts_voice: str = "alloy",
-        bgm_volume: float = 0.4,
-        subtitle_color: str = "#FFD700",
-        subtitle_size: int = 60,
+        bgm_volume: float = 0.2,
+        subtitle_color: str = "#F6F8FA",
+        subtitle_size: int = 54,
         subtitle_y_position: int = 1300,
         bgm_mood: Optional[str] = None,
     ):
@@ -370,16 +370,22 @@ class VideoEditor:
                 else:
                     line = candidate
             paragraph_lines.append(line)
-            # ponytail: rebalance only a short final word; inspect complex wraps in playback.
+            # ponytail: move at most two words; inspect complex wraps in playback.
             if len(paragraph_lines) > 1:
                 previous = paragraph_lines[-2].split()
                 last = paragraph_lines[-1]
-                if (len(previous) >= 3 and len(last.split()) == 1
-                        and font.getlength(last) < font_size * 4.5):
+                moved = 0
+                while (len(previous) >= 3 and moved < 2
+                       and font.getlength(last) < font.getlength(" ".join(previous))
+                       * (0.6 if moved == 0 else 0.4)):
                     balanced = f"{previous[-1]} {last}"
-                    if font.getlength(balanced) <= 860:
-                        paragraph_lines[-2] = " ".join(previous[:-1])
-                        paragraph_lines[-1] = balanced
+                    if font.getlength(balanced) > 860:
+                        break
+                    last = balanced
+                    previous.pop()
+                    moved += 1
+                paragraph_lines[-2] = " ".join(previous)
+                paragraph_lines[-1] = last
             lines.extend(paragraph_lines)
         return "\n".join(lines)
 
@@ -456,7 +462,7 @@ class VideoEditor:
                         method='caption',
                         size=(900, None),
                         text_align='center',
-                        stroke_color='black',
+                        stroke_color='#102536',
                         stroke_width=stroke_width,
                     )
                     clips.append(place(clip, start, length))
@@ -466,7 +472,7 @@ class VideoEditor:
                 raise
 
         try:
-            return render('AppleGothic', self.subtitle_size, self.subtitle_color, 3)
+            return render('/System/Library/Fonts/AppleSDGothicNeo.ttc', self.subtitle_size, self.subtitle_color, 2)
         except Exception as e:
             self.logger.error(f"❌ Subtitle error: {e}")
             try:

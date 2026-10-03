@@ -37,7 +37,7 @@ class BGMManager:
     def get_bgm_path(self, mood: str) -> Optional[str]:
         mood = mood.lower()
         category = {
-            "luxury": "corporate", "sci-fi": "mysterious",
+            "luxury": "corporate", "sci-fi": "futuristic",
             "suspense": "mysterious", "emotional": "calm",
         }.get(mood, mood)
         tracks = sorted(self.bgm_dir.glob("*.mp3"))

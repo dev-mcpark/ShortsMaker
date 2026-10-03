@@ -63,11 +63,11 @@ class AppState:
 
     # Editing Options - BGM
     bgm_mood: str = "auto"
-    bgm_volume: float = 0.4
+    bgm_volume: float = 0.2
 
     # Editing Options - Subtitles
-    subtitle_color: str = "#FFFF00"
-    subtitle_size: int = 60
+    subtitle_color: str = "#F6F8FA"
+    subtitle_size: int = 54
     subtitle_y_position: int = 1350
 
     # Character Overlay Options
