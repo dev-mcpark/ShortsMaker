@@ -32,6 +32,8 @@ async def render_pair(script: ShortsScript, budget_usd: float) -> None:
         )
     if max(image_estimate, hybrid_estimate) > settings.max_visual_cost_usd:
         raise ValueError("영상별 비주얼 비용 상한을 넘습니다.")
+    if not settings.paid_production_enabled:
+        raise ValueError(ProductionService.PAID_WORK_DISABLED)
     print(f"Pair visual upper estimate: ${image_estimate + hybrid_estimate:.3f}", flush=True)
 
     narrator = VideoEditor(bgm_volume=0.0)

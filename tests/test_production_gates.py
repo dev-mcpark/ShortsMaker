@@ -45,6 +45,11 @@ def fake_editor(output):
 
 
 class ProductionGateTests(unittest.TestCase):
+    def setUp(self):
+        paid = patch.object(settings, "paid_production_enabled", True)
+        paid.start()
+        self.addCleanup(paid.stop)
+
     def test_local_editor_needs_no_openai_key_until_tts(self):
         with patch.object(settings, "openai_api_key", ""), patch(
             "shorts_maker.editor.video_editor.AsyncOpenAI"
@@ -272,6 +277,55 @@ class ProductionGateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "비교 실험 상한"):
                 asyncio.run(render_pair(script, budget_usd=0.50))
         editor.assert_not_called()
+
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_zero_paid_round_blocks_api_work_but_allows_complete_local_edit(self, _check):
+        with patch.object(settings, "paid_production_enabled", False):
+            planning = ProductionService(editor_options={"bgm_volume": 0})
+            planning._planner = SimpleNamespace(plan_content=AsyncMock())
+            self.assertEqual(asyncio.run(planning.generate_script()), (None, None))
+            planning._planner.plan_content.assert_not_awaited()
+            full = asyncio.run(planning.full_pipeline())
+            self.assertFalse(full.success)
+            self.assertIn("PAID_PRODUCTION_ENABLED", full.error)
+            planning._planner.plan_content.assert_not_awaited()
+
+            context = SimpleNamespace(attempt_count=0, max_attempts=2, source_item={})
+            planning._planner.regenerate = AsyncMock()
+            self.assertIsNone(asyncio.run(planning.regenerate_script(context, "revise")))
+            self.assertEqual(context.attempt_count, 0)
+            planning._planner.regenerate.assert_not_awaited()
+
+            paid_video = ProductionService(mode="image", editor_options={"bgm_volume": 0})
+            paid_video._editor = fake_editor("unused.mp4")
+            paid_video._generator = SimpleNamespace(generate_scene_clip=AsyncMock())
+            result = asyncio.run(paid_video.produce_video(sample_script()))
+            self.assertFalse(result.success)
+            self.assertIn("PAID_PRODUCTION_ENABLED", result.error)
+            paid_video._editor.prepare_narration.assert_not_awaited()
+            paid_video._generator.generate_scene_clip.assert_not_awaited()
+
+            with tempfile.TemporaryDirectory() as directory:
+                clip = Path(directory) / "scene.mp4"
+                output = Path(directory) / "review.mp4"
+                clip.touch()
+                output.touch()
+                script = sample_script()
+                script.scenes = script.scenes[:1]
+                local = ProductionService(mode="video", editor_options={"bgm_volume": 0})
+                local._editor = fake_editor(output)
+                local._editor.validate_narration = Mock()
+                result = asyncio.run(local.produce_video(
+                    script, manual_clip_paths={1: str(clip)},
+                    prepared_audio_paths=["prepared.wav"],
+                ))
+                self.assertTrue(result.success)
+                local._editor.prepare_narration.assert_not_awaited()
+
+            with patch("scripts.paired_review.VideoEditor") as narrator:
+                with self.assertRaisesRegex(ValueError, "PAID_PRODUCTION_ENABLED"):
+                    asyncio.run(render_pair(sample_script(), budget_usd=2.0))
+            narrator.assert_not_called()
 
     @patch("shorts_maker.services.production_service.check_video_quality")
     @patch("shorts_maker.services.production_service.asyncio.sleep", new_callable=AsyncMock)

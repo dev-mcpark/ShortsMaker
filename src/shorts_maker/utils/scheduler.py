@@ -331,10 +331,20 @@ class ScheduleManager:
         """스케줄된 파이프라인 실행"""
         from shorts_maker.services.production_service import ProductionService
         from shorts_maker.utils.bgm_manager import BGMManager
+        from shorts_maker.utils.config import settings
 
         self.logger.info(f"=== Executing scheduled pipeline: {schedule['name']} ===")
 
         try:
+            if not settings.paid_production_enabled:
+                self.update_schedule(schedule['id'], {
+                    'last_run': datetime.now().isoformat(),
+                    'run_count': schedule.get('run_count', 0) + 1,
+                    'last_result': 'paid_production_disabled',
+                    'enabled': False,
+                })
+                self.logger.warning("Scheduled pipeline paused: paid production disabled")
+                return
             if not BGMManager().has_documented_track():
                 self.update_schedule(schedule['id'], {
                     'last_run': datetime.now().isoformat(),

@@ -14,6 +14,7 @@ Earlier PDCA plans, designs, analyses, and reports under `01-plan/` through `04-
 ```text
 NiceGUI / scheduler
   -> AppState / ProductionService
+  -> paid-production gate before new planning, narration, or visuals
   -> ScriptPlanner: RSS or URL -> extraction -> analysis -> script -> source-grounded validation
   -> visual cost preflight -> narration duration check
   -> VideoGenerator: per-scene Veo or Gemini, with visual cache
@@ -45,4 +46,5 @@ The app is a Python modular monolith. `ProductionService` owns orchestration, pr
 - `ProductionService` writes a neighboring `*.production.json` record for each new rendered MP4 when the output directory is writable; keep these local with the video.
 - `AppState` is in-memory browser-session state. API settings are process-wide.
 - External calls are OpenAI for planning/narration, Brave when configured for enrichment, Google for visuals, and YouTube for upload. Unit tests mock those calls.
+- `PAID_PRODUCTION_ENABLED` defaults to false for the shared production service and paired-review script; it does not gate standalone provider utilities or cap actual bills. Complete local clip and narration reviews still run.
 - The test suite uses `unittest`; a local `.venv` may exist. Run the command in `AGENTS.md` after changes.

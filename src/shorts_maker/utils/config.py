@@ -78,6 +78,10 @@ class Settings:
     veo_duration_seconds: int = field(default_factory=lambda: int(os.getenv("VEO_DURATION_SECONDS", "8")))
     hybrid_veo_duration_seconds: int = field(default_factory=lambda: int(os.getenv("HYBRID_VEO_DURATION_SECONDS", "6")))
     max_visual_cost_usd: float = field(default_factory=lambda: float(os.getenv("MAX_VISUAL_COST_USD", "1.0")))
+    paid_production_enabled: bool = field(
+        default_factory=lambda: os.getenv("PAID_PRODUCTION_ENABLED", "false").strip().lower()
+        in {"true", "1", "yes"}
+    )
 
     # Generation Mode
     generation_mode: str = field(default_factory=lambda: os.getenv("GENERATION_MODE", "hybrid"))

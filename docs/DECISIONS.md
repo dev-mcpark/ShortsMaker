@@ -107,3 +107,7 @@ A script mood is too broad to guarantee that a stock song fits an individual sto
 ## 2026-10-03 — Compare caption presentation without changing the edit
 
 The owner accepted the NASA cut's visual rhythm but found the captions rigid. Keep `soft` as the shared default while offering a local `card` review style with left-aligned text and a subtle translucent panel. Use the same script, scene clips, narration, and music to compare caption feel at zero provider cost. Record the selected style in the private production sidecar. Do not adopt a style globally until the owner reviews it in motion.
+
+## 2026-10-03 — Default the current review round to zero new paid calls
+
+The working plan says $0 in new provider calls until a per-round budget is agreed, but the regular service previously enforced only a visual-output estimate. Add `PAID_PRODUCTION_ENABLED=false` by default: block service planning and regeneration before OpenAI use, block production before new TTS or visual work, and block the paired script before its shared narration request. Pause a scheduled run when this condition is disabled. Prepared narration plus manual or cached visuals remain available for no-API review. This is an explicit start/stop control for the normal workflow, not a provider spending limit or a reliable estimate of total cost; standalone provider utilities remain outside it. Do not turn it on merely because Cloud Billing is active.

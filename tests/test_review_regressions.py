@@ -29,6 +29,11 @@ from shorts_maker.utils.veo_prompt_exporter import VeoPromptExporter
 
 
 class ReviewRegressions(unittest.TestCase):
+    def setUp(self):
+        paid = patch.object(settings, "paid_production_enabled", True)
+        paid.start()
+        self.addCleanup(paid.stop)
+
     def test_project_root_does_not_depend_on_launch_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch("shorts_maker.utils.config.Path.cwd", return_value=Path(directory)):
@@ -155,6 +160,23 @@ class ReviewRegressions(unittest.TestCase):
             ):
                 asyncio.run(manager._execute_pipeline(another))
             self.assertFalse(manager.get_schedule(another["id"])["enabled"])
+
+    def test_schedule_pauses_before_any_pipeline_when_paid_work_is_disabled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("Pilot", "09:00")
+            with patch.object(settings, "paid_production_enabled", False), patch(
+                "shorts_maker.utils.bgm_manager.BGMManager.has_documented_track"
+            ) as music, patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock,
+            ) as pipeline:
+                asyncio.run(manager._execute_pipeline(schedule))
+            stored = manager.get_schedule(schedule["id"])
+            self.assertFalse(stored["enabled"])
+            self.assertEqual(stored["last_result"], "paid_production_disabled")
+            music.assert_not_called()
+            pipeline.assert_not_awaited()
 
     def test_enabled_image_overlay_changes_pixels(self):
         with tempfile.TemporaryDirectory() as directory:

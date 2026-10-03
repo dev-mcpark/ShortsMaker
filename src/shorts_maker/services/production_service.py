@@ -142,6 +142,11 @@ class ProductionService:
         }
     }
 
+    PAID_WORK_DISABLED = (
+        "유료 제작 호출이 꺼져 있습니다. 이번 라운드 예산과 제공자 사용량을 "
+        "확인한 뒤 PAID_PRODUCTION_ENABLED=true로 설정하세요."
+    )
+
     def __init__(self, mode: str = "image", parallel_clips: bool = False,
                  character_overlay_config: Optional[CharacterOverlayConfig] = None,
                  editor_options: Optional[Dict[str, Any]] = None,
@@ -410,6 +415,8 @@ class ProductionService:
         """
         try:
             self._start_phase(ProductionPhase.PLANNING)
+            if not settings.paid_production_enabled:
+                raise ValueError(self.PAID_WORK_DISABLED)
             self._update_progress(ProductionPhase.PLANNING, 10, "콘텐츠 소스 분석 중...")
 
             if self.is_cancelled():
@@ -475,9 +482,11 @@ class ProductionService:
             self.logger.warning("스크립트 재생성 최대 횟수에 도달했습니다")
             return None
 
-        context.attempt_count += 1
         try:
             self._start_phase(ProductionPhase.PLANNING)
+            if not settings.paid_production_enabled:
+                raise ValueError(self.PAID_WORK_DISABLED)
+            context.attempt_count += 1
             self._update_progress(ProductionPhase.PLANNING, 20, "피드백 반영 재생성 중...")
 
             planner = self._get_planner()
@@ -567,6 +576,10 @@ class ProductionService:
                     f"${settings.max_visual_cost_usd:.2f}를 초과합니다. "
                     "이미지 모드 또는 MAX_VISUAL_COST_USD 설정을 확인하세요.", clips,
                 )
+            if not settings.paid_production_enabled and (
+                estimated_cost > 0 or prepared_audio_paths is None
+            ):
+                return self._failed_result(self.PAID_WORK_DISABLED, clips)
             self.logger.info(f"Visual API estimate: ${estimated_cost:.3f} (cap ${settings.max_visual_cost_usd:.2f})")
             if isinstance(script, ShortsScript):
                 self._update_progress(ProductionPhase.GENERATING, 0, "내레이션 길이 확인 중...")
@@ -823,7 +836,13 @@ class ProductionService:
         # Step 1: Script Generation
         script, _context = await self.generate_script(topic=topic, direct_url=direct_url)
         if not script:
-            return self._failed_result("사용자에 의해 취소됨" if self.is_cancelled() else "스크립트 생성 실패")
+            if self.is_cancelled():
+                reason = "사용자에 의해 취소됨"
+            elif not settings.paid_production_enabled:
+                reason = self.PAID_WORK_DISABLED
+            else:
+                reason = "스크립트 생성 실패"
+            return self._failed_result(reason)
 
         # Step 2: Video Production
         result = await self.produce_video(script, finish_phase=not auto_upload)

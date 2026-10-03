@@ -21,6 +21,11 @@ from shorts_maker.utils.veo_prompt_exporter import VeoPromptExporter
 
 
 class WorkflowTests(unittest.TestCase):
+    def setUp(self):
+        paid = patch.object(settings, "paid_production_enabled", True)
+        paid.start()
+        self.addCleanup(paid.stop)
+
     def test_empty_manual_clips_do_not_start_paid_generation(self):
         service = ProductionService(mode="video")
         script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=1)])

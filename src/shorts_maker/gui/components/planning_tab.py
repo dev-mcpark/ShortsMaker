@@ -214,7 +214,10 @@ def render_planning_tab(state: 'AppState') -> None:
                             except RuntimeError:
                                 pass
                         else:
-                            safe_notify('각본 생성 실패', type='negative')
+                            message = (service.PAID_WORK_DISABLED
+                                       if service.progress.error == service.PAID_WORK_DISABLED
+                                       else '각본 생성 실패')
+                            safe_notify(message, type='negative')
                     except Exception as e:
                         safe_notify(f'오류: {str(e)}', type='negative')
                         logger.error(f"Plan Error: {e}")
@@ -340,7 +343,10 @@ def render_planning_tab(state: 'AppState') -> None:
                             except RuntimeError:
                                 pass
                         else:
-                            safe_notify('재생성 실패', type='negative')
+                            message = (service.PAID_WORK_DISABLED
+                                       if service.progress.error == service.PAID_WORK_DISABLED
+                                       else '재생성 실패')
+                            safe_notify(message, type='negative')
                     except Exception as e:
                         safe_notify(f'재생성 오류: {e}', type='negative')
                         logger.error(f"Regen error: {e}")
