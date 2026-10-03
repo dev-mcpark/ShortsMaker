@@ -6,12 +6,14 @@ import glob
 from contextlib import suppress
 from pathlib import Path
 from typing import Callable, List, Optional
+
+import numpy as np
 from moviepy import VideoFileClip, TextClip, AudioFileClip, concatenate_videoclips, CompositeVideoClip, ImageClip, CompositeAudioClip
 from moviepy.config import FFMPEG_BINARY
 import moviepy.video.fx as vfx
 from moviepy.audio.fx import AudioFadeIn, AudioFadeOut
 from openai import APIConnectionError, AsyncOpenAI, InternalServerError
-from PIL import ImageFont
+from PIL import Image, ImageDraw, ImageFont
 from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
@@ -31,6 +33,7 @@ class VideoEditor:
         subtitle_y_position: int = 1300,
         bgm_mood: Optional[str] = None,
         bgm_track: Optional[str] = None,
+        subtitle_style: str = "soft",
     ):
         """
         VideoEditor 초기화
@@ -41,6 +44,7 @@ class VideoEditor:
             subtitle_color: 자막 색상 (hex color)
             subtitle_size: 자막 폰트 크기 (40-80)
             subtitle_y_position: 자막 Y 위치 (1000-1600)
+            subtitle_style: soft 기본 자막 또는 card 로컬 비교용 자막
         """
         self.logger = get_logger(__name__)
         self.bgm_manager = BGMManager()
@@ -57,6 +61,9 @@ class VideoEditor:
         self.subtitle_color = subtitle_color
         self.subtitle_size = subtitle_size
         self.subtitle_y_position = subtitle_y_position
+        if subtitle_style not in {"soft", "card"}:
+            raise ValueError("subtitle_style은 soft 또는 card여야 합니다.")
+        self.subtitle_style = subtitle_style
 
         self.voice_map = {
             'suspense': 'onyx',
@@ -359,7 +366,7 @@ class VideoEditor:
             raise
 
     @staticmethod
-    def _wrap_subtitle(text: str, font_name: str, font_size: int) -> str:
+    def _wrap_subtitle(text: str, font_name: str, font_size: int, max_width: int = 860) -> str:
         """Keep Korean words and their punctuation together within the caption width."""
         font = ImageFont.truetype(font_name, font_size)
         lines = []
@@ -368,7 +375,7 @@ class VideoEditor:
             line = ""
             for word in paragraph.split():
                 candidate = f"{line} {word}" if line else word
-                if line and font.getlength(candidate) > 860:
+                if line and font.getlength(candidate) > max_width:
                     paragraph_lines.append(line)
                     line = word
                 else:
@@ -383,7 +390,7 @@ class VideoEditor:
                        and font.getlength(last) < font.getlength(" ".join(previous))
                        * (0.6 if moved == 0 else 0.4)):
                     balanced = f"{previous[-1]} {last}"
-                    if font.getlength(balanced) > 860:
+                    if font.getlength(balanced) > max_width:
                         break
                     last = balanced
                     previous.pop()
@@ -458,17 +465,37 @@ class VideoEditor:
             clips = []
             try:
                 for phrase, start, length in segments:
+                    card = getattr(self, "subtitle_style", "soft") == "card"
                     clip = TextClip(
-                        text=self._wrap_subtitle(phrase, font_name, font_size),
+                        text=self._wrap_subtitle(
+                            phrase, font_name, font_size, 820 if card else 860,
+                        ),
                         font_size=font_size,
                         color=color,
                         font=font_name,
                         method='caption',
-                        size=(900, None),
-                        text_align='center',
+                        size=(844 if card else 900, None),
+                        text_align='left' if card else 'center',
+                        horizontal_align='left' if card else 'center',
                         stroke_color='#102536',
                         stroke_width=stroke_width,
                     )
+                    if card:
+                        height = clip.h + 44
+                        panel = Image.new("RGBA", (940, height), (0, 0, 0, 0))
+                        draw = ImageDraw.Draw(panel)
+                        draw.rounded_rectangle(
+                            (0, 0, 939, height - 1), radius=24,
+                            fill=(10, 29, 43, 204), outline=(128, 214, 201, 95), width=2,
+                        )
+                        draw.rounded_rectangle(
+                            (20, 20, 26, height - 21), radius=3,
+                            fill=(128, 214, 201, 230),
+                        )
+                        clip = CompositeVideoClip(
+                            [ImageClip(np.asarray(panel)), clip.with_position((48, 22))],
+                            size=(940, height),
+                        )
                     clips.append(place(clip, start, length))
                 return clips
             except Exception:

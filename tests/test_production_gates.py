@@ -13,7 +13,7 @@ import httpx
 import numpy as np
 from openai import APIConnectionError, BadRequestError, RateLimitError
 from PIL import Image
-from moviepy import AudioClip, ColorClip, VideoFileClip
+from moviepy import AudioClip, ColorClip, TextClip, VideoFileClip
 
 from scripts.paired_review import estimate_pair, render_pair
 from shorts_maker.editor.quality_check import check_video_quality
@@ -529,6 +529,25 @@ class ProductionGateTests(unittest.TestCase):
         with patch("shorts_maker.editor.video_editor.TextClip", return_value=clip):
             editor._create_subtitle_clips("Caption", 3)
         clip.with_position.assert_called_once_with(("center", settings.video_height - 500 - 80))
+
+    def test_card_subtitle_is_a_local_style_option(self):
+        with self.assertRaisesRegex(ValueError, "subtitle_style"):
+            VideoEditor(bgm_volume=0, subtitle_style="unknown")
+        soft = VideoEditor(bgm_volume=0)._create_subtitle_clips(
+            "드론은 잠깐 멈춰 새 지점을 검토했습니다.", 3,
+        )
+        with patch("shorts_maker.editor.video_editor.TextClip", wraps=TextClip) as text_clip:
+            card = VideoEditor(bgm_volume=0, subtitle_style="card")._create_subtitle_clips(
+                "드론은 잠깐 멈춰 새 지점을 검토했습니다.", 3,
+            )
+        self.assertEqual(text_clip.call_args.kwargs["horizontal_align"], "left")
+        try:
+            self.assertEqual(card[0].w, 940)
+            self.assertGreater(card[0].h, soft[0].h)
+            self.assertEqual(card[0].get_frame(0.1).shape[1], 940)
+        finally:
+            for clip in soft + card:
+                clip.close()
 
     def test_caption_segments_reveal_without_early_payoff(self):
         text = "드론이 새 지점을 찾았습니다. 하던 임무는 멈춰야 할까요?"

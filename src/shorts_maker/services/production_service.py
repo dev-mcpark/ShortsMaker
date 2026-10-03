@@ -714,6 +714,7 @@ class ProductionService:
                 ],
                 "estimated_visual_output_cost_usd": round(estimated_cost, 4),
                 "bgm_track": Path(editor.selected_bgm_path).name if getattr(editor, "selected_bgm_path", None) else None,
+                "subtitle_style": getattr(editor, "subtitle_style", "soft"),
                 "generated_scenes": generated_scenes,
                 "reused_or_manual_scenes": reused_scenes,
                 "quality_passed": quality_error is None,

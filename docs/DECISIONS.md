@@ -103,3 +103,7 @@ In the NASA review script, “the rover collected a sample” converted the [sou
 ## 2026-10-03 — Let the local music review name one track
 
 A script mood is too broad to guarantee that a stock song fits an individual story. Keep mood selection for automatic drafts, but allow `scripts/local_review.py --bgm-track` to name one documented MP3 exactly. Resolve it before paid planning when used in production, and fail if it is missing or its hash differs instead of falling back to a mood match. This keeps stock music comparison local and free; the owner still decides musical fit by listening.
+
+## 2026-10-03 — Compare caption presentation without changing the edit
+
+The owner accepted the NASA cut's visual rhythm but found the captions rigid. Keep `soft` as the shared default while offering a local `card` review style with left-aligned text and a subtle translucent panel. Use the same script, scene clips, narration, and music to compare caption feel at zero provider cost. Record the selected style in the private production sidecar. Do not adopt a style globally until the owner reviews it in motion.
