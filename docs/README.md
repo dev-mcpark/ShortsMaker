@@ -31,6 +31,7 @@ The app is a Python modular monolith. `ProductionService` owns orchestration, pr
 | Topic sourcing and script facts | `src/shorts_maker/planner/script_planner.py`, `content_extractor.py`, `script_validator.py` | `tests/test_content_extraction.py`, `tests/test_review_regressions.py` |
 | Source-grounded visual briefs and Veo prompt wrapper | `src/shorts_maker/planner/script_planner.py`, `script_validator.py`, `generator/video_generator.py` | `tests/test_review_regressions.py`, `tests/test_production_gates.py` |
 | Visual model, duration, or output cost | `src/shorts_maker/services/visual_cost.py`, `generator/video_generator.py`, `utils/config.py` | `tests/test_production_gates.py`, `tests/test_review_regressions.py` |
+| Paid request switch and standalone character Veo | `src/shorts_maker/utils/paid_gate.py`, `utils/character_video_generator.py` | `tests/test_production_gates.py`, `tests/test_review_regressions.py` |
 | Scene reuse, narration preflight, and upload sequence | `src/shorts_maker/services/production_service.py` | `tests/test_production_gates.py`, `tests/test_workflows.py` |
 | Rendered video and quality gate | `src/shorts_maker/editor/video_editor.py`, `quality_check.py` | `tests/test_production_gates.py` |
 | Music provenance and selection | `src/shorts_maker/utils/bgm_manager.py`, `editor/video_editor.py` | `tests/test_production_gates.py` |
@@ -46,5 +47,5 @@ The app is a Python modular monolith. `ProductionService` owns orchestration, pr
 - `ProductionService` writes a neighboring `*.production.json` record for each new rendered MP4 when the output directory is writable; keep these local with the video.
 - `AppState` is in-memory browser-session state. API settings are process-wide.
 - External calls are OpenAI for planning/narration, Brave when configured for enrichment, Google for visuals, and YouTube for upload. Unit tests mock those calls.
-- `PAID_PRODUCTION_ENABLED` defaults to false for the shared production service and paired-review script; it does not gate standalone provider utilities or cap actual bills. Complete local clip and narration reviews still run.
+- `PAID_PRODUCTION_ENABLED` defaults to false. The shared production service, paired-review script, and direct OpenAI/Google/Brave request helpers check it before new provider calls; it does not cap actual bills. Complete local clip and narration reviews still run.
 - The test suite uses `unittest`; a local `.venv` may exist. Run the command in `AGENTS.md` after changes.

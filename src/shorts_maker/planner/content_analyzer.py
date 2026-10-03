@@ -5,6 +5,7 @@ from openai import AsyncOpenAI
 from typing import Optional, Dict, List
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
+from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.planner.models import ArticleContent, ContentAnalysis
 
 
@@ -74,6 +75,7 @@ class ContentAnalyzer:
         """
         
         try:
+            require_paid_production_enabled()
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],

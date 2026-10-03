@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
+from shorts_maker.utils.paid_gate import require_paid_production_enabled
 
 class ValidationResult(BaseModel):
     is_valid: bool
@@ -98,6 +99,7 @@ class ScriptValidator:
         """
 
         try:
+            require_paid_production_enabled()
             response = await self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=[

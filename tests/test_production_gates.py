@@ -18,10 +18,13 @@ from moviepy import AudioClip, ColorClip, TextClip, VideoFileClip
 from scripts.paired_review import estimate_pair, render_pair
 from shorts_maker.editor.quality_check import check_video_quality
 from shorts_maker.editor.video_editor import VideoEditor
+from shorts_maker.generator.video_generator import VideoGenerator
+from shorts_maker.planner.content_enricher import ContentEnricher
 from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.services.production_service import ProductionService
 from shorts_maker.uploader.youtube_uploader import YouTubeUploader
 from shorts_maker.utils.bgm_manager import BGMManager
+from shorts_maker.utils.character_video_generator import CharacterVideoGenerator
 from shorts_maker.utils.config import settings
 
 
@@ -49,6 +52,50 @@ class ProductionGateTests(unittest.TestCase):
         paid = patch.object(settings, "paid_production_enabled", True)
         paid.start()
         self.addCleanup(paid.stop)
+
+    def test_direct_provider_helpers_respect_paid_switch(self):
+        video_client = SimpleNamespace(models=SimpleNamespace(generate_videos=Mock()))
+        image_client = SimpleNamespace(models=SimpleNamespace(generate_content=Mock()))
+        video = object.__new__(VideoGenerator)
+        video.client = video_client
+        video.image_client = image_client
+        voice = object.__new__(VideoEditor)
+        voice.client = SimpleNamespace(audio=SimpleNamespace(
+            speech=SimpleNamespace(create=AsyncMock())))
+        character = object.__new__(CharacterVideoGenerator)
+        character.client = video_client
+        enricher = object.__new__(ContentEnricher)
+        enricher.client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=AsyncMock())))
+        enricher.search_api_key = "test-key"
+        enricher.logger = Mock()
+
+        with patch.object(settings, "paid_production_enabled", False):
+            with self.assertRaisesRegex(RuntimeError, "PAID_PRODUCTION_ENABLED"):
+                video._run_image_generation("image-model", SimpleNamespace(
+                    visual_description="scene"), "unused.png")
+            with self.assertRaisesRegex(RuntimeError, "PAID_PRODUCTION_ENABLED"):
+                video._retry_veo_call("video-model", "prompt", "unused.mp4", "fallback")
+            with self.assertRaisesRegex(RuntimeError, "PAID_PRODUCTION_ENABLED"):
+                character._run_veo_generation("video-model", "prompt", object(), "unused.mp4", 6)
+            with self.assertRaisesRegex(RuntimeError, "PAID_PRODUCTION_ENABLED"):
+                asyncio.run(voice._generate_tts("문장", 0, "nova"))
+            with self.assertRaisesRegex(RuntimeError, "PAID_PRODUCTION_ENABLED"):
+                asyncio.run(enricher._generate_search_query("topic", "message", []))
+            with patch("shorts_maker.planner.content_enricher.requests.get") as search:
+                self.assertEqual(asyncio.run(enricher._search_web_brave("query")), [])
+                search.assert_not_called()
+
+        image_client.models.generate_content.assert_not_called()
+        video_client.models.generate_videos.assert_not_called()
+        voice.client.audio.speech.create.assert_not_awaited()
+        enricher.client.chat.completions.create.assert_not_awaited()
+
+        character.logger = Mock()
+        video_client.models.generate_videos.side_effect = RuntimeError("500 provider error")
+        self.assertFalse(character._run_veo_generation(
+            "video-model", "prompt", object(), "unused.mp4", 6))
+        video_client.models.generate_videos.assert_called_once()
 
     def test_local_editor_needs_no_openai_key_until_tts(self):
         with patch.object(settings, "openai_api_key", ""), patch(

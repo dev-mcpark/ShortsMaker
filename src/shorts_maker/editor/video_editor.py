@@ -17,6 +17,7 @@ from PIL import Image, ImageDraw, ImageFont
 from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
+from shorts_maker.utils.paid_gate import require_paid_production_enabled
 
 # [CRITICAL FIX] Manually set ImageMagick path for macOS Homebrew install
 if os.path.exists("/opt/homebrew/bin/magick"):
@@ -513,6 +514,7 @@ class VideoEditor:
                 raise
 
     async def _generate_tts(self, text: str, scene_idx: int, voice: str) -> str:
+        require_paid_production_enabled()
         if self.client is None:
             if not settings.openai_api_key:
                 raise ValueError("OPENAI_API_KEY is required to generate narration.")

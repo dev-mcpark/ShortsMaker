@@ -147,7 +147,7 @@ Launch your browser and go to `http://localhost:8080`.
 
 Using the configured models, a new 6-scene hybrid video is estimated at about **$0.65** for visuals (6 seconds of Veo Fast at $0.08/second plus five Gemini images estimated at $0.034 each). Six still images are about **$0.20**; six 8-second Veo Fast clips are about **$3.84**. These are illustrative October 2026 planning rates, not full production costs. Check [Vertex AI pricing](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing) and [model lifecycle dates](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions) before raising budgets. The project's current [Google Cloud budget sends alerts only](https://docs.cloud.google.com/billing/docs/how-to/budgets); it does not stop charges. Check whether a supported [project and service spend cap](https://docs.cloud.google.com/billing/docs/how-to/budgets-spend-caps) is available before relying on one, and review OpenAI usage separately.
 
-The production switch protects the normal app and paired-review paths; standalone provider utilities require separate care. It does not measure planning, TTS, image input, failed attempts, or taxes, so check provider bills before each new paid round.
+The production switch also stops direct OpenAI, Google, and Brave request helpers when off. Direct helpers do not run the service's visual-cost preflight. The switch does not measure planning, TTS, image input, failed attempts, or taxes, so check provider bills before each new paid round.
 
 ---
 

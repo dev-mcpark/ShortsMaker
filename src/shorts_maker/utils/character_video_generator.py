@@ -23,6 +23,7 @@ from google import genai
 from google.genai import types
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
+from shorts_maker.utils.paid_gate import require_paid_production_enabled
 
 
 class CharacterVideoGenerator:
@@ -163,65 +164,34 @@ class CharacterVideoGenerator:
 
     def _run_veo_generation(self, model_id: str, prompt: str, image_input,
                             output_path: str, duration_seconds: int) -> bool:
-        """Veo API 호출 (동기)"""
-        max_attempts = 3
+        """Make one explicit Veo attempt; a new paid attempt needs a new call."""
+        require_paid_production_enabled()
+        try:
+            operation = self.client.models.generate_videos(
+                model=model_id,
+                prompt=prompt,
+                image=image_input,
+                config={"aspect_ratio": "9:16", "duration_seconds": duration_seconds}
+            )
 
-        for attempt in range(max_attempts):
-            try:
-                self.logger.info(f"   Generating (Attempt {attempt + 1}/{max_attempts})...")
-
-                operation = self.client.models.generate_videos(
-                    model=model_id,
-                    prompt=prompt,
-                    image=image_input,
-                    config={"aspect_ratio": "9:16", "duration_seconds": duration_seconds}
-                )
-
-                # 완료 대기
-                for _ in range(90):  # 최대 15분 대기
-                    if operation.done:
-                        break
-                    time.sleep(10)
-                    operation = self.client.operations.get(operation)
-                    self.logger.debug("   Waiting...")
-                if not operation.done:
-                    raise TimeoutError("Veo generation did not finish within 15 minutes")
-
-                self.logger.info("   Done!")
-
-                response = operation.result
-                if response and response.generated_videos:
-                    response.generated_videos[0].video.save(output_path)
-                    return True
-                else:
-                    error_info = getattr(operation, 'error', 'Unknown Error')
-                    raise Exception(f"No video generated. Error: {error_info}")
-
-            except TimeoutError as e:
-                self.logger.error(f"   ❌ Error: {e}")
-                return False
-            except Exception as e:
-                err_str = str(e).lower()
-
-                if "internal error" in err_str or "500" in err_str:
-                    self.logger.warning(f"   ⚠️ Server error, retrying in 30s...")
-                    time.sleep(30)
-                    continue
-
-                if "violate" in err_str:
-                    self.logger.warning(f"   ⚠️ Safety violation, simplifying prompt...")
-                    prompt = (
-                        "Animate this character speaking naturally. "
-                        "Subtle movements, professional quality."
-                    )
-                    continue
-
-                self.logger.error(f"   ❌ Error: {e}")
-                if attempt == max_attempts - 1:
-                    return False
+            for _ in range(90):  # 최대 15분 대기
+                if operation.done:
+                    break
                 time.sleep(10)
+                operation = self.client.operations.get(operation)
+                self.logger.debug("   Waiting...")
+            if not operation.done:
+                raise TimeoutError("Veo generation did not finish within 15 minutes")
 
-        return False
+            response = operation.result
+            if response and response.generated_videos:
+                response.generated_videos[0].video.save(output_path)
+                return True
+            error_info = getattr(operation, "error", "Unknown Error")
+            raise RuntimeError(f"No video generated. Error: {error_info}")
+        except Exception as error:
+            self.logger.error(f"   ❌ Veo generation failed: {error}")
+            return False
 
 
 async def main():

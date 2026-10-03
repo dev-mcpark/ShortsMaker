@@ -9,6 +9,7 @@ from google.genai import types
 
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
+from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
 from shorts_maker.services.visual_cost import scene_mode
 
@@ -213,6 +214,7 @@ class VideoGenerator:
         current_prompt = initial_prompt
 
         for attempt in range(max_attempts):
+            require_paid_production_enabled()
             try:
                 self.logger.info(f"    Generating (Attempt {attempt + 1}/{max_attempts})...")
 
@@ -318,6 +320,7 @@ class VideoGenerator:
             raise
 
     def _run_image_generation(self, model_id: str, scene, output_path: str) -> None:
+        require_paid_production_enabled()
         if self.image_client is None:
             self.image_client = genai.Client(
                 vertexai=True, project=self.project_id, location="global",

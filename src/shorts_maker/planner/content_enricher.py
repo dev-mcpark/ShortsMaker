@@ -8,6 +8,7 @@ from typing import Optional, List, Dict
 import requests
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
+from shorts_maker.utils.paid_gate import require_paid_production_enabled
 
 
 class ContentEnricher:
@@ -72,6 +73,7 @@ class ContentEnricher:
         Example: "history of Tesla Autopilot accidents and safety data 2024"
         """
         
+        require_paid_production_enabled()
         response = await self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
@@ -94,6 +96,7 @@ class ContentEnricher:
         params = {"q": query, "count": 5}
         
         try:
+            require_paid_production_enabled()
             response = await asyncio.to_thread(
                 requests.get,
                 "https://api.search.brave.com/res/v1/web/search",
@@ -141,6 +144,7 @@ class ContentEnricher:
         """
         
         try:
+            require_paid_production_enabled()
             response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
