@@ -406,6 +406,7 @@ class WorkflowTests(unittest.TestCase):
             getattr(module, function_name)()
         self.assertEqual(run_server.call_args.kwargs["port"], 8080)
         self.assertEqual(run_server.call_args.kwargs["host"], "127.0.0.1")
+        self.assertFalse(run_server.call_args.kwargs["reload"])
         self.assertNotEqual(
             run_server.call_args.kwargs["storage_secret"],
             "shortsmaker_secret_key_change_in_production",

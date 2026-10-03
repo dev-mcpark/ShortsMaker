@@ -59,7 +59,7 @@ def run():
         title="ShortsMaker Studio",
         favicon="🎬",
         dark=True,
-        reload=True,
+        reload=False,
         host="127.0.0.1",
         port=8080,
         storage_secret=settings.nicegui_storage_secret or secrets.token_urlsafe(32)

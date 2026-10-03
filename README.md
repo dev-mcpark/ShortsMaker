@@ -134,7 +134,7 @@ The command requires every clip and narration file before starting, reuses `Prod
 # Start the GUI
 shorts-maker
 ```
-Launch your browser and go to `http://localhost:8080`.
+Launch your browser and go to `http://127.0.0.1:8080`. Studio binds to loopback on port 8080.
 
 ---
 
