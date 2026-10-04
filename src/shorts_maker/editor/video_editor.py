@@ -25,6 +25,9 @@ if os.path.exists("/opt/homebrew/bin/magick"):
 
 
 class VideoEditor:
+    TTS_MODEL = "tts-1"
+    TTS_MAX_ATTEMPTS = 2  # One request plus one explicit transient retry; SDK retries are off.
+
     def __init__(
         self,
         tts_voice: str = "alloy",
@@ -524,10 +527,10 @@ class VideoEditor:
         self._track_temp_file(output_path)
         self.logger.info(f"Generating OpenAI TTS ({voice}) for scene {scene_idx}...")
 
-        for attempt in range(2):
+        for attempt in range(self.TTS_MAX_ATTEMPTS):
             try:
                 response = await self.client.audio.speech.create(
-                    model="tts-1",
+                    model=self.TTS_MODEL,
                     voice=voice,
                     input=text
                 )

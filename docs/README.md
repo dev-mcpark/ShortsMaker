@@ -2,7 +2,7 @@
 
 This is the code map for Codex, Claude Code, and contributors. For what is currently working or next, read [STATUS.md](STATUS.md). For why durable choices were made, read [DECISIONS.md](DECISIONS.md). Root [README.md](../README.md) owns setup and user-facing behavior.
 
-The current evaluation method for finished videos is [QUALITY_EVALUATION.md](QUALITY_EVALUATION.md). `scripts/local_review.py` renders a zero-provider-call edit from complete local scene clips and narration; `scripts/creative_review.py` builds a private music/caption comparison page after checking exact stream identity; `scripts/paired_review.py` runs the budgeted image/hybrid comparison. The private outcome summary is `src/shorts_maker/services/scorecard.py`.
+The current evaluation method for finished videos is [QUALITY_EVALUATION.md](QUALITY_EVALUATION.md). `scripts/prepare_narration.py` retains a budgeted, resumable narration set under ignored `outputs/`; `scripts/local_review.py` renders a zero-provider-call edit from complete local scene clips and narration; `scripts/creative_review.py` builds a private music/caption comparison page after checking exact stream identity; `scripts/paired_review.py` runs the budgeted image/hybrid comparison. The private outcome summary is `src/shorts_maker/services/scorecard.py`.
 The curated visual prompt rules and official source links are in [VISUAL_PROMPTING.md](VISUAL_PROMPTING.md).
 The source-grounded story, motion, music, and spending recipe is [CREATIVE_FORMAT.md](CREATIVE_FORMAT.md).
 The current NASA review's exact six-scene, source-checked narration and visual brief is [nasa_field_test_review.json](nasa_field_test_review.json). It is a shareable script for editorial handoff; its video clips, scratch voice, music MP3, sidecar, and review metrics stay local and ignored.
@@ -35,7 +35,7 @@ The app is a Python modular monolith. `ProductionService` owns orchestration, pr
 | Scene reuse, narration preflight, and upload sequence | `src/shorts_maker/services/production_service.py` | `tests/test_production_gates.py`, `tests/test_workflows.py` |
 | Rendered video and quality gate | `src/shorts_maker/editor/video_editor.py`, `quality_check.py` | `tests/test_production_gates.py` |
 | Music brief, provenance, and selection | `src/shorts_maker/planner/models.py`, `planner/script_planner.py`, `utils/bgm_manager.py`, `editor/video_editor.py`, `gui/state/app_state.py`, `gui/pages/main_page.py` | `tests/test_review_regressions.py`, `tests/test_production_gates.py`, `tests/test_workflows.py` |
-| Local edit review, creative comparison, paired production, and outcome scorecard | `scripts/local_review.py`, `scripts/creative_review.py`, `scripts/paired_review.py`, `src/shorts_maker/services/scorecard.py` | `tests/test_local_review.py`, `tests/test_creative_review.py`, `tests/test_production_gates.py`, `tests/test_scorecard.py` |
+| Retained narration, local edit review, creative comparison, paired production, and outcome scorecard | `scripts/prepare_narration.py`, `scripts/local_review.py`, `scripts/creative_review.py`, `scripts/paired_review.py`, `src/shorts_maker/services/scorecard.py` | `tests/test_prepare_narration.py`, `tests/test_local_review.py`, `tests/test_creative_review.py`, `tests/test_production_gates.py`, `tests/test_scorecard.py` |
 | Browser state and controls | `src/shorts_maker/gui/state/app_state.py`, `gui/pages/`, `gui/components/` | `tests/test_workflows.py` |
 | Scheduled runs | `src/shorts_maker/utils/scheduler.py` | `tests/test_review_regressions.py` |
 | Upload | `src/shorts_maker/uploader/youtube_uploader.py` | `tests/test_production_gates.py` |
@@ -45,6 +45,7 @@ The app is a Python modular monolith. `ProductionService` owns orchestration, pr
 - Settings load from `config/.env` or root `.env`; use `config/.env.example` as the template. Secrets are not tracked.
 - `outputs/`, `temp/`, `logs/`, and local histories are runtime data, not project docs.
 - `ProductionService` writes a neighboring `*.production.json` record for each new rendered MP4 when the output directory is writable; keep these local with the video.
+- `scripts/prepare_narration.py` writes scene MP3s and a cumulative request-reserve manifest to ignored `outputs/`; its ceiling uses a caller-verified model price and bounds requests, not the provider's final bill.
 - `AppState` is in-memory browser-session state. API settings are process-wide.
 - External calls are OpenAI for planning/narration, Brave when configured for enrichment, Google for visuals, and YouTube for upload. Unit tests mock those calls.
 - `PAID_PRODUCTION_ENABLED` defaults to false. The shared production service, paired-review script, and direct OpenAI/Google/Brave request helpers check it before new provider calls; it does not cap actual bills. Complete local clip and narration reviews still run.

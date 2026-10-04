@@ -135,3 +135,7 @@ A music choice and a caption treatment need separate listening and viewing judgm
 ## 2026-10-04 — Carry the owner's NASA music and caption choice into the next cut
 
 The owner heard the controlled options and found Digital Clouds the best fit, then preferred soft captions over the card treatment. Use that exact documented MP3 at the reviewed 20% level and the soft style for the NASA A pilot's next edit. Record this in private review notes without marking the scratch-voice cut fully accepted. The choice is specific to this story; other scripts still require music selected against their own `music_direction` and playback review. Do not buy final narration until the exact script and a round spending ceiling are confirmed.
+
+## 2026-10-04 — Retain a budgeted final narration set for free revisions
+
+The owner approved the NASA script, chose OpenAI `nova`, and set a $0.02 ceiling for new narration API work only. The standard service removes generated temporary speech after rendering, which would force a new paid request for each edit. Use `scripts/prepare_narration.py` to keep each validated scene MP3 under ignored `outputs/`, bind it to the exact script and voice, and write a cumulative request reserve before any new request. The reserve includes the editor's one explicit transient retry and is a planning guard, not a billing record. Complete scenes can be reused in `scripts/local_review.py` with the paid switch off. Keep video generation and upload outside this authorization; the final voice still needs playback review.
