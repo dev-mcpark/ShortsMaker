@@ -131,3 +131,7 @@ The installed OpenAI Python SDK defaults to two retries, while the planner, anal
 ## 2026-10-03 — Verify controlled music and caption comparisons
 
 A music choice and a caption treatment need separate listening and viewing judgments. Generate a local three-cut review page only after comparing encoded streams: the music alternate must keep the baseline video exactly, while the caption alternate must keep its audio exactly. `scripts/creative_review.py` makes this check reproducible and keeps the page with ignored video files. It is not a perceptual score or owner acceptance; neither an exact shared stream nor a license record can prove the song fits the story.
+
+## 2026-10-04 — Carry the owner's NASA music and caption choice into the next cut
+
+The owner heard the controlled options and found Digital Clouds the best fit, then preferred soft captions over the card treatment. Use that exact documented MP3 at the reviewed 20% level and the soft style for the NASA A pilot's next edit. Record this in private review notes without marking the scratch-voice cut fully accepted. The choice is specific to this story; other scripts still require music selected against their own `music_direction` and playback review. Do not buy final narration until the exact script and a round spending ceiling are confirmed.
