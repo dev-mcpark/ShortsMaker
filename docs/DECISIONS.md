@@ -151,3 +151,7 @@ The final `nova` voice made five of the six NASA scene durations longer than the
 ## 2026-10-05 — Hold the final frame without retiming reveals
 
 The slowed NASA cut fixed the restart but delayed the scene 5 highlight until after the narration had named the other rover. Supersede the slowdown choice above: play short silent clips at their original speed, then freeze the last frame to match narration length. This keeps authored reveals aligned with speech and avoids another visual generation call. Long holds still need editorial review and, if distracting, a revised storyboard.
+
+## 2026-10-05 — Rebuild the manual storyboard for the final voice
+
+The final-frame policy is a safe fallback for arbitrary short clips, but the NASA pilot has local storyboard source and five 0.88–1.72-second holds after switching from scratch Yuna to `nova`. Track a small NASA-specific renderer that times the six diagrams to the retained narration lengths, keeping the right-rover cue at the second phrase rather than scaling its time with the scene duration. Render locally and reuse the same speech, music, and captions. This removes avoidable static tails without another provider call; it does not certify that the full cut is engaging by ear or in motion.
