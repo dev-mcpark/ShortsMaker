@@ -147,3 +147,7 @@ The selected Yuna scratch speech was about 11 dB louder than the new `nova` file
 ## 2026-10-05 — Slow short scenes instead of restarting them
 
 The final `nova` voice made five of the six NASA scene durations longer than their existing manual animations. The shared editor looped short clips, visibly resetting both a diagram and its progress bar before the scene ended. Stretch silent scene playback to the narration duration instead, preserving each clip's visual arc without new generation cost. This is a modest slowdown for the current pilot; more extreme mismatches still need human review and a better storyboard.
+
+## 2026-10-05 — Hold the final frame without retiming reveals
+
+The slowed NASA cut fixed the restart but delayed the scene 5 highlight until after the narration had named the other rover. Supersede the slowdown choice above: play short silent clips at their original speed, then freeze the last frame to match narration length. This keeps authored reveals aligned with speech and avoids another visual generation call. Long holds still need editorial review and, if distracting, a revised storyboard.

@@ -324,7 +324,7 @@ class ProductionGateTests(unittest.TestCase):
             editor.cleanup_temp_files()
             self.assertFalse(Path(normalized_path).exists())
 
-    def test_short_video_slows_down_instead_of_restarting(self):
+    def test_short_video_holds_final_frame_without_retiming_reveal(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "scene.mp4"
             first = ColorClip((8, 16), color=(255, 0, 0), duration=0.5)
@@ -336,12 +336,13 @@ class ProductionGateTests(unittest.TestCase):
                 clip.close()
                 first.close()
                 second.close()
-            stretched = VideoEditor(bgm_volume=0)._create_visual_clip(str(source), 1.5)
+            extended = VideoEditor(bgm_volume=0)._create_visual_clip(str(source), 1.5)
             try:
-                self.assertAlmostEqual(stretched.duration, 1.5, delta=0.02)
-                self.assertGreater(stretched.get_frame(1.1)[900, 500, 2], 200)
+                self.assertAlmostEqual(extended.duration, 1.5, delta=0.02)
+                self.assertGreater(extended.get_frame(0.65)[900, 500, 2], 200)
+                self.assertGreater(extended.get_frame(1.1)[900, 500, 2], 200)
             finally:
-                stretched.close()
+                extended.close()
 
     def test_veo_prompt_version_only_invalidates_video_cache(self):
         service = object.__new__(ProductionService)

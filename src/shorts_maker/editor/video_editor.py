@@ -357,9 +357,9 @@ class VideoEditor:
             elif extension in {'.mp4', '.mov', '.webm'}:
                 clip = VideoFileClip(path)
 
-                # Keep a short scene's visual arc aligned with its narration.
+                # Preserve the reveal timing; hold the final frame rather than restart.
                 if clip.duration < duration:
-                    clip = clip.with_effects([vfx.MultiplySpeed(clip.duration / duration)])
+                    clip = clip.with_effects([vfx.Freeze(t="end", total_duration=duration)])
                 else:
                     clip = clip.with_duration(duration)
 
