@@ -143,3 +143,7 @@ The owner approved the NASA script, chose OpenAI `nova`, and set a $0.02 ceiling
 ## 2026-10-05 — Balance speech before adding the music bed
 
 The selected Yuna scratch speech was about 11 dB louder than the new `nova` file for the first NASA scene. Mixing both at the same 20% BGM setting made the new voice vulnerable to masking; normalizing the entire finished mix cannot change the speech/music ratio. Normalize each narration scene near -18 LUFS in the shared editor before BGM mixing, using temporary local WAVs and keeping the original audio files for reuse. Keep the final mix normalization as a separate output step. This is a measured level correction, not a substitute for listening to pronunciation, musical fit, and phrase timing.
+
+## 2026-10-05 — Slow short scenes instead of restarting them
+
+The final `nova` voice made five of the six NASA scene durations longer than their existing manual animations. The shared editor looped short clips, visibly resetting both a diagram and its progress bar before the scene ended. Stretch silent scene playback to the narration duration instead, preserving each clip's visual arc without new generation cost. This is a modest slowdown for the current pilot; more extreme mismatches still need human review and a better storyboard.

@@ -13,7 +13,7 @@ import httpx
 import numpy as np
 from openai import APIConnectionError, BadRequestError, RateLimitError
 from PIL import Image
-from moviepy import AudioClip, AudioFileClip, ColorClip, TextClip, VideoFileClip
+from moviepy import AudioClip, AudioFileClip, ColorClip, TextClip, VideoFileClip, concatenate_videoclips
 
 from scripts.paired_review import estimate_pair, render_pair
 from shorts_maker.editor.quality_check import check_video_quality
@@ -323,6 +323,25 @@ class ProductionGateTests(unittest.TestCase):
             self.assertEqual(source.read_bytes(), original)
             editor.cleanup_temp_files()
             self.assertFalse(Path(normalized_path).exists())
+
+    def test_short_video_slows_down_instead_of_restarting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "scene.mp4"
+            first = ColorClip((8, 16), color=(255, 0, 0), duration=0.5)
+            second = ColorClip((8, 16), color=(0, 0, 255), duration=0.5)
+            clip = concatenate_videoclips([first, second])
+            try:
+                clip.write_videofile(str(source), fps=12, codec="libx264", audio=False, logger=None)
+            finally:
+                clip.close()
+                first.close()
+                second.close()
+            stretched = VideoEditor(bgm_volume=0)._create_visual_clip(str(source), 1.5)
+            try:
+                self.assertAlmostEqual(stretched.duration, 1.5, delta=0.02)
+                self.assertGreater(stretched.get_frame(1.1)[900, 500, 2], 200)
+            finally:
+                stretched.close()
 
     def test_veo_prompt_version_only_invalidates_video_cache(self):
         service = object.__new__(ProductionService)

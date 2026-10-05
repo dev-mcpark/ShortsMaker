@@ -357,9 +357,9 @@ class VideoEditor:
             elif extension in {'.mp4', '.mov', '.webm'}:
                 clip = VideoFileClip(path)
 
-                # Loop if too short (MoviePy v2 fix)
+                # Keep a short scene's visual arc aligned with its narration.
                 if clip.duration < duration:
-                    clip = clip.with_effects([vfx.Loop(duration=duration)])
+                    clip = clip.with_effects([vfx.MultiplySpeed(clip.duration / duration)])
                 else:
                     clip = clip.with_duration(duration)
 
