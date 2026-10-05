@@ -13,7 +13,7 @@ import httpx
 import numpy as np
 from openai import APIConnectionError, BadRequestError, RateLimitError
 from PIL import Image
-from moviepy import AudioClip, ColorClip, TextClip, VideoFileClip
+from moviepy import AudioClip, AudioFileClip, ColorClip, TextClip, VideoFileClip
 
 from scripts.paired_review import estimate_pair, render_pair
 from shorts_maker.editor.quality_check import check_video_quality
@@ -305,6 +305,24 @@ class ProductionGateTests(unittest.TestCase):
             self.assertGreater(after, before * 5)
             self.assertLess(after, 0.7)
             self.assertFalse((Path(directory) / "quiet.normalized.mp4").exists())
+
+    def test_quiet_narration_is_normalized_before_music_without_changing_source(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(settings, "temp_dir", Path(directory)):
+            source = Path(directory) / "quiet.wav"
+            audio = AudioClip(lambda t: 0.01 * np.sin(2 * np.pi * 220 * t), duration=2, fps=8000)
+            try:
+                audio.write_audiofile(str(source), fps=8000, logger=None)
+            finally:
+                audio.close()
+            original = source.read_bytes()
+            editor = VideoEditor(bgm_volume=0)
+            normalized_path = editor._normalize_narration_audio(str(source))
+            with AudioFileClip(str(source)) as before, AudioFileClip(normalized_path) as after:
+                self.assertGreater(after.max_volume(), before.max_volume() * 4)
+                self.assertAlmostEqual(after.duration, before.duration, delta=0.05)
+            self.assertEqual(source.read_bytes(), original)
+            editor.cleanup_temp_files()
+            self.assertFalse(Path(normalized_path).exists())
 
     def test_veo_prompt_version_only_invalidates_video_cache(self):
         service = object.__new__(ProductionService)
@@ -618,6 +636,7 @@ class ProductionGateTests(unittest.TestCase):
             editor.logger = Mock()
             editor.cleanup_old_temp_files = Mock()
             editor._get_voice_for_mood = Mock(return_value="alloy")
+            editor._normalize_narration_audio = Mock(return_value=str(audio))
             editor._create_visual_clip = Mock(side_effect=RuntimeError("stop before render"))
             one_scene_script = sample_script()
             one_scene_script.scenes = one_scene_script.scenes[:1]

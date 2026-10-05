@@ -221,7 +221,10 @@ class VideoEditor:
                 audio_path = audio_paths[i] if audio_paths is not None else await self._generate_tts(scene.script_text, i, voice_name)
                 if is_cancelled and is_cancelled():
                     raise RuntimeError("사용자에 의해 취소됨")
-                audio = AudioFileClip(audio_path)
+                normalized_audio_path = await asyncio.to_thread(
+                    self._normalize_narration_audio, audio_path
+                )
+                audio = AudioFileClip(normalized_audio_path)
                 duration = audio.duration + 0.5
             
                 # 2. Visual Clip (Adaptive to file type)
@@ -321,6 +324,20 @@ class VideoEditor:
             os.replace(normalized, output)
         finally:
             normalized.unlink(missing_ok=True)
+
+    def _normalize_narration_audio(self, path: str) -> str:
+        """Match speech level before BGM mixing; final mix normalization cannot fix masking."""
+        settings.temp_dir.mkdir(parents=True, exist_ok=True)
+        output = str(settings.temp_dir / f"narration_{time.time_ns()}.wav")
+        self._track_temp_file(output)
+        result = subprocess.run([
+            FFMPEG_BINARY, "-y", "-hide_banner", "-loglevel", "error",
+            "-i", path, "-af", "loudnorm=I=-18:TP=-2:LRA=11",
+            "-ar", "48000", "-ac", "2", output,
+        ], capture_output=True, text=True)
+        if result.returncode:
+            raise RuntimeError(f"내레이션 음량 보정 실패: {result.stderr.strip()[-500:]}")
+        return output
 
     def _create_visual_clip(self, path, duration):
         clip = None

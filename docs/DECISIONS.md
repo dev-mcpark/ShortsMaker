@@ -139,3 +139,7 @@ The owner heard the controlled options and found Digital Clouds the best fit, th
 ## 2026-10-04 — Retain a budgeted final narration set for free revisions
 
 The owner approved the NASA script, chose OpenAI `nova`, and set a $0.02 ceiling for new narration API work only. The standard service removes generated temporary speech after rendering, which would force a new paid request for each edit. Use `scripts/prepare_narration.py` to keep each validated scene MP3 under ignored `outputs/`, bind it to the exact script and voice, and write a cumulative request reserve before any new request. The reserve includes the editor's one explicit transient retry and is a planning guard, not a billing record. Complete scenes can be reused in `scripts/local_review.py` with the paid switch off. Keep video generation and upload outside this authorization; the final voice still needs playback review.
+
+## 2026-10-05 — Balance speech before adding the music bed
+
+The selected Yuna scratch speech was about 11 dB louder than the new `nova` file for the first NASA scene. Mixing both at the same 20% BGM setting made the new voice vulnerable to masking; normalizing the entire finished mix cannot change the speech/music ratio. Normalize each narration scene near -18 LUFS in the shared editor before BGM mixing, using temporary local WAVs and keeping the original audio files for reuse. Keep the final mix normalization as a separate output step. This is a measured level correction, not a substitute for listening to pronunciation, musical fit, and phrase timing.

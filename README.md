@@ -56,7 +56,7 @@ cap: prompt tokens, GPT, TTS, provider-side retries, and taxes are excluded. It 
 requesting Veo or Gemini media. It also checks for documented music before TTS or visual requests. Scene files in `outputs/clips/scenes/` are keyed by the
 visual prompt, model, duration, and character overlay, so narration edits reuse them.
 Changes to the Veo prompt wrapper invalidate only Veo scene cache entries.
-The editor fades the selected BGM at the start and end, then normalizes the final audio locally after rendering; this adds no API request.
+The editor matches each narration scene to about -18 LUFS before mixing, fades the selected BGM at the start and end, then normalizes the final audio locally after rendering; this adds no API request. Prepared caller-owned narration files are retained for later edits.
 Automatic narration uses OpenAI. It retries a transient connection or server failure once, then stops with the original error; it does not silently switch to a different voice provider.
 Planning, analysis, enrichment, and editorial validation disable OpenAI SDK automatic retries. A new candidate or manual rerun can still make a separate paid request, so check provider usage before another round.
 To retry a failed scene from the full pipeline, keep the
