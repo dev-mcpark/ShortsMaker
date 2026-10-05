@@ -155,3 +155,7 @@ The slowed NASA cut fixed the restart but delayed the scene 5 highlight until af
 ## 2026-10-05 — Rebuild the manual storyboard for the final voice
 
 The final-frame policy is a safe fallback for arbitrary short clips, but the NASA pilot has local storyboard source and five 0.88–1.72-second holds after switching from scratch Yuna to `nova`. Track a small NASA-specific renderer that times the six diagrams to the retained narration lengths, keeping the right-rover cue at the second phrase rather than scaling its time with the scene duration. Render locally and reuse the same speech, music, and captions. This removes avoidable static tails without another provider call; it does not certify that the full cut is engaging by ear or in motion.
+
+## 2026-10-05 — Bind retained narration to its scene text before editing
+
+The retained narration manifest records both the approved scene text and each completed audio file's hash, but local re-renders previously checked only the number and playable length of prepared files. Check the existing manifest in the shared production path when it is present, before visual work, so a renamed or replaced file cannot silently voice a different claim under the approved captions. Keep manifest-free scratch audio usable for local comparisons; reviewers must check its alignment themselves. This verifies text/file identity, not pronunciation or the truth of the source article.

@@ -1,5 +1,7 @@
 import os
 import asyncio
+import hashlib
+import json
 import subprocess
 import time
 import glob
@@ -177,7 +179,27 @@ class VideoEditor:
             raise
 
     @staticmethod
-    def validate_narration(audio_paths: List[str]) -> None:
+    def validate_narration(audio_paths: List[str], script=None) -> None:
+        if script is not None:
+            if len(audio_paths) != len(script.scenes):
+                raise ValueError("씬 수와 내레이션 수가 일치하지 않습니다.")
+            manifests = {Path(path).resolve().parent / "narration.json" for path in audio_paths}
+            existing = [path for path in manifests if path.is_file()]
+            if existing:
+                if len(manifests) != 1:
+                    raise ValueError("준비된 내레이션은 하나의 기록된 세트여야 합니다.")
+                manifest = json.loads(existing[0].read_text(encoding="utf-8"))
+                scenes = manifest.get("scenes") if isinstance(manifest, dict) else None
+                if not isinstance(manifest, dict) or manifest.get("schema_version") != 1 or not isinstance(scenes, dict):
+                    raise ValueError("내레이션 준비 기록이 올바르지 않습니다.")
+                for scene, path in zip(script.scenes, audio_paths):
+                    entry = scenes.get(str(scene.scene_number))
+                    expected_text = hashlib.sha256(scene.script_text.encode("utf-8")).hexdigest()
+                    expected_file = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+                    if (not isinstance(entry, dict) or entry.get("status") != "complete"
+                            or entry.get("text_sha256") != expected_text
+                            or entry.get("file_sha256") != expected_file):
+                        raise ValueError(f"씬 {scene.scene_number} 내레이션이 대본 또는 준비 기록과 다릅니다.")
         total_duration = 0.0
         for path in audio_paths:
             audio = AudioFileClip(path)

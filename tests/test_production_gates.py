@@ -53,6 +53,29 @@ class ProductionGateTests(unittest.TestCase):
         paid.start()
         self.addCleanup(paid.stop)
 
+    def test_prepared_narration_manifest_rejects_wrong_script_or_file(self):
+        script = sample_script()
+        script.scenes = script.scenes[:1]
+        with tempfile.TemporaryDirectory() as directory:
+            audio = Path(directory) / "scene_1.wav"
+            audio.write_bytes(b"recorded")
+            manifest = {"schema_version": 1, "scenes": {"1": {
+                "status": "complete",
+                "text_sha256": hashlib.sha256(b"First").hexdigest(),
+                "file_sha256": hashlib.sha256(audio.read_bytes()).hexdigest(),
+            }}}
+            (Path(directory) / "narration.json").write_text(json.dumps(manifest))
+            with patch("shorts_maker.editor.video_editor.AudioFileClip",
+                       return_value=SimpleNamespace(duration=1.0, close=Mock())):
+                VideoEditor.validate_narration([str(audio)], script)
+                script.scenes[0].script_text = "Different claim"
+                with self.assertRaisesRegex(ValueError, "대본"):
+                    VideoEditor.validate_narration([str(audio)], script)
+                script.scenes[0].script_text = "First"
+                audio.write_bytes(b"changed")
+                with self.assertRaisesRegex(ValueError, "준비 기록"):
+                    VideoEditor.validate_narration([str(audio)], script)
+
     def test_direct_provider_helpers_respect_paid_switch(self):
         video_client = SimpleNamespace(models=SimpleNamespace(generate_videos=Mock()))
         image_client = SimpleNamespace(models=SimpleNamespace(generate_content=Mock()))
@@ -640,13 +663,14 @@ class ProductionGateTests(unittest.TestCase):
             service._editor.validate_narration = Mock()
             service._generator = SimpleNamespace(generate_scene_clip=AsyncMock(return_value=str(source)))
 
+            script = sample_script()
             result = asyncio.run(service.produce_video(
-                sample_script(), prepared_audio_paths=[str(audio), str(audio)],
+                script, prepared_audio_paths=[str(audio), str(audio)],
             ))
 
             self.assertTrue(result.success)
             service._editor.prepare_narration.assert_not_awaited()
-            service._editor.validate_narration.assert_called_once()
+            service._editor.validate_narration.assert_called_once_with([str(audio)] * 2, script)
             self.assertEqual(service._editor.compose_video.await_args.kwargs["audio_paths"], [str(audio)] * 2)
             service._editor.cleanup_temp_files.assert_not_called()
             self.assertTrue(audio.exists())

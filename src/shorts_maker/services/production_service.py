@@ -591,7 +591,7 @@ class ProductionService:
                 else:
                     if len(prepared_audio_paths) != num_scenes:
                         raise ValueError("씬 수와 내레이션 수가 일치하지 않습니다.")
-                    await asyncio.to_thread(editor.validate_narration, prepared_audio_paths)
+                    await asyncio.to_thread(editor.validate_narration, prepared_audio_paths, script)
                     audio_paths = prepared_audio_paths
                 if self.is_cancelled():
                     return self._failed_result("사용자에 의해 취소됨", clips)
