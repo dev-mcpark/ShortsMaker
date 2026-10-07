@@ -11,11 +11,15 @@ class CwNetStoryboardTests(unittest.TestCase):
     def test_stop_is_shown_before_its_safety_cause(self):
         early = storyboard.frame(1, 0.5, 5.23)
         stopped = storyboard.frame(1, 3.4, 5.23)
+        before_signal = storyboard.frame(2, 2.5, 6.52)
+        after_signal = storyboard.frame(2, 3.0, 6.52)
         before_cause = storyboard.frame(4, 1.5, 6.37)
         after_cause = storyboard.frame(4, 4.0, 6.37)
 
         self.assertNotEqual(early.getpixel((180, 408)), ImageColor.getrgb(storyboard.RED))
         self.assertEqual(stopped.getpixel((180, 408)), ImageColor.getrgb(storyboard.RED))
+        self.assertNotEqual(before_signal.getpixel((72, 530)), ImageColor.getrgb(storyboard.RED))
+        self.assertEqual(after_signal.getpixel((72, 530)), ImageColor.getrgb(storyboard.RED))
         self.assertNotEqual(before_cause.getpixel((65, 195)), ImageColor.getrgb(storyboard.MINT))
         self.assertEqual(after_cause.getpixel((65, 195)), ImageColor.getrgb(storyboard.MINT))
         before_limit = storyboard.frame(6, 3.3, 6.69)

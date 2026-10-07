@@ -71,10 +71,10 @@ def frame(scene, t, duration):
         if t >= 2.0:
             d.line((180, 408, 360, 408), fill=RED, width=7)
     elif scene == 2:
-        label(d, (34, 105), "운전자의 생각과 다른 신호", 31)
+        label(d, (34, 105), "멈췄지만 신호는 낮았다", 31)
         if t >= 0.4:
-            card(d, (40, 240, 500, 354), "운전자의 생각", "자전거를 보고 멈췄다")
-        if t >= 2.5:
+            card(d, (40, 240, 500, 354), "겉으로는 안전한 정지", "자전거 앞에서 멈춤")
+        if t >= 2.7:
             card(d, (40, 418, 500, 565), "설명 화면의 자전거 신호", "실제 화면을 단순화한 개념도", GOLD)
             d.rounded_rectangle((70, 525, 470, 540), radius=7, fill="#405363")
             d.rounded_rectangle((70, 525, 75, 540), radius=3, fill=RED)

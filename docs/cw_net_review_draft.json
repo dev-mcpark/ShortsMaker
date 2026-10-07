@@ -20,8 +20,8 @@
       "scene_number": 2,
       "visual_mode": "video",
       "duration_seconds": 6,
-      "visual_description": "Original dashboard concept diagram: the safety driver's expectation appears first, then the BIKE concept indicator stays near zero. Label this as a simplified explanation, not the study's actual UI.",
-      "script_text": "운전자는 그렇게 믿었지만, 설명 화면의 '자전거' 신호는 거의 켜지지 않았죠."
+      "visual_description": "Original dashboard concept diagram: the observed stop appears first, then the BIKE concept indicator stays below 1%. Label this as a simplified explanation, not the study's actual UI; do not assign an unreported belief to the safety driver.",
+      "script_text": "그런데 설명 화면은 달랐습니다. '자전거' 신호는 줄곧 1% 미만이었죠."
     },
     {
       "scene_number": 3,

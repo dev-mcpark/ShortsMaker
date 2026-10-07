@@ -179,3 +179,7 @@ The first topic page paired NASA `nova` with CW-Net Yuna, so voice quality could
 ## 2026-10-07 — Normalize documented music before the volume setting
 
 The three documented tracks differ by 12.7 LU over their first 37.5 seconds, so applying the same 20% volume directly makes a track swap unexpectedly loud or quiet. Normalize a temporary copy toward -14 LUFS with a -2 dB true-peak ceiling, then apply the existing mix volume; preserve the licensed MP3 and its hash. Keep the already-reviewed NASA cut unchanged and compare its new local mix by ear before choosing a replacement. Level matching makes options comparable but cannot judge whether a track fits the story or masks an individual word.
+
+## 2026-10-07 — Describe the cyclist signal without inventing the driver's thought
+
+The CW-Net paper reports a BIKE concept below 1% in the first cyclist tests and later more cautious self-driving engagement, but its case narrative does not quote the safety driver's precise initial belief. Replace the draft's attributed thought with the observed stop and low explanation signal. Keep the separate perception/planner and backup-braking reveal, align the numeric graphic with its spoken phrase, and retain the earlier shared scratch cut only for old links. This is a source-accuracy correction, not owner approval of the new story.
