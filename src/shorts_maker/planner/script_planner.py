@@ -614,6 +614,7 @@ class ScriptPlanner:
         - **Anti-Cliché Rule:** Do NOT start with "Did you know?" or generic intros. Dive straight into the specific fact or problem.
         - **Depth:** Explain one source-supported mechanism or relationship. Give numbers only when the source provides them.
         - **Evidence tense:** Keep a device's capability or assigned role separate from an action observed in the test. Do not turn "can collect samples" into "collected samples" without source evidence.
+        - **Evidence type:** Separate measured results from model projections and proposed uses. Do not present a simulated benefit as an observed field outcome.
         - **Length:** Aim for roughly 200-260 Korean narration characters; the TTS duration check is authoritative.
         - **TIMING:** The total spoken duration MUST be under **50 seconds**. This is a HARD LIMIT.
         - **Story spine:** Choose one source-supported dilemma, decision, and result. Each scene must change what the viewer understands; do not list facts or robot roles in article order.

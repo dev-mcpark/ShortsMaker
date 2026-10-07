@@ -47,6 +47,8 @@ class ScriptValidator:
            Distinguish capability or assigned role from an observed action or result;
            reject a past-tense event claim when the source only describes what a
            device can do or was meant to do.
+           Distinguish measured results from simulations, model projections, and
+           proposed uses. Reject a modeled benefit stated as an observed field result.
            Do not use outside knowledge as evidence. Visuals may be illustrative,
            but must not present invented footage as a real event. Compare visual
            descriptions and motion instructions with the source's location,

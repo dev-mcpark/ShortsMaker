@@ -187,3 +187,7 @@ The CW-Net paper reports a BIKE concept below 1% in the first cyclist tests and 
 ## 2026-10-07 — Lead the wind-tunnel draft with the measured turn
 
 The paper's laboratory result is that the power-maximizing tip-speed ratio changes with yaw angle; the wind-farm benefit comes from a separate uncertain model case study. Put the measured turn immediately after the opening question, then show how the tunnel test produced it. Describe combined yaw and rotor control as an opportunity, and reserve farm gains for a clearly labeled modeled prospect. Keep this as a text-only candidate until the owner chooses the story direction.
+
+## 2026-10-07 — Preserve measured versus modeled evidence in automatic scripts
+
+The automated story prompt already requires a source-backed question, early result, causal steps, and limit, but it did not name the distinction exposed by the wind-tunnel paper: a measured laboratory result versus a modeled wind-farm gain. State that distinction in the existing generation and source-validation prompts, and repeat it in the editorial recipe. Keep the same planning and validation calls; prompt tests verify the instructions are sent, not that a live model always follows them.

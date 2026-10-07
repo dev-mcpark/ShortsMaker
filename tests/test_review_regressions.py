@@ -344,6 +344,7 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("clearly illustrative diagram", prompt)
         self.assertIn("one coherent shot", prompt)
         self.assertIn("source-supported dilemma, decision, and result", prompt)
+        self.assertIn("Separate measured results from model projections", prompt)
         self.assertIn("Reveal what actually happened", prompt)
         self.assertNotIn("4k resolution", prompt.lower())
         self.assertNotIn("15%", prompt)
@@ -446,6 +447,7 @@ class ReviewRegressions(unittest.TestCase):
         self.assertEqual(result.reason, "unsupported_claim")
         request = completion.await_args.kwargs["messages"]
         self.assertIn("Source grounding", request[0]["content"])
+        self.assertIn("Distinguish measured results from simulations", request[0]["content"])
         self.assertIn("The factory expanded.", request[1]["content"])
         self.assertIn("30% increase", request[1]["content"])
 
