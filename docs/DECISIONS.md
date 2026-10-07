@@ -163,3 +163,7 @@ The retained narration manifest records both the approved scene text and each co
 ## 2026-10-07 — Count editorial cuts without contaminating paired experiments
 
 The NASA pilot now uses source-grounded manual storyboard clips, but the scorecard summarized only image/hybrid pairs. Report manual-clip re-cuts separately, using the existing private review CSV and sidecar flag. Count cost and acceptance only for rows with both a human verdict and an allocated bill; include rejected drafts in cost per accepted editorial cut. Keep paired image/hybrid results and their matched seven-day outcomes unchanged. Draft count is not a count of independent topics, and missing bills remain missing rather than zero.
+
+## 2026-10-07 — Apply the visual cap to direct generator calls
+
+The standalone generation test invokes `VideoGenerator` without `ProductionService`, so enabling paid production previously allowed it to bypass the service's visual-output cap. Check the full direct batch before launching any scene and check single-scene calls as well, reserving configured Veo attempts. Direct generation has no service cache, so count every requested scene. Keep the service's cache-aware preflight and the default-off paid switch; neither estimate includes provider input charges or guarantees the final bill.

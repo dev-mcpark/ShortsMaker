@@ -11,7 +11,7 @@ from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
-from shorts_maker.services.visual_cost import scene_mode
+from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
 
 VIDEO_PROMPT_VERSION = 2
 
@@ -76,13 +76,34 @@ class VideoGenerator:
             script: ShortsScript 객체
             parallel: True면 이미지 모드에서 병렬 처리 (비디오 모드는 순차 처리)
         """
+        reserve = sum(
+            self._scene_output_reserve(scene_mode(self.mode, scene, index))
+            for index, scene in enumerate(script.scenes)
+        )
+        self._check_visual_cap(reserve)
         if parallel and self.mode == "image":
             return await self._generate_clips_parallel(script)
         return await self._generate_clips_sequential(script)
 
+    def _scene_output_reserve(self, mode: str) -> float:
+        model = settings.veo_model_id if mode == "video" else settings.image_model_id
+        duration = (settings.hybrid_veo_duration_seconds if self.mode == "hybrid"
+                    else settings.veo_duration_seconds)
+        attempts = self.max_veo_attempts if mode == "video" else 1
+        return attempts * estimated_scene_cost(mode, model, duration)
+
+    @staticmethod
+    def _check_visual_cap(reserve: float) -> None:
+        if reserve > settings.max_visual_cost_usd:
+            raise ValueError(
+                f"예상 비주얼 비용 ${reserve:.3f}가 설정 상한 "
+                f"${settings.max_visual_cost_usd:.2f}를 초과합니다."
+            )
+
     async def generate_scene_clip(self, scene, mode_override: Optional[str] = None) -> str:
         """현재 생성 모드에 맞는 단일 씬 클립을 만듭니다."""
         mode = mode_override or self.mode
+        self._check_visual_cap(self._scene_output_reserve(mode))
         if mode == "video":
             path = (await self._generate_background_video(
                 scene, settings.hybrid_veo_duration_seconds,

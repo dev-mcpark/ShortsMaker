@@ -26,6 +26,27 @@ class WorkflowTests(unittest.TestCase):
         paid.start()
         self.addCleanup(paid.stop)
 
+    def test_direct_generator_checks_batch_and_retry_reserve_before_generation(self):
+        generator = object.__new__(VideoGenerator)
+        generator.mode = "image"
+        generator.max_veo_attempts = 1
+        script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=i) for i in (1, 2)])
+        with patch.object(settings, "max_visual_cost_usd", 0.05), patch.object(
+            generator, "_generate_clips_sequential", new_callable=AsyncMock,
+        ) as generate:
+            with self.assertRaisesRegex(ValueError, "설정 상한"):
+                asyncio.run(generator.generate_clips(script))
+            generate.assert_not_awaited()
+
+        generator.mode = "video"
+        generator.max_veo_attempts = 3
+        with patch.object(settings, "max_visual_cost_usd", 1.0), patch.object(
+            generator, "_generate_background_video", new_callable=AsyncMock,
+        ) as generate:
+            with self.assertRaisesRegex(ValueError, "설정 상한"):
+                asyncio.run(generator.generate_scene_clip(script.scenes[0]))
+            generate.assert_not_awaited()
+
     def test_empty_manual_clips_do_not_start_paid_generation(self):
         service = ProductionService(mode="video")
         script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=1)])
@@ -262,6 +283,7 @@ class WorkflowTests(unittest.TestCase):
     def test_generator_keeps_mode_specific_paths(self):
         generator = object.__new__(VideoGenerator)
         generator.mode = "video"
+        generator.max_veo_attempts = 1
         generator.character_overlay = None
         generator._generate_background_video = AsyncMock(return_value="background.mp4")
         generator._generate_image_gemini = AsyncMock(return_value="image.png")
