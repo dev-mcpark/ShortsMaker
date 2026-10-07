@@ -167,3 +167,7 @@ The NASA pilot now uses source-grounded manual storyboard clips, but the scoreca
 ## 2026-10-07 — Apply the visual cap to direct generator calls
 
 The standalone generation test invokes `VideoGenerator` without `ProductionService`, so enabling paid production previously allowed it to bypass the service's visual-output cap. Check the full direct batch before launching any scene and check single-scene calls as well, reserving configured Veo attempts. Direct generation has no service cache, so count every requested scene. Keep the service's cache-aware preflight and the default-off paid switch; neither estimate includes provider input charges or guarantees the final bill.
+
+## 2026-10-07 — Test story interest with a second topic at zero API cost
+
+The owner found the NASA final voice, music, captions, and visual pacing suitable but could not isolate the story's appeal from its subject. Build a private CW-Net draft from the primary paper's cyclist case with original concept diagrams and local scratch voice, reusing the documented music only provisionally. Keep its script and music unapproved, label the different voices in the comparison, and avoid treating this as a controlled A/B result. Delay final paid voice, generated visuals, and publication until editorial review and a separate spending ceiling are agreed.
