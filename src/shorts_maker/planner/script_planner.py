@@ -524,7 +524,7 @@ class ScriptPlanner:
         if analysis:
             # Phase 2: Deep Analysis 결과 활용
             enhanced_context += f"""
-            ### DEEP ANALYSIS & STORY MATERIAL (PRIORITY):
+            ### STORY IDEAS FROM AN EARLIER MODEL PASS (NOT EVIDENCE):
             - **Core Message:** {analysis.core_message}
             - **Powerful Hook:** {analysis.hook}
             - **Secret Mechanism (The 'How'):** {analysis.secret_mechanism}
@@ -540,6 +540,8 @@ class ScriptPlanner:
             4. **Impact:** {analysis.story_structure.get('impact')}
 
             ### VISUAL THEMES: {', '.join(analysis.visual_keywords)}
+
+            *Use this analysis for structure only. Include factual claims only when the primary source text above supports them.*
             """
 
             # Phase 3: Enriched Info 추가

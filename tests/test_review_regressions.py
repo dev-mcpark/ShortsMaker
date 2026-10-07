@@ -334,6 +334,13 @@ class ReviewRegressions(unittest.TestCase):
             "category": "Tech", "title": "ASTRA field test",
             "content": "Three robots were tested in Virginia.",
             "source": "NASA", "url": "https://example.com/source",
+            "analysis": SimpleNamespace(
+                core_message="Mars landing", hook="Mars landing", secret_mechanism="unverified",
+                context_background="unverified", numbers_data=["unverified estimate"], expert_insights=[],
+                future_impact="unverified", visual_keywords=[],
+                story_structure={"opening": "Mars", "mystery": "Mars", "secret": "Mars", "impact": "Mars"},
+            ),
+            "enriched_info": ["Unverified search claim"],
         }))
 
         self.assertEqual(result.scenes[0].visual_mode, "image")
@@ -345,6 +352,9 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("one coherent shot", prompt)
         self.assertIn("source-supported dilemma, decision, and result", prompt)
         self.assertIn("Separate measured results from model projections", prompt)
+        self.assertIn("STORY IDEAS FROM AN EARLIER MODEL PASS (NOT EVIDENCE)", prompt)
+        self.assertIn("Include factual claims only when the primary source text above supports them", prompt)
+        self.assertIn("Use these snippets as leads only", prompt)
         self.assertIn("Reveal what actually happened", prompt)
         self.assertNotIn("4k resolution", prompt.lower())
         self.assertNotIn("15%", prompt)

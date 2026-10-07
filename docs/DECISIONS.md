@@ -191,3 +191,7 @@ The paper's laboratory result is that the power-maximizing tip-speed ratio chang
 ## 2026-10-07 — Preserve measured versus modeled evidence in automatic scripts
 
 The automated story prompt already requires a source-backed question, early result, causal steps, and limit, but it did not name the distinction exposed by the wind-tunnel paper: a measured laboratory result versus a modeled wind-farm gain. State that distinction in the existing generation and source-validation prompts, and repeat it in the editorial recipe. Keep the same planning and validation calls; prompt tests verify the instructions are sent, not that a live model always follows them.
+
+## 2026-10-07 — Treat model analysis as story ideas, not primary evidence
+
+The script writer called a previous LLM analysis `PRIORITY` even though the validator checks factual claims against the source article or RSS excerpt, and the web-search snippets were already leads only. Relabel that analysis as unverified story ideas and explicitly require the article text to support its claims. Keep the analysis for useful hook and structure suggestions without making another call. The offline prompt test exercises both analysis and search-snippet branches; this reduces a conflicting instruction, but does not prove a future model will ignore every unsupported suggestion.
