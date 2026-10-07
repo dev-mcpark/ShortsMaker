@@ -1,0 +1,55 @@
+{
+  "title": "바람이 비껴가면 풍력발전기는 속도를 바꿔야 할까?",
+  "description": "Kurelek 등의 2026년 풍동 실험을 바탕으로 한 설명 영상 초안입니다. 화면은 자체 제작 개념도이며 실제 발전소나 시험 장면이 아닙니다. 연구: https://academic.oup.com/pnasnexus/article/5/10/pgag303/8786541",
+  "tags": ["풍력발전", "에너지", "과학", "Shorts"],
+  "mood": "calm",
+  "style": "source-grounded story",
+  "music_direction": "비스듬한 바람이라는 문제를 담백하게 제시하고, 최적 회전 속도가 달라지는 장면에서만 리듬을 살린다. 실험과 전망의 경계는 차분하게 마무리한다. 영웅적 상승음과 음성을 가리는 강한 박자는 피한다.",
+  "source_name": "PNAS Nexus — Full dynamic similarity experiments and predictive modeling of wind turbine aerodynamics across control strategies",
+  "source_url": "https://academic.oup.com/pnasnexus/article/5/10/pgag303/8786541",
+  "generation_mode": "video",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "visual_mode": "video",
+      "duration_seconds": 6,
+      "visual_description": "Original labeled diagram of wind arriving at a turbine from an angle. Keep the blade speed unchanged visually; ask the question before revealing the result. No real wind-farm footage.",
+      "script_text": "바람이 비스듬히 불면, 풍력발전기 날개 속도는 그대로 둬도 될까요?"
+    },
+    {
+      "scene_number": 2,
+      "visual_mode": "video",
+      "duration_seconds": 6,
+      "visual_description": "Original diagram of a scaled turbine inside a pressurized wind tunnel. Reveal independent controls for wind alignment and blade-tip speed; omit pressure numbers because the paper and MIT report differ.",
+      "script_text": "연구진은 작은 터빈을 고압 풍동에 넣고, 바람 각도와 날개 속도를 바꿔 봤습니다."
+    },
+    {
+      "scene_number": 3,
+      "visual_mode": "video",
+      "duration_seconds": 6,
+      "visual_description": "Original qualitative plot: as wind misalignment changes, the blade-tip speed ratio at maximum power shifts. Do not invent measured percentages or imply faster is always better.",
+      "script_text": "바람 각도가 달라지자 전력을 가장 많이 만드는 날개 속도도 달라졌죠."
+    },
+    {
+      "scene_number": 4,
+      "visual_mode": "video",
+      "duration_seconds": 6,
+      "visual_description": "Original two-control diagram: yaw direction and blade-tip speed ratio are considered together. Label this as a proposed control opportunity, not a deployed wind-farm result.",
+      "script_text": "방향만 돌릴 게 아니라, 회전 속도도 함께 조정할 근거가 생긴 겁니다."
+    },
+    {
+      "scene_number": 5,
+      "visual_mode": "video",
+      "duration_seconds": 6,
+      "visual_description": "Split original diagram: measured wind-tunnel points on one side, model-based wind-farm case study on the other. Distinct labels prevent the modeled farm from appearing observed.",
+      "script_text": "새 모델은 실험 결과를 예측했습니다. 풍력단지 효과는 컴퓨터로 계산했고요."
+    },
+    {
+      "scene_number": 6,
+      "visual_mode": "video",
+      "duration_seconds": 7,
+      "visual_description": "Original closing diagram separates controlled lab evidence from future full-scale field testing. No production or revenue figure is displayed as fact.",
+      "script_text": "실제 풍력단지에서 전력이 얼마나 늘지는, 현장 시험으로 확인해야 합니다."
+    }
+  ]
+}
