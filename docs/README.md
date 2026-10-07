@@ -6,7 +6,7 @@ The current evaluation method for finished videos is [QUALITY_EVALUATION.md](QUA
 The curated visual prompt rules and official source links are in [VISUAL_PROMPTING.md](VISUAL_PROMPTING.md).
 The source-grounded story, motion, music, and spending recipe is [CREATIVE_FORMAT.md](CREATIVE_FORMAT.md).
 The current NASA review's exact six-scene, source-checked narration and visual brief is [nasa_field_test_review.json](nasa_field_test_review.json). `scripts/render_nasa_storyboard.py` recreates its local six-scene diagrams from the source photo and retained narration lengths, then `scripts/local_review.py` makes the review cut. The photo, video clips, voice, music MP3, sidecar, and review metrics stay local and ignored.
-The unapproved six-scene drafts for distinct [CW-Net](cw_net_review_draft.json) and [wind-tunnel](wind_tunnel_review_draft.json) episodes are text-only; their primary-source checks and production gate are in [STATUS.md](STATUS.md).
+The unapproved six-scene drafts for distinct [CW-Net](cw_net_review_draft.json) and [wind-tunnel](wind_tunnel_review_draft.json) episodes are text-only briefs for complete local manual clips, not automatic visual-generation inputs; their primary-source checks and production gate are in [STATUS.md](STATUS.md).
 
 Earlier PDCA plans, designs, analyses, and reports under `01-plan/` through `04-report/` and `archive/` are preserved as historical context. They describe past proposals and completion reports, not the current implementation contract. Verify them against code before reusing a pattern. Local `.pdca-*` snapshots and `.bkit-memory.json` are tool state and remain untracked.
 
