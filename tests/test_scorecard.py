@@ -1,4 +1,4 @@
-"""The scorecard only compares complete, paired production evidence."""
+"""The scorecard keeps paired and editorial evidence separate."""
 
 import csv
 import json
@@ -92,6 +92,37 @@ class ScorecardTests(unittest.TestCase):
             self.assertEqual(summary["complete_7d_outcome_pairs"], 1)
             self.assertEqual(summary["complete_7d_revenue_pairs"], 0)
             self.assertIsNone(summary["outcomes_7d"]["image"]["revenue_usd"])
+
+    def test_editorial_costs_include_rejected_cuts_without_polluting_pairs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outputs = Path(directory)
+            reviews = outputs / "reviews.csv"
+            for name in ("accepted", "rejected", "pending"):
+                (outputs / f"{name}.production.json").write_text(json.dumps({
+                    "schema_version": 1, "script_key": "same-story",
+                    "production_mode": "video", "paired_comparison_eligible": False,
+                    "quality_passed": True,
+                }), encoding="utf-8")
+            init_reviews(outputs, reviews)
+            with reviews.open(encoding="utf-8", newline="") as file:
+                rows = list(csv.DictReader(file))
+            for row in rows:
+                if "accepted.production" in row["report_path"]:
+                    row.update(accepted="yes", billed_cost_usd="0.04")
+                elif "rejected.production" in row["report_path"]:
+                    row.update(accepted="no", billed_cost_usd="0.02")
+            with reviews.open("w", encoding="utf-8", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=FIELDS)
+                writer.writeheader()
+                writer.writerows(rows)
+
+            summary = summarize(outputs, reviews)
+            self.assertEqual(summary["paired_scripts"], 0)
+            self.assertEqual(summary["editorial_cuts"], {
+                "rendered": 3, "complete_cost_reviews": 2, "accepted": 1,
+                "accepted_rate": 0.5, "billed_cost_usd": 0.06,
+                "billed_cost_per_accepted_usd": 0.06,
+            })
 
 
 if __name__ == "__main__":

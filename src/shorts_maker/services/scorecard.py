@@ -1,4 +1,4 @@
-"""Offline, private image-versus-hybrid production scorecard."""
+"""Offline, private production scorecard."""
 
 import argparse
 import csv
@@ -122,6 +122,24 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
             for mode in totals:
                 outcomes[mode]["revenue"] += metrics[mode][2]
 
+    editorial_paths = [path for path, report in reports.items()
+                       if report.get("paired_comparison_eligible") is False]
+    editorial_complete = editorial_accepted = 0
+    editorial_cost = 0.0
+    for path in editorial_paths:
+        row = reviews.get(path)
+        if row is None or row["accepted"].strip().lower() not in {"yes", "no"}:
+            continue
+        cost = _number(row, "billed_cost_usd")
+        if cost is None:
+            continue
+        accepted = row["accepted"].strip().lower() == "yes"
+        if accepted and not reports[path].get("quality_passed"):
+            raise ValueError("품질 검사를 통과하지 못한 영상을 채택할 수 없습니다.")
+        editorial_complete += 1
+        editorial_accepted += accepted
+        editorial_cost += cost
+
     return {
         "rendered_reports": len(reports),
         "paired_scripts": paired,
@@ -136,6 +154,16 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
                     totals[mode]["cost"] / totals[mode]["accepted"], 4,
                 ) if totals[mode]["accepted"] else None,
             } for mode in totals
+        },
+        "editorial_cuts": {
+            "rendered": len(editorial_paths),
+            "complete_cost_reviews": editorial_complete,
+            "accepted": editorial_accepted,
+            "accepted_rate": round(editorial_accepted / editorial_complete, 4) if editorial_complete else None,
+            "billed_cost_usd": round(editorial_cost, 4) if editorial_complete else None,
+            "billed_cost_per_accepted_usd": round(
+                editorial_cost / editorial_accepted, 4,
+            ) if editorial_accepted else None,
         },
         "complete_7d_outcome_pairs": outcome_pairs,
         "complete_7d_revenue_pairs": revenue_pairs,

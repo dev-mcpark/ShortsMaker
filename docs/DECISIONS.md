@@ -159,3 +159,7 @@ The final-frame policy is a safe fallback for arbitrary short clips, but the NAS
 ## 2026-10-05 — Bind retained narration to its scene text before editing
 
 The retained narration manifest records both the approved scene text and each completed audio file's hash, but local re-renders previously checked only the number and playable length of prepared files. Check the existing manifest in the shared production path when it is present, before visual work, so a renamed or replaced file cannot silently voice a different claim under the approved captions. Keep manifest-free scratch audio usable for local comparisons; reviewers must check its alignment themselves. This verifies text/file identity, not pronunciation or the truth of the source article.
+
+## 2026-10-07 — Count editorial cuts without contaminating paired experiments
+
+The NASA pilot now uses source-grounded manual storyboard clips, but the scorecard summarized only image/hybrid pairs. Report manual-clip re-cuts separately, using the existing private review CSV and sidecar flag. Count cost and acceptance only for rows with both a human verdict and an allocated bill; include rejected drafts in cost per accepted editorial cut. Keep paired image/hybrid results and their matched seven-day outcomes unchanged. Draft count is not a count of independent topics, and missing bills remain missing rather than zero.
