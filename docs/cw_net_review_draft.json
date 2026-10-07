@@ -42,7 +42,7 @@
       "visual_mode": "video",
       "duration_seconds": 6,
       "visual_description": "Original private-track diagram compares the initial test with the driver's later choice to engage self-driving at a lower speed. Avoid invented speed numbers.",
-      "script_text": "설명을 본 운전자는 다음 시험에서 더 낮은 속도로 자율주행을 시작했습니다."
+      "script_text": "설명을 본 운전자는 더 조심했습니다. 다음엔 더 낮은 속도로 자율주행을 켰죠."
     },
     {
       "scene_number": 6,
