@@ -171,3 +171,7 @@ The standalone generation test invokes `VideoGenerator` without `ProductionServi
 ## 2026-10-07 — Test story interest with a second topic at zero API cost
 
 The owner found the NASA final voice, music, captions, and visual pacing suitable but could not isolate the story's appeal from its subject. Build a private CW-Net draft from the primary paper's cyclist case with original concept diagrams and local scratch voice, reusing the documented music only provisionally. Keep its script and music unapproved, label the different voices in the comparison, and avoid treating this as a controlled A/B result. Delay final paid voice, generated visuals, and publication until editorial review and a separate spending ceiling are agreed.
+
+## 2026-10-07 — Compare story topics with the existing shared scratch voice
+
+The first topic page paired NASA `nova` with CW-Net Yuna, so voice quality could influence a story judgment. Add the already-rendered NASA Yuna cut as the main comparator and keep `nova` as the owner's final-voice reference. This costs no new media work and reduces one confound, while different scripts, lengths, and visuals still prevent a controlled A/B claim.
