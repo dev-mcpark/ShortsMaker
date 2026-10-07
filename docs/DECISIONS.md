@@ -175,3 +175,7 @@ The owner found the NASA final voice, music, captions, and visual pacing suitabl
 ## 2026-10-07 — Compare story topics with the existing shared scratch voice
 
 The first topic page paired NASA `nova` with CW-Net Yuna, so voice quality could influence a story judgment. Add the already-rendered NASA Yuna cut as the main comparator and keep `nova` as the owner's final-voice reference. This costs no new media work and reduces one confound, while different scripts, lengths, and visuals still prevent a controlled A/B claim.
+
+## 2026-10-07 — Normalize documented music before the volume setting
+
+The three documented tracks differ by 12.7 LU over their first 37.5 seconds, so applying the same 20% volume directly makes a track swap unexpectedly loud or quiet. Normalize a temporary copy toward -14 LUFS with a -2 dB true-peak ceiling, then apply the existing mix volume; preserve the licensed MP3 and its hash. Keep the already-reviewed NASA cut unchanged and compare its new local mix by ear before choosing a replacement. Level matching makes options comparable but cannot judge whether a track fits the story or masks an individual word.

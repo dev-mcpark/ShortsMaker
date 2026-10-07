@@ -29,6 +29,7 @@ if os.path.exists("/opt/homebrew/bin/magick"):
 class VideoEditor:
     TTS_MODEL = "tts-1"
     TTS_MAX_ATTEMPTS = 2  # One request plus one explicit transient retry; SDK retries are off.
+    BGM_TARGET_LUFS = -14
 
     def __init__(
         self,
@@ -296,7 +297,8 @@ class VideoEditor:
             if progress_callback:
                 progress_callback(75, "BGM 합성 중...")
             if bgm_path:
-                bgm = AudioFileClip(bgm_path)
+                normalized_bgm_path = await asyncio.to_thread(self._normalize_bgm_audio, bgm_path)
+                bgm = AudioFileClip(normalized_bgm_path)
                 if bgm.duration < final_video.duration:
                     from moviepy.audio.fx import AudioLoop
                     bgm = bgm.with_effects([AudioLoop(duration=final_video.duration)])
@@ -359,6 +361,20 @@ class VideoEditor:
         ], capture_output=True, text=True)
         if result.returncode:
             raise RuntimeError(f"내레이션 음량 보정 실패: {result.stderr.strip()[-500:]}")
+        return output
+
+    def _normalize_bgm_audio(self, path: str) -> str:
+        """Give documented tracks a common starting level before applying bgm_volume."""
+        settings.temp_dir.mkdir(parents=True, exist_ok=True)
+        output = str(settings.temp_dir / f"bgm_{time.time_ns()}.wav")
+        self._track_temp_file(output)
+        result = subprocess.run([
+            FFMPEG_BINARY, "-y", "-hide_banner", "-loglevel", "error",
+            "-i", path, "-af", f"loudnorm=I={self.BGM_TARGET_LUFS}:TP=-2:LRA=11",
+            "-ar", "48000", "-ac", "2", output,
+        ], capture_output=True, text=True)
+        if result.returncode:
+            raise RuntimeError(f"BGM 음량 보정 실패: {result.stderr.strip()[-500:]}")
         return output
 
     def _create_visual_clip(self, path, duration):

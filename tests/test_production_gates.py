@@ -347,6 +347,27 @@ class ProductionGateTests(unittest.TestCase):
             editor.cleanup_temp_files()
             self.assertFalse(Path(normalized_path).exists())
 
+    def test_music_tracks_start_at_comparable_levels_without_changing_sources(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(settings, "temp_dir", Path(directory)):
+            editor = VideoEditor(bgm_volume=0.2)
+            output_levels = []
+            for amplitude in (0.02, 0.2):
+                source = Path(directory) / f"music_{amplitude}.wav"
+                audio = AudioClip(lambda t: amplitude * np.sin(2 * np.pi * 220 * t), duration=3, fps=8000)
+                try:
+                    audio.write_audiofile(str(source), fps=8000, logger=None)
+                finally:
+                    audio.close()
+                original = source.read_bytes()
+                normalized = editor._normalize_bgm_audio(str(source))
+                with AudioFileClip(normalized) as clip:
+                    output_levels.append(np.sqrt(np.mean(clip.to_soundarray() ** 2)))
+                self.assertEqual(source.read_bytes(), original)
+            self.assertLess(max(output_levels) / min(output_levels), 1.3)
+            paths = list(editor._temp_files)
+            editor.cleanup_temp_files()
+            self.assertTrue(all(not Path(path).exists() for path in paths))
+
     def test_short_video_holds_final_frame_without_retiming_reveal(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "scene.mp4"
@@ -514,6 +535,8 @@ class ProductionGateTests(unittest.TestCase):
             script.music_direction = "조용한 호기심, 강한 드럼은 피함"
             service = ProductionService(mode="hybrid")
             service._editor = fake_editor(output)
+            service._editor.selected_bgm_path = "/tmp/documented.mp3"
+            service._editor.bgm_volume = 0.35
             service._generator = SimpleNamespace(generate_scene_clip=AsyncMock(
                 side_effect=[str(output), str(output)],
             ))
@@ -529,6 +552,9 @@ class ProductionGateTests(unittest.TestCase):
             self.assertEqual(report["source_url"], script.source_url)
             self.assertEqual(report["production_mode"], "hybrid")
             self.assertEqual(report["music_direction"], script.music_direction)
+            self.assertEqual(report["bgm_track"], "documented.mp3")
+            self.assertEqual(report["bgm_volume"], 0.35)
+            self.assertEqual(report["bgm_source_target_lufs"], -14)
             self.assertTrue(report["paired_comparison_eligible"])
             self.assertEqual([scene["visual_mode"] for scene in report["scenes"]], ["video", "image"])
             self.assertEqual([scene["source"] for scene in report["scenes"]], ["generated", "generated"])

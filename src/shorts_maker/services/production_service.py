@@ -703,6 +703,7 @@ class ProductionService:
                 "title": getattr(script, "title", None),
                 "narration": [getattr(scene, "script_text", None) for scene in script.scenes],
             }, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
+            music_path = getattr(editor, "selected_bgm_path", None)
             report_path = await asyncio.to_thread(self._write_report, video_path, {
                 "schema_version": 1,
                 "completed_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -727,7 +728,10 @@ class ProductionService:
                 ],
                 "estimated_visual_output_cost_usd": round(estimated_cost, 4),
                 "music_direction": getattr(script, "music_direction", ""),
-                "bgm_track": Path(editor.selected_bgm_path).name if getattr(editor, "selected_bgm_path", None) else None,
+                "bgm_track": Path(music_path).name if music_path else None,
+                "bgm_volume": (getattr(editor, "bgm_volume", self.editor_options.get("bgm_volume", 0.2))
+                               if music_path else 0.0),
+                "bgm_source_target_lufs": VideoEditor.BGM_TARGET_LUFS if music_path else None,
                 "subtitle_style": getattr(editor, "subtitle_style", "soft"),
                 "generated_scenes": generated_scenes,
                 "reused_or_manual_scenes": reused_scenes,
