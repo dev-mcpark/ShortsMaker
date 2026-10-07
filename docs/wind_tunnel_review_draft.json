@@ -20,29 +20,29 @@
       "scene_number": 2,
       "visual_mode": "video",
       "duration_seconds": 6,
-      "visual_description": "Original diagram of a scaled turbine inside a pressurized wind tunnel. Reveal independent controls for wind alignment and blade-tip speed; omit pressure numbers because the paper and MIT report differ.",
-      "script_text": "연구진은 작은 터빈을 고압 풍동에 넣고, 바람 각도와 날개 속도를 바꿔 봤습니다."
+      "visual_description": "Original explanatory plot labeled '풍동 결과 개념도': show only the paper's finding that the power-maximizing blade-tip speed ratio changes with yaw angle. Do not invent numeric points, a measured curve shape, or a field deployment.",
+      "script_text": "풍동 실험에선 각도마다 최대 출력을 내는 회전 조건이 달랐습니다."
     },
     {
       "scene_number": 3,
       "visual_mode": "video",
       "duration_seconds": 6,
-      "visual_description": "Original qualitative plot: as wind misalignment changes, the blade-tip speed ratio at maximum power shifts. Do not invent measured percentages or imply faster is always better.",
-      "script_text": "바람 각도가 달라지자 전력을 가장 많이 만드는 날개 속도도 달라졌죠."
+      "visual_description": "Original diagram of a scaled turbine inside a pressurized wind tunnel. Reveal the tested yaw angle and blade-tip speed ratio as separate controls; omit pressure numbers because the paper and MIT report differ.",
+      "script_text": "연구진은 작은 터빈을 고압 풍동에서 시험하며 바람 각도와 회전 조건을 바꿨죠."
     },
     {
       "scene_number": 4,
       "visual_mode": "video",
       "duration_seconds": 6,
       "visual_description": "Original two-control diagram: yaw direction and blade-tip speed ratio are considered together. Label this as a proposed control opportunity, not a deployed wind-farm result.",
-      "script_text": "방향만 돌릴 게 아니라, 회전 속도도 함께 조정할 근거가 생긴 겁니다."
+      "script_text": "방향과 회전 조건을 함께 조정하는 방식을 검토할 근거가 생긴 겁니다."
     },
     {
       "scene_number": 5,
       "visual_mode": "video",
       "duration_seconds": 6,
       "visual_description": "Split original diagram: measured wind-tunnel points on one side, model-based wind-farm case study on the other. Distinct labels prevent the modeled farm from appearing observed.",
-      "script_text": "새 모델은 실험 결과를 예측했습니다. 풍력단지 효과는 컴퓨터로 계산했고요."
+      "script_text": "모델은 풍동 결과를 예측했습니다. 풍력단지 이득은 컴퓨터로 계산한 전망이고요."
     },
     {
       "scene_number": 6,

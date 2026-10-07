@@ -183,3 +183,7 @@ The three documented tracks differ by 12.7 LU over their first 37.5 seconds, so 
 ## 2026-10-07 — Describe the cyclist signal without inventing the driver's thought
 
 The CW-Net paper reports a BIKE concept below 1% in the first cyclist tests and later more cautious self-driving engagement, but its case narrative does not quote the safety driver's precise initial belief. Replace the draft's attributed thought with the observed stop and low explanation signal. Keep the separate perception/planner and backup-braking reveal, align the numeric graphic with its spoken phrase, and retain the earlier shared scratch cut only for old links. This is a source-accuracy correction, not owner approval of the new story.
+
+## 2026-10-07 — Lead the wind-tunnel draft with the measured turn
+
+The paper's laboratory result is that the power-maximizing tip-speed ratio changes with yaw angle; the wind-farm benefit comes from a separate uncertain model case study. Put the measured turn immediately after the opening question, then show how the tunnel test produced it. Describe combined yaw and rotor control as an opportunity, and reserve farm gains for a clearly labeled modeled prospect. Keep this as a text-only candidate until the owner chooses the story direction.
