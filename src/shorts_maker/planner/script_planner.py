@@ -511,6 +511,8 @@ class ScriptPlanner:
 
     async def _write_script(self, item: Dict, feedback: Optional[str] = None) -> ShortsScript:
         self.logger.info(f"Writing script for: {item['title']} (Mode: {self.generation_mode})")
+        # Match the validator's evidence window; retain the longer excerpt in context.
+        source_excerpt = (item.get('content') or '').strip()[:5000]
         if feedback:
             self.logger.info(f"♻️ Rewriting based on feedback: {feedback}")
 
@@ -606,7 +608,7 @@ class ScriptPlanner:
         **SOURCE MATERIAL:**
         Category: {item['category']}
         Title: {item['title']}
-        Content: {item['content']}
+        Content: {source_excerpt}
 
         {enhanced_context}
 

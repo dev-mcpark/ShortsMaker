@@ -330,9 +330,10 @@ class ReviewRegressions(unittest.TestCase):
             completions=SimpleNamespace(create=completion),
         ))
 
+        source_text = "  Three robots were tested in Virginia. " + "A" * 5000 + "UNVERIFIED_TAIL"
         result = asyncio.run(planner._write_script({
             "category": "Tech", "title": "ASTRA field test",
-            "content": "Three robots were tested in Virginia.",
+            "content": source_text,
             "source": "NASA", "url": "https://example.com/source",
             "analysis": SimpleNamespace(
                 core_message="Mars landing", hook="Mars landing", secret_mechanism="unverified",
@@ -355,6 +356,8 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("STORY IDEAS FROM AN EARLIER MODEL PASS (NOT EVIDENCE)", prompt)
         self.assertIn("Include factual claims only when the primary source text above supports them", prompt)
         self.assertIn("Use these snippets as leads only", prompt)
+        self.assertIn("Three robots were tested in Virginia.", prompt)
+        self.assertNotIn("UNVERIFIED_TAIL", prompt)
         self.assertIn("Reveal what actually happened", prompt)
         self.assertNotIn("4k resolution", prompt.lower())
         self.assertNotIn("15%", prompt)

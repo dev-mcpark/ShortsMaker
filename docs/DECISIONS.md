@@ -195,3 +195,7 @@ The automated story prompt already requires a source-backed question, early resu
 ## 2026-10-07 — Treat model analysis as story ideas, not primary evidence
 
 The script writer called a previous LLM analysis `PRIORITY` even though the validator checks factual claims against the source article or RSS excerpt, and the web-search snippets were already leads only. Relabel that analysis as unverified story ideas and explicitly require the article text to support its claims. Keep the analysis for useful hook and structure suggestions without making another call. The offline prompt test exercises both analysis and search-snippet branches; this reduces a conflicting instruction, but does not prove a future model will ignore every unsupported suggestion.
+
+## 2026-10-08 — Match generation evidence to the validator's excerpt
+
+For long articles, `_write_script` could see 8,000 characters while `ScriptValidator` only checked the first 5,000 after trimming whitespace. Use the same 5,000-character excerpt in the shared writer for both direct-URL and RSS paths; retain the longer source in planning context for later editorial use. This avoids writing claims the validator cannot inspect and shortens the generation prompt without adding an API call. A prompt test verifies the boundary; it does not measure provider savings or replace factual review.
