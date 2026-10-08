@@ -203,3 +203,7 @@ For long articles, `_write_script` could see 8,000 characters while `ScriptValid
 ## 2026-10-08 — Reject empty evidence at model request boundaries
 
 The normal planner rejected an empty source before approving a script, but its writer could still request a paid draft and the validator's public entry point could skip source grounding entirely when called directly. Reject a blank excerpt in both entry points before their completion requests. Let the planner continue to the next RSS candidate and let direct regeneration return no script. This saves avoidable calls and keeps source checking fail-closed; it does not prove that a nonempty source supports every generated claim.
+
+## 2026-10-08 — Audition a third story without buying media
+
+The NASA voice, music, captions, and visual pacing received positive feedback, while story interest remained topic-dependent. A CW-Net audition alone gives only one contrasting subject. Advance the source-checked wind-tunnel draft from text-only to a local scratch cut with original diagrams, the same Yuna voice and temporary normalized music mix as the NASA/CW-Net story cuts. Reveal the measured yaw-dependent result with its spoken caption and keep the wind-farm gain visibly labeled as a model forecast. This reverses the earlier text-only hold for a zero-provider-cost audition, not approval of the draft, music fit, or any paid production. The three subjects and visual treatments still differ, so their review is exploratory rather than a controlled A/B experiment.
