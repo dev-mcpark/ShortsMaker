@@ -152,6 +152,54 @@ class ReviewRegressions(unittest.TestCase):
             self.assertFalse(stored["enabled"])
             self.assertEqual(stored["last_result"], "billing_disabled")
 
+    def test_provider_limit_pauses_repeating_schedule(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            for error in ("429 RESOURCE_EXHAUSTED", "RESOURCE_EXHAUSTED"):
+                schedule = manager.create_schedule("Pilot", "09:00")
+                failure = ProductionService()._failed_result(error)
+                with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                    "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                    new_callable=AsyncMock, return_value=failure,
+                ):
+                    asyncio.run(manager._execute_pipeline(schedule))
+                stored = manager.get_schedule(schedule["id"])
+                self.assertFalse(stored["enabled"])
+                self.assertEqual(stored["last_result"], "provider_limit")
+                self.assertEqual(stored["run_count"], 1)
+
+            schedule = manager.create_schedule("Thrown", "10:00")
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, side_effect=RuntimeError("429 provider error"),
+            ):
+                asyncio.run(manager._execute_pipeline(schedule))
+            stored = manager.get_schedule(schedule["id"])
+            self.assertFalse(stored["enabled"])
+            self.assertEqual(stored["last_result"], "provider_limit")
+            self.assertEqual(stored["run_count"], 1)
+
+            schedule = manager.create_schedule("Transient", "11:00")
+            failure = ProductionService()._failed_result("503 temporary server error")
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, return_value=failure,
+            ):
+                asyncio.run(manager._execute_pipeline(schedule))
+            self.assertTrue(manager.get_schedule(schedule["id"])["enabled"])
+
+    def test_planning_provider_limit_survives_pipeline_without_stale_errors(self):
+        service = ProductionService(editor_options={"bgm_volume": 0})
+        service._planner = SimpleNamespace(plan_content=AsyncMock(
+            side_effect=RuntimeError("429 RESOURCE_EXHAUSTED: provider details")
+        ))
+        result = asyncio.run(service.full_pipeline())
+        self.assertFalse(result.success)
+        self.assertEqual(result.error, "RESOURCE_EXHAUSTED: 공급자 제한으로 스크립트 생성 중단")
+        service._planner.plan_content = AsyncMock(return_value=(None, None))
+        result = asyncio.run(service.full_pipeline())
+        self.assertEqual(result.error, "스크립트 생성 실패")
+
     def test_schedule_pauses_before_paid_planning_when_music_is_missing(self):
         with tempfile.TemporaryDirectory() as directory:
             manager = ScheduleManager(str(Path(directory) / "schedules.json"))

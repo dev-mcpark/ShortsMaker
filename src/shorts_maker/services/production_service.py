@@ -414,6 +414,7 @@ class ProductionService:
             (ShortsScript, ScriptGenerationContext) 튜플. 실패 시 (None, None)
         """
         try:
+            self._progress.error = None
             self._start_phase(ProductionPhase.PLANNING)
             if not settings.paid_production_enabled:
                 raise ValueError(self.PAID_WORK_DISABLED)
@@ -845,6 +846,10 @@ class ProductionService:
                 reason = "사용자에 의해 취소됨"
             elif not settings.paid_production_enabled:
                 reason = self.PAID_WORK_DISABLED
+            elif self._progress.error and (
+                "429" in self._progress.error or "RESOURCE_EXHAUSTED" in self._progress.error.upper()
+            ):
+                reason = "RESOURCE_EXHAUSTED: 공급자 제한으로 스크립트 생성 중단"
             else:
                 reason = "스크립트 생성 실패"
             return self._failed_result(reason)

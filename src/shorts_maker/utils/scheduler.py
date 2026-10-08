@@ -15,6 +15,9 @@ from datetime import datetime
 from shorts_maker.utils.logger import get_logger
 
 
+_PROVIDER_LIMIT = re.compile(r"(?<!\d)429(?!\d)|RESOURCE_EXHAUSTED", re.IGNORECASE)
+
+
 class ScheduleManager:
     """
     스케줄 관리 클래스
@@ -365,18 +368,21 @@ class ScheduleManager:
 
             billing_disabled = "BILLING_DISABLED" in (result.error or "")
             music_missing = "사용 권한이 기록된 BGM이 없습니다" in (result.error or "")
-            # 영구 사전 조건이 충족될 때까지 유료 계획을 반복하지 않는다.
+            provider_limited = not result.success and bool(_PROVIDER_LIMIT.search(result.error or ""))
+            # 공급자 제한 뒤의 다음 일정이 계획·내레이션 비용을 다시 쓰지 않도록 멈춘다.
             last_result = 'success' if result.success else 'failed'
             if billing_disabled:
                 last_result = 'billing_disabled'
             elif music_missing:
                 last_result = 'music_missing'
+            elif provider_limited:
+                last_result = 'provider_limit'
             updates = {
                 'last_run': datetime.now().isoformat(),
                 'run_count': schedule.get('run_count', 0) + 1,
                 'last_result': last_result,
             }
-            if billing_disabled or music_missing:
+            if billing_disabled or music_missing or provider_limited:
                 updates['enabled'] = False
             self.update_schedule(schedule['id'], updates)
 
@@ -387,10 +393,14 @@ class ScheduleManager:
 
         except Exception as e:
             self.logger.error(f"Scheduled pipeline error: {e}")
-            self.update_schedule(schedule['id'], {
+            updates = {
                 'last_run': datetime.now().isoformat(),
                 'last_result': f'error: {str(e)}'
-            })
+            }
+            if _PROVIDER_LIMIT.search(str(e)):
+                updates.update(enabled=False, last_result='provider_limit',
+                               run_count=schedule.get('run_count', 0) + 1)
+            self.update_schedule(schedule['id'], updates)
 
     def get_next_run_times(self) -> List[Dict[str, Any]]:
         """
