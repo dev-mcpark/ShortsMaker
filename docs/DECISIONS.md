@@ -211,3 +211,7 @@ The NASA voice, music, captions, and visual pacing received positive feedback, w
 ## 2026-10-08 — Pause scheduled spending after a provider limit
 
 A provider `429` or `RESOURCE_EXHAUSTED` error can mean quota pressure or temporary shared-capacity exhaustion, so the response alone does not justify another unattended paid attempt. Disable only the failing repeating schedule and mark it `provider_limit` whether the pipeline returns or raises that error. Preserve a sanitized limit marker when script planning fails, because its former generic error hid the cause from the scheduler; clear that marker before the next planning run. Let the owner inspect provider usage and the failed run before re-enabling it. Keep other transient failures on their existing schedule policy; this limits repeated cross-run spend, not in-flight retries or actual provider charges.
+
+## 2026-10-08 — Stop a planning round on OpenAI rate limits
+
+Topic-scoring fallback, optional article analysis, enrichment summarization, and source validation previously swallowed OpenAI `RateLimitError` and let the same run continue to another paid call or candidate. Propagate that SDK exception through all four stages so the production service can stop the round and the scheduler can pause a repeating run. Recognize its HTTP 429 status even when the message lacks the number, and expose only a generic limit marker. Preserve the existing fallback for malformed responses and other local failures; this change does not classify every provider error or replace bill reconciliation.

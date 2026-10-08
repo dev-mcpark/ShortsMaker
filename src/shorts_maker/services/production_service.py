@@ -459,9 +459,10 @@ class ProductionService:
                 return None, None
 
         except Exception as e:
-            self.logger.error(f"스크립트 생성 오류: {e}")
-            self._progress.error = str(e)
-            self._update_progress(ProductionPhase.FAILED, 0, f"오류: {e}")
+            self._progress.error = ("RESOURCE_EXHAUSTED: 공급자 제한으로 스크립트 생성 중단"
+                                    if getattr(e, "status_code", None) == 429 else str(e))
+            self.logger.error(f"스크립트 생성 오류: {self._progress.error}")
+            self._update_progress(ProductionPhase.FAILED, 0, f"오류: {self._progress.error}")
             return None, None
 
     async def regenerate_script(

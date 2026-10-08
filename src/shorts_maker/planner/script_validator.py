@@ -1,5 +1,5 @@
 import json
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 from shorts_maker.utils.logger import get_logger
@@ -150,6 +150,8 @@ class ScriptValidator:
 
             return result
             
+        except RateLimitError:
+            raise
         except Exception as e:
             self.logger.error(f"Validation failed due to error: {e}")
             # 보안: 검증 오류 시 Fail-Close (통과시키지 않음)

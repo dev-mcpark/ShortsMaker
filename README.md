@@ -173,6 +173,7 @@ Using the configured models, a new 6-scene hybrid video is estimated at about **
 
 The production switch also stops direct OpenAI, Google, and Brave request helpers when off. Direct `VideoGenerator` calls separately check the configured visual-output cap for a full batch or one scene; other direct helpers have no monetary preflight. Neither check measures planning, TTS, image input, failed attempts, or taxes, so check provider bills before each new paid round.
 If a scheduled run receives provider `429` or `RESOURCE_EXHAUSTED`, that schedule pauses instead of buying planning and narration again at its next time. Check provider usage and the failed run before manually re-enabling it; the error alone does not distinguish quota from temporary capacity.
+An OpenAI rate limit during topic scoring, article analysis, enrichment summarization, or script validation also stops the current planning round instead of trying another paid topic or model call.
 
 ---
 

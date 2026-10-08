@@ -3,7 +3,7 @@
 import os
 import json
 import asyncio
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError
 from typing import Optional, List, Dict
 import requests
 from shorts_maker.utils.logger import get_logger
@@ -158,6 +158,8 @@ class ContentEnricher:
                     if isinstance(val, list):
                         return val[:5]
             return []
+        except RateLimitError:
+            raise
         except Exception as e:
             self.logger.error(f"Error summarizing search results: {e}")
             return []

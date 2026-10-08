@@ -1,6 +1,7 @@
 """Regression checks for production and local data boundaries."""
 
 import asyncio
+import httpx
 import importlib
 import json
 import tempfile
@@ -10,12 +11,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+from openai import RateLimitError
 from PIL import Image
 from moviepy import ColorClip, VideoFileClip
 
 from shorts_maker.generator.video_generator import VideoGenerator
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.content_enricher import ContentEnricher
+from shorts_maker.planner.content_analyzer import ContentAnalyzer
 from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.planner.script_planner import ScriptPlanner
 from shorts_maker.planner.script_validator import ScriptValidator
@@ -191,7 +194,9 @@ class ReviewRegressions(unittest.TestCase):
     def test_planning_provider_limit_survives_pipeline_without_stale_errors(self):
         service = ProductionService(editor_options={"bgm_volume": 0})
         service._planner = SimpleNamespace(plan_content=AsyncMock(
-            side_effect=RuntimeError("429 RESOURCE_EXHAUSTED: provider details")
+            side_effect=RateLimitError("quota", response=httpx.Response(
+                429, request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+            ), body=None)
         ))
         result = asyncio.run(service.full_pipeline())
         self.assertFalse(result.success)
@@ -199,6 +204,49 @@ class ReviewRegressions(unittest.TestCase):
         service._planner.plan_content = AsyncMock(return_value=(None, None))
         result = asyncio.run(service.full_pipeline())
         self.assertEqual(result.error, "스크립트 생성 실패")
+
+    def test_openai_limit_stops_optional_planning_stages(self):
+        limited = RateLimitError("quota", response=httpx.Response(
+            429, request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+        ), body=None)
+        completion = AsyncMock(side_effect=limited)
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=completion)))
+
+        with tempfile.TemporaryDirectory() as directory:
+            planner = object.__new__(ScriptPlanner)
+            planner.logger = Mock()
+            planner.history_file = str(Path(directory) / "history.json")
+            planner.client = client
+            planner._fetch_rss_feeds = Mock(return_value=[{
+                "category": "Tech", "title": "Topic", "url": "https://example.com/article",
+            }])
+            planner._write_script = AsyncMock()
+            with self.assertRaises(RateLimitError):
+                asyncio.run(planner.plan_content())
+            planner._write_script.assert_not_awaited()
+
+        analyzer = object.__new__(ContentAnalyzer)
+        analyzer.logger = Mock()
+        analyzer.model = "gpt-4o"
+        analyzer.client = client
+        article = SimpleNamespace(title="Topic", main_text="Source", quotes=[], headings=[], captions=[])
+        with self.assertRaises(RateLimitError):
+            asyncio.run(analyzer.analyze_content(article))
+
+        enricher = object.__new__(ContentEnricher)
+        enricher.logger = Mock()
+        enricher.client = client
+        with self.assertRaises(RateLimitError):
+            asyncio.run(enricher._summarize_search_results("Topic", [
+                {"title": "Result", "description": "Excerpt"},
+            ]))
+
+        validator = object.__new__(ScriptValidator)
+        validator.logger = Mock()
+        validator.client = client
+        script = SimpleNamespace(title="Topic", model_dump_json=lambda **_: "{}")
+        with self.assertRaises(RateLimitError):
+            asyncio.run(validator.validate_script(script, source_text="Primary source"))
 
     def test_schedule_pauses_before_paid_planning_when_music_is_missing(self):
         with tempfile.TemporaryDirectory() as directory:

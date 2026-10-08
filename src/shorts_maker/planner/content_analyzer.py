@@ -1,7 +1,7 @@
 """콘텐츠 심층 분석 모듈 - Deep Content Analysis"""
 
 import json
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError
 from typing import Optional, Dict, List
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
@@ -89,6 +89,8 @@ class ContentAnalyzer:
             self.logger.info("✅ Content analysis complete.")
             return analysis
             
+        except RateLimitError:
+            raise
         except Exception as e:
             self.logger.error(f"Error during content analysis: {e}")
             return None

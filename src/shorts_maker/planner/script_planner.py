@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import time
 from urllib.parse import urljoin
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError
 from typing import List, Dict, Optional, Tuple
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
@@ -325,6 +325,8 @@ class ScriptPlanner:
                 return [TopicCandidate(item=chosen, score=5, reason="자동 선택 (빈 결과)", selected=True)]
 
             return result
+        except RateLimitError:
+            raise
         except Exception as e:
             self.logger.warning(f"토픽 점수화 실패, 랜덤 선택: {e}")
             chosen = random.choice(candidates)
