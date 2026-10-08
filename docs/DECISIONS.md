@@ -199,3 +199,7 @@ The script writer called a previous LLM analysis `PRIORITY` even though the vali
 ## 2026-10-08 — Match generation evidence to the validator's excerpt
 
 For long articles, `_write_script` could see 8,000 characters while `ScriptValidator` only checked the first 5,000 after trimming whitespace. Use the same 5,000-character excerpt in the shared writer for both direct-URL and RSS paths; retain the longer source in planning context for later editorial use. This avoids writing claims the validator cannot inspect and shortens the generation prompt without adding an API call. A prompt test verifies the boundary; it does not measure provider savings or replace factual review.
+
+## 2026-10-08 — Reject empty evidence at model request boundaries
+
+The normal planner rejected an empty source before approving a script, but its writer could still request a paid draft and the validator's public entry point could skip source grounding entirely when called directly. Reject a blank excerpt in both entry points before their completion requests. Let the planner continue to the next RSS candidate and let direct regeneration return no script. This saves avoidable calls and keeps source checking fail-closed; it does not prove that a nonempty source supports every generated claim.

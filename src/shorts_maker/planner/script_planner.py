@@ -509,10 +509,13 @@ class ScriptPlanner:
             return None
         return await self._validate_and_save(script, source_item)
 
-    async def _write_script(self, item: Dict, feedback: Optional[str] = None) -> ShortsScript:
+    async def _write_script(self, item: Dict, feedback: Optional[str] = None) -> Optional[ShortsScript]:
         self.logger.info(f"Writing script for: {item['title']} (Mode: {self.generation_mode})")
         # Match the validator's evidence window; retain the longer excerpt in context.
         source_excerpt = (item.get('content') or '').strip()[:5000]
+        if not source_excerpt:
+            self.logger.warning("Script not requested: no source material to support its claims")
+            return None
         if feedback:
             self.logger.info(f"♻️ Rewriting based on feedback: {feedback}")
 

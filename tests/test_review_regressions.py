@@ -433,10 +433,31 @@ class ReviewRegressions(unittest.TestCase):
         for score, duration in [(42, 5), (90, 70)]:
             response.choices[0].message.content = f'{{"is_valid": true, "score": {score}}}'
             script.scenes[0].duration_seconds = duration
-            self.assertFalse(asyncio.run(validator.validate_script(script)).is_valid)
+            self.assertFalse(asyncio.run(validator.validate_script(script, source_text="Test source.")).is_valid)
         response.choices[0].message.content = '{"is_valid": true, "score": 90, "reason": "advertising_content"}'
         script.scenes[0].duration_seconds = 5
-        self.assertFalse(asyncio.run(validator.validate_script(script)).is_valid)
+        self.assertFalse(asyncio.run(validator.validate_script(script, source_text="Test source.")).is_valid)
+
+    def test_empty_source_stops_script_and_validation_requests(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.generation_mode = "image"
+        planner.client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=AsyncMock()),
+        ))
+        self.assertIsNone(asyncio.run(planner._write_script({"title": "Draft", "content": "  "})))
+        planner.client.chat.completions.create.assert_not_awaited()
+
+        validator = object.__new__(ScriptValidator)
+        validator.logger = Mock()
+        validator.client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=AsyncMock()),
+        ))
+        script = SimpleNamespace(title="Draft")
+        result = asyncio.run(validator.validate_script(script, source_text="  "))
+        self.assertFalse(result.is_valid)
+        self.assertEqual(result.reason, "insufficient_source")
+        validator.client.chat.completions.create.assert_not_awaited()
 
     def test_source_excerpt_reaches_validator_as_untrusted_data(self):
         validator = object.__new__(ScriptValidator)

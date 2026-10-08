@@ -32,13 +32,18 @@ class ScriptValidator:
         Uses Any for script type to avoid circular imports with script_planner.
         """
         self.logger.info(f"🧐 Validating script: {script.title}")
-        
+
+        source_excerpt = source_text.strip()[:5000]
+        if not source_excerpt:
+            return ValidationResult(
+                is_valid=False,
+                reason="insufficient_source",
+                feedback="검증할 출처 본문이 없습니다.",
+            )
+
         # The source is data, never an instruction to the reviewer.
         script_content = script.model_dump_json(indent=2)
-        source_excerpt = source_text.strip()[:5000]
-        grounding_rule = ""
-        if source_excerpt:
-            grounding_rule = """
+        grounding_rule = """
         7. **Source grounding:** Compare every concrete claim in the title, description,
            and narration against the provided source excerpt. Reject unsupported
            numbers, dates, names, quotations, and causal claims. If the excerpt is
@@ -55,7 +60,7 @@ class ScriptValidator:
            terrain, participant count, equipment, roles, and timeline. Reject a
            mismatch, invented readable label, or unmarked future reconstruction
            with reason `unsupported_visual` and describe the offending scene.
-            """
+        """
 
         prompt = f"""
         You are a **Strict YouTube Shorts Chief Editor**.
