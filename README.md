@@ -6,6 +6,7 @@ AI-powered YouTube Shorts automation pipeline using **Google Veo 3.1** and **Gem
 ShortsMaker researches, writes scripts, generates visuals, and can upload content to YouTube. Review source claims and the finished video before scaling publication.
 Automatic uploads are private review copies; public publication remains a separate editorial decision.
 Automatic API uploads conservatively mark AI-generated visuals for YouTube's synthetic-media disclosure. The manual Publishing tab requires an explicit yes/no choice about realistic AI-generated or altered scenes; review that choice again before making a video public.
+Studio and scheduled API uploads are always **private**. Review the complete video, source claims, music rights, and AI disclosure choice in YouTube before making it public; the technical quality check does not make an editorial decision.
 
 ---
 
