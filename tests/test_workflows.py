@@ -26,6 +26,29 @@ class WorkflowTests(unittest.TestCase):
         paid.start()
         self.addCleanup(paid.stop)
 
+    def test_topic_scoring_asks_for_stakes_and_source_supported_payoff(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.history_file = "/nonexistent/shorts-maker-history.json"
+        create = AsyncMock(return_value=SimpleNamespace(choices=[
+            SimpleNamespace(message=SimpleNamespace(content=(
+                '{"candidates":[{"index":0,"score":7,"reason":"검증 필요","selected":true}]}'
+            )))
+        ]))
+        planner.client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=create)))
+
+        result = asyncio.run(planner._score_topics([
+            {"title": "Article title", "category": "Tech", "url": "https://example.com"}
+        ]))
+
+        self.assertTrue(result[0].selected)
+        prompt = create.await_args.kwargs["messages"][0]["content"]
+        self.assertIn("Concrete stakes", prompt)
+        self.assertIn("Source-backed turn", prompt)
+        self.assertIn("A niche mechanism alone", prompt)
+        self.assertIn("Judge only what the candidate title supports", prompt)
+
     def test_direct_generator_checks_batch_and_retry_reserve_before_generation(self):
         generator = object.__new__(VideoGenerator)
         generator.mode = "image"

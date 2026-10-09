@@ -1,0 +1,55 @@
+{
+  "title": "비행 중 떨어진 패널, 빠진 건 볼트만이 아니었다",
+  "description": "2024년 알래스카항공 1282편 사고에 관한 NTSB의 2025년 조사 결과를 설명하는 미승인 영상 초안입니다. 안전 착륙의 근거는 NTSB 사건 페이지 https://www.ntsb.gov/investigations/pages/DCA24MA063.aspx 입니다. 화면은 자체 제작 개념도로 계획했으며 사고 영상이나 실제 항공기 구조의 정밀 재현이 아닙니다.",
+  "tags": ["항공안전", "사고조사", "품질관리", "Shorts"],
+  "mood": "serious",
+  "style": "source-grounded explanatory story",
+  "music_direction": "실제 사고의 긴장은 절제해서 전달하고, 볼트와 기록·검사의 연결이 드러날 때만 변화를 준다. 재난을 오락처럼 만드는 공포 효과와 과한 박자는 피한다. 소재가 승인되기 전에는 음악을 고르지 않는다.",
+  "source_name": "NTSB — Boeing’s Inadequate Training, Guidance and Oversight Led to Mid-Exit Door Plug Blowout on Passenger Jet",
+  "source_url": "https://www.ntsb.gov/news/press-releases/Pages/NR20250624.aspx",
+  "generation_mode": "image",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "visual_mode": "image",
+      "duration_seconds": 6,
+      "visual_description": "Original, clearly labeled side-view concept diagram of an aircraft with a mid-exit door plug outline. Do not show accident footage, an airline logo, or an invented passenger view. Reveal the missing panel only with the spoken question.",
+      "script_text": "2024년, 비행 중 여객기의 출입구 패널이 떨어져 나갔습니다. 왜였을까요?"
+    },
+    {
+      "scene_number": 2,
+      "visual_mode": "image",
+      "duration_seconds": 5,
+      "visual_description": "Original simplified plug outline with four securing-bolt positions, all labeled '사고 전부터 없음'. Do not imply the exact physical geometry is reproduced.",
+      "script_text": "조사관은 패널을 고정할 볼트 네 개가 사고 전부터 없었다고 확인했습니다."
+    },
+    {
+      "scene_number": 3,
+      "visual_mode": "image",
+      "duration_seconds": 6,
+      "visual_description": "Original factory timeline: panel opened for fuselage rivet repair on September 18, 2023, then closed the following day. Label this as an explanatory timeline, not factory footage.",
+      "script_text": "몇 달 전 공장에서 동체 리벳을 고치려고 패널을 열었다가, 다음 날 닫았습니다."
+    },
+    {
+      "scene_number": 4,
+      "visual_mode": "image",
+      "duration_seconds": 6,
+      "visual_description": "Original two-step process diagram: required removal record absent, so quality inspection after plug closure did not happen. Reveal the inspection consequence after the narration names the missing record.",
+      "script_text": "그런데 작업 기록이 없었습니다. 그래서 패널을 다시 닫은 뒤의 품질 검사도 이뤄지지 않았죠."
+    },
+    {
+      "scene_number": 5,
+      "visual_mode": "image",
+      "duration_seconds": 6,
+      "visual_description": "Original conceptual sequence of the unsecured plug gradually moving upward across earlier flight cycles, then separating during the January 5, 2024 flight. No invented real footage or exact movement distance.",
+      "script_text": "볼트가 없는 패널은 여러 비행에서 조금씩 위로 밀렸고, 이륙 약 6분 뒤 결국 떨어졌습니다."
+    },
+    {
+      "scene_number": 6,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Original return-to-airport route diagram and restrained conclusion card: '안전 착륙' and '교육·지침·감독 부족'. Do not imply there were no injuries; NTSB reported minor injuries to one flight attendant and seven passengers.",
+      "script_text": "승무원은 비상 절차에 따라 돌아와 안전하게 착륙했습니다. 조사 결론은 공장 작업의 교육과 지침, 감독 부족이었습니다."
+    }
+  ]
+}

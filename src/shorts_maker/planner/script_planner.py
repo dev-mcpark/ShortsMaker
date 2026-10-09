@@ -261,12 +261,13 @@ class ScriptPlanner:
             recent_context = "**AVOID these recently covered topics (Find something different):**\n" + "\n".join([f"- {t}" for t in recent_topics])
 
         prompt = f"""
-        You are a **Trend Hunter** looking for **'Blue Ocean' content** across various fields.
+        You select source-checkable Korean Shorts stories for a general audience. Judge only what the candidate title supports; the full article is checked later.
 
         **Scoring Criteria:**
-        1. **Unexpected Insight:** Something counter-intuitive or surprising. ("Did you know?" factor)
-        2. **Specific Value:** New mechanism, hidden discovery, money opportunity, psychological hack.
-        3. **Niche over Generic:** Avoid broad headlines. Look for the *specific reason* or *untold story*.
+        1. **Concrete stakes:** A person can understand what happened and why the outcome matters without specialist background.
+        2. **Source-backed turn:** The title suggests a specific cause, decision, or result worth revealing; do not invent a crisis, reward fear for its own sake, or promise a result the title does not support.
+        3. **Clear payoff:** Prefer a story that can end with an observed consequence or useful explanation, not a list of technical facts. A niche mechanism alone is not a reason to score highly.
+        4. **Uncertainty:** If the title does not show the stakes or payoff, score conservatively and say what the article must verify.
 
         {recent_context}
 
@@ -278,8 +279,8 @@ class ScriptPlanner:
 
         Output a JSON object:
         {{"candidates": [
-          {{"index": 0, "score": 7, "reason": "흥미로운 기술 트렌드지만 최근 유사 주제 다룸", "selected": false}},
-          {{"index": 1, "score": 9, "reason": "역설적인 통계로 강한 후크 가능. 구체적 메커니즘 설명 가능", "selected": true}}
+          {{"index": 0, "score": 5, "reason": "제목만으로 시청자에게 닿는 결과를 확인하기 어려움. 본문 검증 필요", "selected": false}},
+          {{"index": 1, "score": 9, "reason": "제목에 구체적 결과와 원인 질문이 있음. 본문에서 인과관계 검증 필요", "selected": true}}
         ]}}
         """
         try:
