@@ -1,0 +1,48 @@
+{
+  "title": "버스 차고지 아래에 빗물 3만 5천 톤을 담는 이유",
+  "description": "서울시의 신림 공영차고지 준공 발표를 바탕으로 한 미승인 이야기 초안입니다. 지상과 지하 1층은 버스 차고지, 지하 2층은 빗물저류조입니다. 약 10cm 수위 저감은 서울시가 밝힌 효과이며 실제 침수 피해 감소량을 입증하는 관측치는 아닙니다. 화면은 자체 제작 설명용 개념도이며 실제 시설의 정밀 단면이나 홍수 영상이 아닙니다. 저류시설의 일반 작동 방식: https://news.seoul.go.kr/env/archives/791",
+  "tags": ["도시설계", "건축", "빗물저류조", "Shorts"],
+  "mood": "curious",
+  "style": "source-grounded city-life explanation",
+  "music_direction": "평소 도시의 일상에서 시작해 숨은 지하 구조가 드러날 때 가벼운 리듬을 더한다. 재난 공포 효과와 미래도시 느낌의 전자음을 피하고 말 아래에 잔잔하게 둔다. 이야기 검토용 무음 초안 이후에 어울리는 권리 확인 곡을 찾는다.",
+  "source_name": "서울특별시 — 신림 공영차고지 준공 발표 (2026-04-28)",
+  "source_url": "https://www.seoul.go.kr/news/news_report.do?nttNo=457013&srchCtgry=465",
+  "generation_mode": "image",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "visual_mode": "image",
+      "duration_seconds": 6,
+      "visual_description": "Original schematic of a bus depot with its underground layer concealed. Reveal only a 35,000-ton capacity cue as the question is spoken. No Seoul photograph, exact map, or flood footage.",
+      "script_text": "서울 신림의 버스 차고지 아래에는 빗물 3만 5천 톤을 담는 시설이 있습니다. 왜 차고지 아래일까요?"
+    },
+    {
+      "scene_number": 2,
+      "visual_mode": "image",
+      "duration_seconds": 6,
+      "visual_description": "Two original abstract problem panels: shortage of bus-depot space and recurring flood risk around Dorimcheon. Reveal the second panel after the first phrase. Do not suggest a measured flood outcome.",
+      "script_text": "관악구는 버스 차고지가 부족했고, 도림천 주변에는 폭우 때 침수 위험이 있었습니다."
+    },
+    {
+      "scene_number": 3,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Original labeled conceptual cross-section: buses on the surface and basement 1, rainwater reservoir in basement 2. Reveal the blue tank only when the narration names it. Not an exact structural drawing.",
+      "script_text": "서울시는 버스는 지상과 지하 1층에, 빗물저류조는 지하 2층에 넣었습니다."
+    },
+    {
+      "scene_number": 4,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Original conceptual rain and flow diagram. Animate water entering temporary storage before showing the reduced rush toward the stream; no exact flow rate or storm reenactment.",
+      "script_text": "비가 한꺼번에 쏟아질 때 빗물을 잠시 저장해서, 도림천의 급격한 수위 상승을 줄이려는 설계입니다."
+    },
+    {
+      "scene_number": 5,
+      "visual_mode": "image",
+      "duration_seconds": 8,
+      "visual_description": "Original split-purpose site diagram, daily bus service above and flood-response storage below. End with a clearly attributed text card '약 10cm: 서울시 설명', not a claim of observed flood-damage reduction.",
+      "script_text": "평소엔 교통시설, 폭우 땐 방재시설인 셈이죠. 수위를 약 10센티미터 낮춘다는 건 서울시가 밝힌 효과입니다."
+    }
+  ]
+}
