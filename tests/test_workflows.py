@@ -49,6 +49,54 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("A niche mechanism alone", prompt)
         self.assertIn("Judge only what the candidate title supports", prompt)
 
+    def test_topic_scoring_can_decline_the_whole_pool(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.history_file = "/nonexistent/shorts-maker-history.json"
+        create = AsyncMock(return_value=SimpleNamespace(choices=[
+            SimpleNamespace(message=SimpleNamespace(content=(
+                '{"candidates":[{"index":0,"score":4,"reason":"근거 부족","selected":false}]}'
+            )))
+        ]))
+        planner.client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=create)))
+        candidate = {"title": "Unclear topic", "category": "Tech", "url": "https://example.com"}
+
+        result = asyncio.run(planner._score_topics([candidate]))
+
+        self.assertEqual(len(result), 1)
+        self.assertFalse(result[0].selected)
+        self.assertIn("mark all selected=false", create.await_args.kwargs["messages"][0]["content"])
+
+    def test_unselected_topics_stop_before_article_and_writer(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        candidate = {"title": "Unclear topic", "category": "Tech", "url": "https://example.com"}
+        planner._fetch_rss_feeds = Mock(return_value=[candidate])
+        planner._score_topics = AsyncMock(return_value=[
+            TopicCandidate(item=candidate, score=4, reason="not enough evidence", selected=False)
+        ])
+        planner.content_extractor = SimpleNamespace(fetch_enhanced_article=Mock())
+        planner._write_script = AsyncMock()
+
+        self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+        planner._score_topics.assert_awaited_once()
+        planner.content_extractor.fetch_enhanced_article.assert_not_called()
+        planner._write_script.assert_not_awaited()
+
+    def test_bad_topic_score_response_does_not_randomly_select(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.history_file = "/nonexistent/shorts-maker-history.json"
+        planner.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+            create=AsyncMock(return_value=SimpleNamespace(choices=[
+                SimpleNamespace(message=SimpleNamespace(content="not JSON"))
+            ])))))
+
+        self.assertEqual(asyncio.run(planner._score_topics([
+            {"title": "Unclear topic", "category": "Tech", "url": "https://example.com"}
+        ])), [])
+
     def test_direct_generator_checks_batch_and_retry_reserve_before_generation(self):
         generator = object.__new__(VideoGenerator)
         generator.mode = "image"

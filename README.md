@@ -44,6 +44,9 @@ separate server instances when different users need different credentials.
 An article enters topic history only after its script passes validation. Studio progress
 tracks completed editing work and finishes after an optional upload. Stop requests wait
 for the current external API call to return before the run is released.
+RSS planning may end without a script when every candidate is declined or topic scoring
+fails; it no longer forces a highest-score or random article into paid drafting. A direct
+URL supplied by the user still follows its own source-validation path.
 Planning rejects scripts without source text and asks the editorial validator to reject
 claims or visual scenes that conflict with the supplied excerpt. Generated visual briefs
 favor one source-grounded moment and illustrative diagrams when a realistic reconstruction

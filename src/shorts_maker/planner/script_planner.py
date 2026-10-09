@@ -275,7 +275,7 @@ class ScriptPlanner:
         {candidates_text}
 
         Score EACH candidate from 1-10 and give a brief reason in Korean (1-2 sentences).
-        Mark selected=true for the ONE best candidate.
+        Mark selected=true for at most ONE candidate. If none has clear stakes and a plausible source-backed payoff, mark all selected=false; do not force a topic.
 
         Output a JSON object:
         {{"candidates": [
@@ -311,27 +311,18 @@ class ScriptPlanner:
                         selected=bool(entry.get("selected", False))
                     ))
 
-            # selected가 없으면 가장 높은 점수에 selected 설정
-            if result and not any(c.selected for c in result):
-                result.sort(key=lambda c: c.score, reverse=True)
-                result[0].selected = True
-
-            # 빈 결과 fallback (GPT 응답이 파싱됐지만 유효한 항목이 없는 경우)
             if not result:
                 self.logger.warning(
                     f"토픽 점수화 결과가 비어 있음 (scores_list={len(scores_list)}개, "
-                    f"candidates={len(candidates)}개). 랜덤 선택."
+                    f"candidates={len(candidates)}개). 이번 제작을 중단."
                 )
-                chosen = random.choice(candidates)
-                return [TopicCandidate(item=chosen, score=5, reason="자동 선택 (빈 결과)", selected=True)]
 
             return result
         except RateLimitError:
             raise
         except Exception as e:
-            self.logger.warning(f"토픽 점수화 실패, 랜덤 선택: {e}")
-            chosen = random.choice(candidates)
-            return [TopicCandidate(item=chosen, score=5, reason="자동 선택 (점수화 실패)", selected=True)]
+            self.logger.warning(f"토픽 점수화 실패, 이번 제작을 중단: {e}")
+            return []
 
     async def plan_content(
         self,
@@ -410,7 +401,7 @@ class ScriptPlanner:
 
             # 1. Score Topics
             scored = await self._score_topics(candidates)
-            selected_candidate = next((c for c in scored if c.selected), scored[0] if scored else None)
+            selected_candidate = next((c for c in scored if c.selected), None)
             if not selected_candidate:
                 self.logger.warning(f"Attempt {attempt+1}: 선택 가능한 후보 없음. 종료.")
                 break
