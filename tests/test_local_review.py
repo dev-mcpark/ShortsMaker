@@ -4,13 +4,35 @@ import asyncio
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from scripts.local_review import collect_local_inputs, render_local
 from shorts_maker.planner.models import ShortsScript, VideoScene
 
 
 class LocalReviewTests(unittest.TestCase):
+    def test_forwards_local_caption_color(self):
+        script = ShortsScript(
+            title="Review", description="", tags=[], mood="calm", style="plain",
+            source_name="test", source_url="https://example.com", generation_mode="video",
+            scenes=[VideoScene(scene_number=1, visual_description="diagram", script_text="line")],
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "scene_1.mp4").touch()
+            (root / "scene_1.aiff").touch()
+            with patch("scripts.local_review.ProductionService") as service:
+                service.return_value.produce_video = AsyncMock(return_value=MagicMock(
+                    success=True, video_path="review.mp4", report_path="review.json",
+                    estimated_visual_cost_usd=0,
+                ))
+                asyncio.run(render_local(script, root, root, 0, subtitle_color="#19384a"))
+            self.assertEqual(service.call_args.kwargs["editor_options"]["subtitle_color"], "#19384a")
+            with patch("scripts.local_review.ProductionService") as invalid_service:
+                with self.assertRaises(ValueError):
+                    asyncio.run(render_local(script, root, root, 0, subtitle_color="not-a-color"))
+                invalid_service.assert_not_called()
+
     def test_complete_local_inputs_required_before_service(self):
         script = ShortsScript(
             title="Review", description="", tags=[], mood="calm", style="plain",

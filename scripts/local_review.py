@@ -5,6 +5,8 @@ import asyncio
 import json
 from pathlib import Path
 
+from PIL import ImageColor
+
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.services.production_service import ProductionService
 
@@ -33,7 +35,7 @@ def collect_local_inputs(script: ShortsScript, clips_dir: Path, audio_dir: Path)
 
 async def render_local(script: ShortsScript, clips_dir: Path, audio_dir: Path,
                        bgm_volume: float, bgm_track: str | None = None,
-                       subtitle_style: str = "soft"):
+                       subtitle_style: str = "soft", subtitle_color: str | None = None):
     if not 0 <= bgm_volume <= 1:
         raise ValueError("BGM volume must be between 0 and 1")
     clips, audio = collect_local_inputs(script, clips_dir, audio_dir)
@@ -41,6 +43,9 @@ async def render_local(script: ShortsScript, clips_dir: Path, audio_dir: Path,
                "subtitle_style": subtitle_style}
     if bgm_track:
         options["bgm_track"] = bgm_track
+    if subtitle_color is not None:
+        ImageColor.getrgb(subtitle_color)
+        options["subtitle_color"] = subtitle_color
     service = ProductionService(mode="video", editor_options=options)
     result = await service.produce_video(script, manual_clip_paths=clips, prepared_audio_paths=audio)
     if not result.success:
@@ -57,10 +62,11 @@ def main():
     parser.add_argument("--bgm-volume", type=float, default=0.2)
     parser.add_argument("--bgm-track", help="Exact documented MP3 filename in bgm/")
     parser.add_argument("--subtitle-style", choices=("soft", "card"), default="soft")
+    parser.add_argument("--subtitle-color", help="Caption text color for the local background, e.g. #19384a")
     args = parser.parse_args()
     script = ShortsScript.model_validate_json(args.script.read_text(encoding="utf-8"))
     asyncio.run(render_local(script, args.clips_dir, args.audio_dir, args.bgm_volume,
-                             args.bgm_track, args.subtitle_style))
+                             args.bgm_track, args.subtitle_style, args.subtitle_color))
 
 
 if __name__ == "__main__":

@@ -139,6 +139,7 @@ Prepare a source-checked script JSON, one `scene_N.mp4` for each scene in a clip
 python scripts/local_review.py path/to/script.json path/to/clips path/to/audio --bgm-volume 0.2
 # To audition the exact NASA candidate, add: --bgm-track futuristic_digital_clouds.mp3
 # To audition a left-aligned caption panel, add: --subtitle-style card
+# For a light diagram background, keep soft captions and add: --subtitle-color '#19384a'
 ```
 
 The command requires every clip and narration file before starting, reuses `ProductionService` for captions, documented BGM, final quality checks, and the local sidecar, and makes no planning, TTS, visual API, or upload request. It works without `OPENAI_API_KEY` when narration files are prepared. [The NASA review script](docs/nasa_field_test_review.json) is a source-checked example; supply its clips and narration locally and run it through this command to avoid its paid `video` scene mode. Use `--bgm-volume 0` for a deliberate silent draft. Its output is a private review file; check source claims, caption timing, speech, and music by playback before treating it as a publication candidate.
@@ -154,7 +155,7 @@ python scripts/local_review.py docs/nasa_field_test_review.json outputs/evaluati
 
 The storyboard keeps each reveal on its authored cue while its progress indicator runs for the complete narration scene. Keep the photo and outputs outside Git; the commands use local files and no provider requests.
 
-`--subtitle-style soft` remains the default; `card` changes only the caption presentation to a left-aligned translucent panel. Compare it with the same narration, visuals, and music before selecting a final style.
+`--subtitle-style soft` remains the default; `card` changes only the caption presentation to a left-aligned translucent panel. `--subtitle-color` overrides the default white caption text for a local edit, such as a dark color on light diagrams; the sidecar records the chosen color. Compare styles with the same narration, visuals, and music before selecting a final treatment.
 
 ### 4. Run ShortsMaker Studio
 ```bash
