@@ -215,3 +215,7 @@ A provider `429` or `RESOURCE_EXHAUSTED` error can mean quota pressure or tempor
 ## 2026-10-08 — Stop a planning round on OpenAI rate limits
 
 Topic-scoring fallback, optional article analysis, enrichment summarization, and source validation previously swallowed OpenAI `RateLimitError` and let the same run continue to another paid call or candidate. Propagate that SDK exception through all four stages so the production service can stop the round and the scheduler can pause a repeating run. Recognize its HTTP 429 status even when the message lacks the number, and expose only a generic limit marker. Preserve the existing fallback for malformed responses and other local failures; this change does not classify every provider error or replace bill reconciliation.
+
+## 2026-10-09 — Bound standalone character-video cost
+
+The standalone character-video helper omitted `generate_audio` and skipped the shared visual-output cap, although the character compositor discards clip audio. Request a silent 720p Veo clip explicitly and use the existing model/duration estimate before its one generation request. Reject unsupported durations and unknown-price models before the call. This protects one helper invocation, not cumulative spending or provider-side charges.

@@ -1,7 +1,7 @@
 """
-CharacterVideoGenerator - 캐릭터 이미지로부터 말하는 영상 생성
+CharacterVideoGenerator - 캐릭터 이미지로부터 말하는 듯한 무음 영상 생성
 
-캐릭터 이미지를 Veo에 입력하여 자연스럽게 말하는 영상을 생성합니다.
+캐릭터 이미지를 Veo에 입력하여 말하는 동작의 무음 영상을 생성합니다.
 한 번 생성한 영상은 assets 폴더에 저장하여 재사용합니다.
 
 사용법:
@@ -24,11 +24,12 @@ from google.genai import types
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
+from shorts_maker.services.visual_cost import estimated_scene_cost
 
 
 class CharacterVideoGenerator:
     """
-    캐릭터 이미지를 말하는 영상으로 변환하는 생성기
+    캐릭터 이미지를 말하는 동작의 무음 영상으로 변환하는 생성기
     """
 
     # 말하는 캐릭터를 위한 프롬프트 템플릿
@@ -86,7 +87,7 @@ class CharacterVideoGenerator:
         custom_prompt: Optional[str] = None,
     ) -> Optional[str]:
         """
-        캐릭터 이미지로부터 말하는 영상 생성
+        캐릭터 이미지로부터 말하는 동작의 무음 영상 생성
 
         Args:
             character_image_path: 캐릭터 이미지 경로
@@ -166,12 +167,21 @@ class CharacterVideoGenerator:
                             output_path: str, duration_seconds: int) -> bool:
         """Make one explicit Veo attempt; a new paid attempt needs a new call."""
         require_paid_production_enabled()
+        if duration_seconds not in {4, 6, 8}:
+            raise ValueError("Veo 생성 길이는 4, 6, 8초 중 하나여야 합니다.")
+        reserve = estimated_scene_cost("video", model_id, duration_seconds)
+        if reserve > settings.max_visual_cost_usd:
+            raise ValueError(
+                f"예상 비주얼 비용 ${reserve:.3f}가 설정 상한 "
+                f"${settings.max_visual_cost_usd:.2f}를 초과합니다."
+            )
         try:
             operation = self.client.models.generate_videos(
                 model=model_id,
                 prompt=prompt,
                 image=image_input,
-                config={"aspect_ratio": "9:16", "duration_seconds": duration_seconds}
+                config={"aspect_ratio": "9:16", "duration_seconds": duration_seconds,
+                        "resolution": "720p", "generate_audio": False}
             )
 
             for _ in range(90):  # 최대 15분 대기
@@ -199,7 +209,7 @@ async def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="캐릭터 이미지로부터 말하는 영상 생성"
+        description="캐릭터 이미지로부터 말하는 동작의 무음 영상 생성"
     )
     parser.add_argument(
         "--input", "-i",

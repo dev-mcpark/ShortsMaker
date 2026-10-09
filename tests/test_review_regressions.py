@@ -379,7 +379,7 @@ class ReviewRegressions(unittest.TestCase):
         character_generator.logger = Mock()
         with patch("shorts_maker.utils.character_video_generator.time.sleep"):
             self.assertFalse(character_generator._run_veo_generation(
-                "model", "prompt", object(), "unused.mp4", 6,
+                settings.veo_model_id, "prompt", object(), "unused.mp4", 6,
             ))
         character_generator.client.models.generate_videos.assert_called_once()
 

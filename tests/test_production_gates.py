@@ -117,8 +117,34 @@ class ProductionGateTests(unittest.TestCase):
         character.logger = Mock()
         video_client.models.generate_videos.side_effect = RuntimeError("500 provider error")
         self.assertFalse(character._run_veo_generation(
-            "video-model", "prompt", object(), "unused.mp4", 6))
+            settings.veo_model_id, "prompt", object(), "unused.mp4", 6))
         video_client.models.generate_videos.assert_called_once()
+
+    def test_character_video_checks_cost_before_request_and_stays_silent(self):
+        character = object.__new__(CharacterVideoGenerator)
+        operation = SimpleNamespace(done=False)
+        character.client = SimpleNamespace(
+            models=SimpleNamespace(generate_videos=Mock(return_value=operation)),
+            operations=SimpleNamespace(get=Mock(return_value=operation)),
+        )
+        character.logger = Mock()
+        with patch.object(settings, "max_visual_cost_usd", 0.1):
+            with self.assertRaisesRegex(ValueError, "상한"):
+                character._run_veo_generation(
+                    settings.veo_model_id, "prompt", object(), "unused.mp4", 8)
+        with self.assertRaisesRegex(ValueError, "생성 길이"):
+            character._run_veo_generation(
+                settings.veo_model_id, "prompt", object(), "unused.mp4", 0)
+        with self.assertRaisesRegex(ValueError, "비용을 알 수 없는"):
+            character._run_veo_generation(
+                "unknown-model", "prompt", object(), "unused.mp4", 6)
+        character.client.models.generate_videos.assert_not_called()
+        with patch("shorts_maker.utils.character_video_generator.time.sleep"):
+            self.assertFalse(character._run_veo_generation(
+                settings.veo_model_id, "prompt", object(), "unused.mp4", 6))
+        config = character.client.models.generate_videos.call_args.kwargs["config"]
+        self.assertIs(config["generate_audio"], False)
+        self.assertEqual(config["resolution"], "720p")
 
     def test_local_editor_needs_no_openai_key_until_tts(self):
         with patch.object(settings, "openai_api_key", ""), patch(
