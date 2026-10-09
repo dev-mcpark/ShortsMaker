@@ -272,10 +272,13 @@ class VideoGenerator:
                 raise
             except Exception as e:
                 err_str = str(e).lower()
+                if getattr(e, "status_code", None) == 429 or any(
+                    term in err_str for term in ("429", "resource_exhausted", "resource exhausted")
+                ):
+                    raise RuntimeError("RESOURCE_EXHAUSTED: 공급자 제한으로 Veo 생성 중단") from e
 
                 if any(term in err_str for term in (
-                    "internal error", "500", "502", "503", "504", "429",
-                    "resource exhausted", "try again later",
+                    "internal error", "500", "502", "503", "504", "try again later",
                 )) and attempt < max_attempts - 1:
                     self.logger.warning("    ⚠️ Server error, retrying in 30s...")
                     time.sleep(30)

@@ -383,6 +383,48 @@ class ReviewRegressions(unittest.TestCase):
             ))
         character_generator.client.models.generate_videos.assert_called_once()
 
+    def test_veo_limit_stops_without_using_reserved_retries(self):
+        generator = object.__new__(VideoGenerator)
+        generator.logger = Mock()
+        request = Mock()
+        generator.client = SimpleNamespace(models=SimpleNamespace(generate_videos=request))
+        status_only = RuntimeError("quota")
+        status_only.status_code = 429
+
+        for error in (RuntimeError("RESOURCE_EXHAUSTED"), status_only):
+            with self.subTest(error=error), patch(
+                "shorts_maker.generator.video_generator.time.sleep"
+            ) as sleep:
+                request.reset_mock(side_effect=True)
+                request.side_effect = error
+                with self.assertRaisesRegex(RuntimeError, "RESOURCE_EXHAUSTED"):
+                    generator._retry_veo_call(
+                        settings.veo_model_id, "prompt", "unused.mp4", "fallback",
+                        max_attempts=3,
+                    )
+                request.assert_called_once()
+                sleep.assert_not_called()
+
+    def test_veo_keeps_explicit_retry_for_server_error(self):
+        generator = object.__new__(VideoGenerator)
+        generator.logger = Mock()
+        saved_video = Mock()
+        operation = SimpleNamespace(
+            done=True, result=SimpleNamespace(
+                generated_videos=[SimpleNamespace(video=saved_video)]),
+        )
+        request = Mock(side_effect=[RuntimeError("503"), operation])
+        generator.client = SimpleNamespace(models=SimpleNamespace(generate_videos=request))
+
+        with patch("shorts_maker.generator.video_generator.time.sleep") as sleep:
+            generator._retry_veo_call(
+                settings.veo_model_id, "prompt", "unused.mp4", "fallback",
+                max_attempts=2,
+            )
+        self.assertEqual(request.call_count, 2)
+        sleep.assert_called_once_with(30)
+        saved_video.save.assert_called_once_with("unused.mp4")
+
     def test_veo_prompt_keeps_one_silent_shot_without_fake_quality_claims(self):
         generator = object.__new__(VideoGenerator)
         generator.logger = Mock()

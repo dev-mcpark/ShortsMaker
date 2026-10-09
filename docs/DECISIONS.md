@@ -219,3 +219,7 @@ Topic-scoring fallback, optional article analysis, enrichment summarization, and
 ## 2026-10-09 — Bound standalone character-video cost
 
 The standalone character-video helper omitted `generate_audio` and skipped the shared visual-output cap, although the character compositor discards clip audio. Request a silent 720p Veo clip explicitly and use the existing model/duration estimate before its one generation request. Reject unsupported durations and unknown-price models before the call. This protects one helper invocation, not cumulative spending or provider-side charges.
+
+## 2026-10-09 — Do not retry Veo after a provider limit
+
+The Veo helper allowed explicit extra attempts for transient server errors but also retried `429` and `RESOURCE_EXHAUSTED` after 30 seconds. Stop immediately on either limit, including an exception whose HTTP status is 429 but whose message omits the number, and return a sanitized marker that lets the existing scheduler pause. Keep explicitly budgeted retries for other server failures and safety-prompt fallback. A submitted operation may still finish or be billed after a polling error; this only prevents another request from this helper.
