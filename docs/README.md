@@ -50,6 +50,7 @@ The app is a Python modular monolith. `ProductionService` owns orchestration, pr
 - `outputs/`, `temp/`, `logs/`, and local histories are runtime data, not project docs.
 - `ProductionService` writes a neighboring `*.production.json` record for each new rendered MP4 when the output directory is writable; keep these local with the video.
 - `scripts/prepare_narration.py` writes scene MP3s and a cumulative request-reserve manifest to ignored `outputs/`; its ceiling uses a caller-verified model price and bounds requests, not the provider's final bill. `ProductionService` checks this manifest's scene text and file hashes when reusing those files. Legacy scratch audio without a manifest remains possible for local review and needs human script alignment.
+- `VideoEditor.TTS_MODEL` owns the currently used narration model; `scripts/prepare_narration.py` reads that same value for its manifest and preflight. The default voice is an editor option. Settings has no independent TTS model or voice switch.
 - `AppState` is in-memory browser-session state. API settings are process-wide.
 - External calls are OpenAI for planning/narration, Brave when configured for enrichment, Google for visuals, and YouTube for upload. Unit tests mock those calls.
 - `PAID_PRODUCTION_ENABLED` defaults to false. The shared production service, paired-review script, and direct OpenAI/Google/Brave request helpers check it before new provider calls; it does not cap actual bills. Complete local clip and narration reviews still run.

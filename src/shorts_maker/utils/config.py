@@ -121,10 +121,6 @@ class Settings:
     max_topic_retries: int = 5
     max_api_retries: int = 3
 
-    # TTS Settings
-    tts_model: str = "tts-1"
-    default_voice: str = "alloy"
-
     # NiceGUI Settings
     nicegui_storage_secret: str = field(
         default_factory=lambda: os.getenv("NICEGUI_STORAGE_SECRET", "")

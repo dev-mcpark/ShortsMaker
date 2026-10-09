@@ -235,3 +235,7 @@ The owner described the source themes as personally uninteresting and said they 
 ## 2026-10-09 — Match soft caption color to a light storyboard
 
 The shared white `soft` caption reads as hollow dark outlines on the Sillim depot's cream diagrams. Expose the editor's existing `subtitle_color` through `scripts/local_review.py`, leave the NASA/default white treatment intact, and use dark ink for this light storyboard. Record the color in the local production sidecar. Re-render every Sillim music comparator with the same dark captions so the music-only comparison still has identical video streams; judge final legibility in playback rather than assuming a sampled frame proves it.
+
+## 2026-10-09 — Remove unused narration settings before model migration
+
+`Settings.tts_model` and `Settings.default_voice` were never read by the editor or retained-narration preflight. Changing them could falsely appear to switch providers or voices while calls still used `VideoEditor.TTS_MODEL` and the editor's `tts_voice` option. Remove the dead fields and keep the current model identity in one place until a replacement has a verified voice, token-based spending guard, and local review result. This does not migrate the deprecated model or authorize another paid narration set.
