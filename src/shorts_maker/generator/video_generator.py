@@ -3,6 +3,7 @@ import time
 import asyncio
 import hashlib
 import json
+import math
 import uuid
 from datetime import datetime, timezone
 from io import BytesIO
@@ -234,6 +235,7 @@ class VideoGenerator:
         duration_seconds: Optional[int] = None,
         scene_number: Optional[int] = None,
         first_frame_path: Optional[str] = None,
+        request_budget_usd: Optional[float] = None,
     ) -> None:
         """Veo API 호출을 재시도 로직과 함께 실행.
 
@@ -241,13 +243,22 @@ class VideoGenerator:
         안전 위반 시 fallback_prompt로 전환합니다.
         """
         require_paid_production_enabled()
+        if (not isinstance(request_budget_usd, (int, float))
+                or isinstance(request_budget_usd, bool)
+                or not math.isfinite(request_budget_usd) or request_budget_usd < 0):
+            raise ValueError("Veo 요청 예산 상한을 명시해야 합니다.")
         if not isinstance(max_attempts, int) or isinstance(max_attempts, bool) or max_attempts < 1:
             raise ValueError("Veo 시도 횟수는 1 이상이어야 합니다.")
         requested_seconds = settings.veo_duration_seconds if duration_seconds is None else duration_seconds
         if requested_seconds not in {4, 6, 8} or isinstance(requested_seconds, bool):
             raise ValueError("Veo 생성 길이는 4, 6, 8초 중 하나여야 합니다.")
         estimated_output = estimated_scene_cost("video", model_id, requested_seconds)
-        self._check_visual_cap(estimated_output * max_attempts)
+        reserve = estimated_output * max_attempts
+        self._check_visual_cap(reserve)
+        if reserve > request_budget_usd:
+            raise ValueError(
+                f"Veo 예약액 ${reserve:.3f}가 요청 상한 ${request_budget_usd:.2f}를 초과합니다."
+            )
 
         first_frame = None
         image_sha256 = None
@@ -282,6 +293,7 @@ class VideoGenerator:
                 "generate_audio": False,
                 "number_of_videos": 1,
                 "estimated_output_usd": round(estimated_output, 4),
+                "request_budget_usd": request_budget_usd,
                 "input_type": "image_first_frame" if first_frame is not None else "text",
                 "input_image_sha256": image_sha256,
                 "actual_billed_usd": None,
@@ -394,6 +406,7 @@ class VideoGenerator:
             max_attempts=self.max_veo_attempts,
             duration_seconds=duration_seconds,
             scene_number=scene.scene_number,
+            request_budget_usd=settings.max_visual_cost_usd,
         )
 
     # ── Image Helper ──────────────────────────────────────────────────────
