@@ -16,6 +16,15 @@ class SillimDepotStoryboardTests(unittest.TestCase):
         late_caveat = frame(5, 6, 8).crop((75, 490, 470, 590))
         self.assertIsNotNone(ImageChops.difference(early_caveat, late_caveat).getbbox())
 
+    def test_question_and_flood_role_follow_their_spoken_phrases(self):
+        early_question = frame(1, 4.5, 7.75).crop((70, 500, 470, 550))
+        late_question = frame(1, 5.5, 7.75).crop((70, 500, 470, 550))
+        self.assertIsNotNone(ImageChops.difference(early_question, late_question).getbbox())
+
+        early_flood = frame(5, 1.0, 9).crop((55, 332, 485, 460))
+        late_flood = frame(5, 1.75, 9).crop((55, 332, 485, 460))
+        self.assertIsNotNone(ImageChops.difference(early_flood, late_flood).getbbox())
+
     def test_caption_region_is_clear_in_every_scene(self):
         blank = Image.new("RGB", (540, 200), BG)
         for scene in range(1, 6):

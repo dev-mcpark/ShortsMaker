@@ -239,3 +239,7 @@ The shared white `soft` caption reads as hollow dark outlines on the Sillim depo
 ## 2026-10-09 — Remove unused narration settings before model migration
 
 `Settings.tts_model` and `Settings.default_voice` were never read by the editor or retained-narration preflight. Changing them could falsely appear to switch providers or voices while calls still used `VideoEditor.TTS_MODEL` and the editor's `tts_voice` option. Remove the dead fields and keep the current model identity in one place until a replacement has a verified voice, token-based spending guard, and local review result. This does not migrate the deprecated model or authorize another paid narration set.
+
+## 2026-10-10 — Reveal the Sillim question and second role with narration
+
+The local story held some central diagrams for several seconds, but motion for its own sake would add no explanation. Two premature reveals were concrete: the opening diagram wrote its question before the question caption, and the concluding diagram showed the flood-response role before the transport-first phrase. Delay only those elements to the matching Yuna scratch narration beats; retain the remaining concept diagrams, music mixes, and dark soft captions. Re-render every music candidate from the same updated scene clips so the comparison stays music-only. A final voice will need its own timing pass because its duration and phrasing can differ.

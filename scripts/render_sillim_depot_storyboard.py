@@ -48,7 +48,7 @@ def frame(scene, t, duration):
         label(d, (270, 400), "지하 공간", 26, MUTED, "ma")
         if t >= 2.3:
             label(d, (270, 462), "빗물 3만 5천 톤", 33, TEAL, "ma")
-        if t >= 4.2:
+        if t >= 5.1:
             label(d, (270, 520), "왜 차고지 아래일까?", 26, INK, "ma")
     elif scene == 2:
         label(d, (270, 115), "한 부지, 두 문제", 37, anchor="ma")
@@ -91,9 +91,10 @@ def frame(scene, t, duration):
         d.rounded_rectangle((55, 188, 485, 316), radius=20, fill=PANEL)
         bus(d, 92, 222, 0.62)
         label(d, (336, 240), "평소 · 교통", 27, INK, "ma")
-        d.rounded_rectangle((55, 332, 485, 460), radius=20, fill="#dcebf0")
-        d.rounded_rectangle((95, 365, 235, 429), radius=8, fill=BLUE)
-        label(d, (336, 384), "폭우 · 저장", 27, INK, "ma")
+        if t >= 1.4:
+            d.rounded_rectangle((55, 332, 485, 460), radius=20, fill="#dcebf0")
+            d.rounded_rectangle((95, 365, 235, 429), radius=8, fill=BLUE)
+            label(d, (336, 384), "폭우 · 저장", 27, INK, "ma")
         if t >= 4.0:
             label(d, (270, 510), "약 10cm · 서울시 설명", 25, TEAL, "ma")
         if t >= 5.7:
