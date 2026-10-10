@@ -48,7 +48,7 @@ def frame(scene, t, duration):
         label(d, (270, 400), "지하 공간", 26, MUTED, "ma")
         if t >= 2.3:
             label(d, (270, 462), "빗물 3만 5천 톤", 33, TEAL, "ma")
-        if t >= 5.1:
+        if t >= 5.7:
             label(d, (270, 520), "왜 차고지 아래일까?", 26, INK, "ma")
     elif scene == 2:
         label(d, (270, 115), "한 부지, 두 문제", 37, anchor="ma")

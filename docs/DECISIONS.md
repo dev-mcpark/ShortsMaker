@@ -247,3 +247,7 @@ The local story held some central diagrams for several seconds, but motion for i
 ## 2026-10-10 — Carry RnB 2 forward for the Sillim edit
 
 The owner preferred Arulo's “RnB 2” if choosing among the Sillim music comparisons. Carry its documented local MP3 and provisional normalized 20% mix into the next Sillim review. This is a choice among the heard tracks, not approval of the complete video or proof that it fits a final voice. Recheck speech masking after final narration, and do not turn this story-specific preference into an automatic mapping for every `curious` script.
+
+## 2026-10-10 — Reuse the Sillim storyboard under one approved final voice
+
+The owner approved the exact five-scene script and a $0.02 ceiling for one `nova` narration set. Retain the five generated MP3s with the script-bound manifest. Their request reserve, including the configured possible retry, is $0.00771; leave the actual bill unknown until provider reconciliation. The final voice changes scene lengths by at most about 0.2 seconds from the Yuna audition, so reuse four existing diagrams. The opening question was visibly early against the final caption; redraw only that scene with the cue at 5.7 seconds. Keep the RnB 2 level provisional until listening to the final mix, and require a whole-video editorial verdict before publication.
