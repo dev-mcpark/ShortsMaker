@@ -2,6 +2,7 @@ import os
 import asyncio
 import hashlib
 import json
+import math
 import subprocess
 import time
 import glob
@@ -41,6 +42,7 @@ class VideoEditor:
         bgm_mood: Optional[str] = None,
         bgm_track: Optional[str] = None,
         subtitle_style: str = "soft",
+        text_overlays: Optional[dict] = None,
     ):
         """
         VideoEditor 초기화
@@ -71,6 +73,7 @@ class VideoEditor:
         if subtitle_style not in {"soft", "card"}:
             raise ValueError("subtitle_style은 soft 또는 card여야 합니다.")
         self.subtitle_style = subtitle_style
+        self.text_overlays = text_overlays or {}
 
         self.voice_map = {
             'suspense': 'onyx',
@@ -257,6 +260,8 @@ class VideoEditor:
                 # [FIX] Character is now integrated into the video via Veo.
                 # No need for manual overlay anymore.
                 layers = [clip]
+
+                layers.extend(self._create_text_overlay_clips(scene.scene_number, duration))
 
                 # 3. Subtitle (Flattened structure)
                 subtitle_clips = self._create_subtitle_clips(scene.script_text, duration)
@@ -506,6 +511,40 @@ class VideoEditor:
             end = duration if index == len(chunks) - 1 else spoken_duration * elapsed / total
             segments.append((chunk, start, end - start))
         return segments
+
+    def _create_text_overlay_clips(self, scene_number: int, duration: float) -> List:
+        clips = []
+        try:
+            if not self.text_overlays.get(str(scene_number)):
+                return clips
+            font = ImageFont.truetype('/System/Library/Fonts/AppleSDGothicNeo.ttc', 38)
+            for cue in self.text_overlays.get(str(scene_number), []):
+                start = cue["start"]
+                end = cue.get("end", duration)
+                x, y = cue["x"], cue["y"]
+                if (not all(isinstance(value, (int, float)) and not isinstance(value, bool)
+                            and math.isfinite(value) for value in (start, end, x, y))
+                        or not (0 <= start < end <= duration)
+                        or not (isinstance(x, int) and isinstance(y, int) and x >= 0 and y >= 0)):
+                    raise ValueError(f"씬 {scene_number} 화면 표기 시간 또는 위치가 올바르지 않습니다.")
+                text = cue["text"]
+                if not isinstance(text, str) or not text.strip() or "\n" in text:
+                    raise ValueError(f"씬 {scene_number} 화면 표기 문안이 올바르지 않습니다.")
+                left, top, right, bottom = font.getbbox(text)
+                width, height = right - left + 36, bottom - top + 24
+                if x + width > settings.video_width or y + height > settings.video_height:
+                    raise ValueError(f"씬 {scene_number} 화면 표기가 화면 밖으로 나갑니다.")
+                panel = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(panel)
+                draw.rounded_rectangle((0, 0, width - 1, height - 1), radius=16,
+                                       fill=(245, 241, 232, 232))
+                draw.text((18 - left, 12 - top), text, font=font, fill="#19384a")
+                clips.append(ImageClip(np.asarray(panel)).with_position((x, y))
+                             .with_start(start).with_duration(end - start))
+            return clips
+        except Exception:
+            self._cleanup_clips(clips)
+            raise
 
     def _create_subtitle_clips(self, text, duration) -> List:
         """Returns a list of clips for clean subtitle rendering using user-configurable settings."""

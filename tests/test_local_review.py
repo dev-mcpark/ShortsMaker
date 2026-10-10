@@ -1,16 +1,55 @@
 """The local review command must fail before production when an input is incomplete."""
 
 import asyncio
+import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from scripts.local_review import collect_local_inputs, render_local
+from scripts.local_review import collect_local_inputs, load_text_overlays, render_local
+from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.models import ShortsScript, VideoScene
 
 
 class LocalReviewTests(unittest.TestCase):
+    def test_local_text_cues_validate_and_render_within_scene(self):
+        script = ShortsScript(
+            title="Review", description="", tags=[], mood="calm", style="plain",
+            source_name="test", source_url="https://example.com", generation_mode="video",
+            scenes=[VideoScene(scene_number=1, visual_description="diagram", script_text="line")],
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "overlays.json"
+            cues = {"1": [{"text": "AI 설명용 영상", "start": 0, "x": 60, "y": 75}]}
+            path.write_text(json.dumps(cues), encoding="utf-8")
+            overlays = load_text_overlays(path, script)
+            editor = VideoEditor(bgm_volume=0, text_overlays=overlays)
+            clips = editor._create_text_overlay_clips(1, 2.0)
+            try:
+                self.assertEqual(len(clips), 1)
+                self.assertEqual(clips[0].start, 0)
+                self.assertEqual(clips[0].end, 2.0)
+                self.assertGreater(clips[0].w, 0)
+            finally:
+                editor._cleanup_clips(clips)
+
+            cues["1"][0]["end"] = 3
+            path.write_text(json.dumps(cues), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "시간 또는 위치"):
+                VideoEditor(bgm_volume=0, text_overlays=load_text_overlays(path, script)) \
+                    ._create_text_overlay_clips(1, 2.0)
+            cues["1"][0]["end"] = 1
+            cues["1"][0]["x"] = 1070
+            path.write_text(json.dumps(cues), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "화면 밖"):
+                VideoEditor(bgm_volume=0, text_overlays=load_text_overlays(path, script)) \
+                    ._create_text_overlay_clips(1, 2.0)
+            cues["1"][0]["x"] = -1
+            path.write_text(json.dumps(cues), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "시간 또는 위치"):
+                load_text_overlays(path, script)
+
     def test_forwards_local_caption_color(self):
         script = ShortsScript(
             title="Review", description="", tags=[], mood="calm", style="plain",
