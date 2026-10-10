@@ -1,7 +1,9 @@
 import os
 import time
 import asyncio
+import json
 import uuid
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from google import genai
@@ -11,7 +13,7 @@ from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
-from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
+from shorts_maker.services.visual_cost import VIDEO_USD_PER_SECOND, estimated_scene_cost, scene_mode
 
 VIDEO_PROMPT_VERSION = 2
 
@@ -226,6 +228,7 @@ class VideoGenerator:
         fallback_prompt: str,
         max_attempts: int = 1,
         duration_seconds: Optional[int] = None,
+        scene_number: Optional[int] = None,
     ) -> None:
         """Veo API 호출을 재시도 로직과 함께 실행.
 
@@ -236,6 +239,27 @@ class VideoGenerator:
 
         for attempt in range(max_attempts):
             require_paid_production_enabled()
+            requested_seconds = duration_seconds or settings.veo_duration_seconds
+            audit_dir = settings.output_dir / "evaluation" / "visual_attempts"
+            audit_dir.mkdir(parents=True, exist_ok=True)
+            audit_path = audit_dir / f"{uuid.uuid4().hex}.json"
+            record = {
+                "schema_version": 1,
+                "started_utc": datetime.now(timezone.utc).isoformat(),
+                "model": model_id,
+                "scene_number": scene_number,
+                "duration_seconds": requested_seconds,
+                "resolution": "720p",
+                "generate_audio": False,
+                "number_of_videos": 1,
+                "estimated_output_usd": round(
+                    VIDEO_USD_PER_SECOND[model_id] * requested_seconds, 4,
+                ) if model_id in VIDEO_USD_PER_SECOND else None,
+                "actual_billed_usd": None,
+                "status": "submitted_or_pending",
+            }
+            audit_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+            operation = None
             try:
                 self.logger.info(f"    Generating (Attempt {attempt + 1}/{max_attempts})...")
 
@@ -244,13 +268,12 @@ class VideoGenerator:
                     prompt=current_prompt,
                     config={
                         "aspect_ratio": "9:16",
-                        "duration_seconds": duration_seconds or settings.veo_duration_seconds,
+                        "duration_seconds": requested_seconds,
                         "resolution": "720p",
                         "generate_audio": False,
                         "number_of_videos": 1,
                     },
                 )
-
                 for _ in range(90):  # 최대 15분 대기
                     if operation.done:
                         break
@@ -264,14 +287,24 @@ class VideoGenerator:
                 response = operation.result
                 if response and response.generated_videos:
                     response.generated_videos[0].video.save(output_path)
+                    if not os.path.isfile(output_path):
+                        raise RuntimeError("Veo returned no video file")
+                    record["status"] = "saved"
                     return
 
                 error_info = getattr(operation, "error", "Unknown Error")
                 raise Exception(f"No video generated. Error: {error_info}")
 
             except TimeoutError:
+                record["status"] = "timed_out_unknown"
                 raise
             except Exception as e:
+                record.update(status="failed_or_unknown", error_type=type(e).__name__)
+                provider_error = getattr(operation, "error", None)
+                provider_code = (provider_error.get("code") if isinstance(provider_error, dict)
+                                 else getattr(provider_error, "code", None))
+                if provider_code is not None:
+                    record["provider_error_code"] = str(provider_code)
                 err_str = str(e).lower()
                 if getattr(e, "status_code", None) == 429 or any(
                     term in err_str for term in ("429", "resource_exhausted", "resource exhausted")
@@ -292,6 +325,12 @@ class VideoGenerator:
 
                 self.logger.error(f"    ❌ Error: {e}")
                 raise
+            finally:
+                operation_name = getattr(operation, "name", None)
+                if isinstance(operation_name, str):
+                    record["operation_id"] = operation_name.rsplit("/", 1)[-1]
+                record["finished_utc"] = datetime.now(timezone.utc).isoformat()
+                audit_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _run_veo_background_only(
         self, model_id: str, scene, output_path: str, duration_seconds: Optional[int] = None,
@@ -319,6 +358,7 @@ class VideoGenerator:
             model_id, initial_prompt, output_path, fallback_prompt,
             max_attempts=self.max_veo_attempts,
             duration_seconds=duration_seconds,
+            scene_number=scene.scene_number,
         )
 
     # ── Image Helper ──────────────────────────────────────────────────────

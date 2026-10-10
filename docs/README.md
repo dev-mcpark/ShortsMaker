@@ -34,7 +34,7 @@ The app is a Python modular monolith. `ProductionService` owns orchestration, pr
 | Change | Start here | Verify with |
 | --- | --- | --- |
 | Topic sourcing and script facts | `src/shorts_maker/planner/script_planner.py`, `content_extractor.py`, `script_validator.py` | `tests/test_content_extraction.py`, `tests/test_review_regressions.py` |
-| Source-grounded visual briefs and Veo prompt wrapper | `src/shorts_maker/planner/script_planner.py`, `script_validator.py`, `generator/video_generator.py` | `tests/test_review_regressions.py`, `tests/test_production_gates.py` |
+| Source-grounded visual briefs, Veo prompt wrapper, and private per-request attempt records | `src/shorts_maker/planner/script_planner.py`, `script_validator.py`, `generator/video_generator.py` | `tests/test_review_regressions.py`, `tests/test_production_gates.py` |
 | Visual model, duration, or output cost | `src/shorts_maker/services/visual_cost.py`, `generator/video_generator.py`, `utils/config.py` | `tests/test_production_gates.py`, `tests/test_review_regressions.py` |
 | Paid request switch and retry exposure | `src/shorts_maker/utils/paid_gate.py`, `utils/character_video_generator.py`, `planner/script_planner.py`, `planner/script_validator.py`, `planner/content_analyzer.py`, `planner/content_enricher.py` | `tests/test_production_gates.py`, `tests/test_review_regressions.py` |
 | Scene reuse, narration preflight, and upload sequence | `src/shorts_maker/services/production_service.py` | `tests/test_production_gates.py`, `tests/test_workflows.py` |
@@ -50,6 +50,7 @@ The app is a Python modular monolith. `ProductionService` owns orchestration, pr
 - Settings load from `config/.env` or root `.env`; use `config/.env.example` as the template. Secrets are not tracked.
 - `outputs/`, `temp/`, `logs/`, and local histories are runtime data, not project docs.
 - `ProductionService` writes a neighboring `*.production.json` record for each new rendered MP4 when the output directory is writable; keep these local with the video.
+- Each new `VideoGenerator` Veo request writes a private, prompt-free record under `outputs/evaluation/visual_attempts/` before the provider call and updates it after success, error, or timeout. One file represents one app attempt; a missing or incomplete final state needs billing reconciliation. Older direct pilot requests have separate ignored request records and are not backfilled here.
 - `scripts/prepare_narration.py` writes scene MP3s and a cumulative request-reserve manifest to ignored `outputs/`; its ceiling uses a caller-verified model price and bounds requests, not the provider's final bill. `ProductionService` checks this manifest's scene text and file hashes when reusing those files. Legacy scratch audio without a manifest remains possible for local review and needs human script alignment.
 - `VideoEditor.TTS_MODEL` owns the currently used narration model; `scripts/prepare_narration.py` reads that same value for its manifest and preflight. The default voice is an editor option. Settings has no independent TTS model or voice switch.
 - `AppState` is in-memory browser-session state. API settings are process-wide.

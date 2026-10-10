@@ -365,7 +365,9 @@ class ReviewRegressions(unittest.TestCase):
             operations=SimpleNamespace(get=Mock(return_value=operation)),
         )
         generator.logger = Mock()
-        with patch("shorts_maker.generator.video_generator.time.sleep"):
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            settings, "output_dir", Path(directory),
+        ), patch("shorts_maker.generator.video_generator.time.sleep"):
             with self.assertRaises(TimeoutError):
                 generator._retry_veo_call("model", "prompt", "unused.mp4", "fallback")
         generator.client.models.generate_videos.assert_called_once()
@@ -393,7 +395,9 @@ class ReviewRegressions(unittest.TestCase):
         status_only.status_code = 429
 
         for error in (RuntimeError("RESOURCE_EXHAUSTED"), status_only):
-            with self.subTest(error=error), patch(
+            with self.subTest(error=error), tempfile.TemporaryDirectory() as directory, patch.object(
+                settings, "output_dir", Path(directory),
+            ), patch(
                 "shorts_maker.generator.video_generator.time.sleep"
             ) as sleep:
                 request.reset_mock(side_effect=True)
@@ -416,15 +420,67 @@ class ReviewRegressions(unittest.TestCase):
         )
         request = Mock(side_effect=[RuntimeError("503"), operation])
         generator.client = SimpleNamespace(models=SimpleNamespace(generate_videos=request))
+        saved_video.save.side_effect = lambda path: Path(path).write_bytes(b"fake clip")
 
-        with patch("shorts_maker.generator.video_generator.time.sleep") as sleep:
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            settings, "output_dir", Path(directory),
+        ), patch("shorts_maker.generator.video_generator.time.sleep") as sleep:
+            output = str(Path(directory) / "saved.mp4")
             generator._retry_veo_call(
-                settings.veo_model_id, "prompt", "unused.mp4", "fallback",
+                settings.veo_model_id, "prompt", output, "fallback",
                 max_attempts=2,
             )
+            records = [json.loads(path.read_text(encoding="utf-8")) for path in
+                       (Path(directory) / "evaluation/visual_attempts").glob("*.json")]
+            self.assertEqual(sorted(record["status"] for record in records),
+                             ["failed_or_unknown", "saved"])
         self.assertEqual(request.call_count, 2)
         sleep.assert_called_once_with(30)
-        saved_video.save.assert_called_once_with("unused.mp4")
+        saved_video.save.assert_called_once_with(output)
+
+    def test_veo_internal_error_records_one_unbilled_attempt(self):
+        generator = object.__new__(VideoGenerator)
+        generator.logger = Mock()
+        operation = SimpleNamespace(
+            done=True, result=None, error={"code": 13, "message": "Internal error"},
+            name="projects/example/operations/operation-id",
+        )
+        request = Mock(return_value=operation)
+        generator.client = SimpleNamespace(models=SimpleNamespace(generate_videos=request))
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            settings, "output_dir", Path(directory),
+        ):
+            with self.assertRaisesRegex(Exception, "No video generated"):
+                generator._retry_veo_call(
+                    "veo-3.1-lite-generate-001", "private prompt", "unused.mp4", "fallback",
+                    duration_seconds=8, scene_number=1,
+                )
+            paths = list((Path(directory) / "evaluation/visual_attempts").glob("*.json"))
+            self.assertEqual(len(paths), 1)
+            record = json.loads(paths[0].read_text(encoding="utf-8"))
+        request.assert_called_once()
+        self.assertEqual(record["status"], "failed_or_unknown")
+        self.assertEqual(record["provider_error_code"], "13")
+        self.assertEqual(record["operation_id"], "operation-id")
+        self.assertEqual(record["estimated_output_usd"], 0.24)
+        self.assertIsNone(record["actual_billed_usd"])
+        self.assertNotIn("private prompt", json.dumps(record))
+
+    def test_veo_does_not_call_provider_when_attempt_record_cannot_be_written(self):
+        generator = object.__new__(VideoGenerator)
+        generator.logger = Mock()
+        request = Mock()
+        generator.client = SimpleNamespace(models=SimpleNamespace(generate_videos=request))
+        with tempfile.TemporaryDirectory() as directory:
+            occupied = Path(directory) / "occupied"
+            occupied.write_text("not a directory", encoding="utf-8")
+            with patch.object(settings, "output_dir", occupied):
+                with self.assertRaises(OSError):
+                    generator._retry_veo_call(
+                        settings.veo_model_id, "prompt", "unused.mp4", "fallback",
+                    )
+        request.assert_not_called()
 
     def test_veo_prompt_keeps_one_silent_shot_without_fake_quality_claims(self):
         generator = object.__new__(VideoGenerator)
