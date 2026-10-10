@@ -34,7 +34,7 @@ The app is a Python modular monolith. `ProductionService` owns orchestration, pr
 | Change | Start here | Verify with |
 | --- | --- | --- |
 | Topic sourcing and script facts | `src/shorts_maker/planner/script_planner.py`, `content_extractor.py`, `script_validator.py` | `tests/test_content_extraction.py`, `tests/test_review_regressions.py` |
-| Source-grounded visual briefs, Veo prompt wrapper, and private per-request attempt records | `src/shorts_maker/planner/script_planner.py`, `script_validator.py`, `generator/video_generator.py` | `tests/test_review_regressions.py`, `tests/test_production_gates.py` |
+| Source-grounded visual briefs, Veo prompt wrapper, optional first-frame input, and private per-request attempt records | `src/shorts_maker/planner/script_planner.py`, `script_validator.py`, `generator/video_generator.py` | `tests/test_review_regressions.py`, `tests/test_production_gates.py` |
 | Visual model, duration, or output cost | `src/shorts_maker/services/visual_cost.py`, `generator/video_generator.py`, `utils/config.py` | `tests/test_production_gates.py`, `tests/test_review_regressions.py` |
 | Paid request switch and retry exposure | `src/shorts_maker/utils/paid_gate.py`, `utils/character_video_generator.py`, `planner/script_planner.py`, `planner/script_validator.py`, `planner/content_analyzer.py`, `planner/content_enricher.py` | `tests/test_production_gates.py`, `tests/test_review_regressions.py` |
 | Scene reuse, narration preflight, and upload sequence | `src/shorts_maker/services/production_service.py` | `tests/test_production_gates.py`, `tests/test_workflows.py` |

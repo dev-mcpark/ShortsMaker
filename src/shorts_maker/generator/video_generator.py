@@ -1,19 +1,23 @@
 import os
 import time
 import asyncio
+import hashlib
 import json
 import uuid
 from datetime import datetime, timezone
+from io import BytesIO
+from pathlib import Path
 from typing import List, Optional
 
 from google import genai
 from google.genai import types
+from PIL import Image
 
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
-from shorts_maker.services.visual_cost import VIDEO_USD_PER_SECOND, estimated_scene_cost, scene_mode
+from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
 
 VIDEO_PROMPT_VERSION = 2
 
@@ -229,17 +233,42 @@ class VideoGenerator:
         max_attempts: int = 1,
         duration_seconds: Optional[int] = None,
         scene_number: Optional[int] = None,
+        first_frame_path: Optional[str] = None,
     ) -> None:
         """Veo API 호출을 재시도 로직과 함께 실행.
 
         max_attempts가 2 이상이면 서버 오류를 대기 후 재시도하고,
         안전 위반 시 fallback_prompt로 전환합니다.
         """
+        require_paid_production_enabled()
+        if not isinstance(max_attempts, int) or isinstance(max_attempts, bool) or max_attempts < 1:
+            raise ValueError("Veo 시도 횟수는 1 이상이어야 합니다.")
+        requested_seconds = settings.veo_duration_seconds if duration_seconds is None else duration_seconds
+        if requested_seconds not in {4, 6, 8} or isinstance(requested_seconds, bool):
+            raise ValueError("Veo 생성 길이는 4, 6, 8초 중 하나여야 합니다.")
+        estimated_output = estimated_scene_cost("video", model_id, requested_seconds)
+        self._check_visual_cap(estimated_output * max_attempts)
+
+        first_frame = None
+        image_sha256 = None
+        if first_frame_path is not None:
+            frame_path = Path(first_frame_path)
+            if frame_path.stat().st_size > 20_000_000:
+                raise ValueError("Veo 첫 프레임 이미지는 20 MB 이하여야 합니다.")
+            image_bytes = frame_path.read_bytes()
+            with Image.open(BytesIO(image_bytes)) as image:
+                width, height = image.size
+                mime_type = Image.MIME.get(image.format)
+                image.verify()
+            if mime_type not in {"image/png", "image/jpeg"} or abs(width / height - 9 / 16) > 0.02:
+                raise ValueError("Veo 첫 프레임은 세로 9:16 PNG 또는 JPEG여야 합니다.")
+            first_frame = types.Image(image_bytes=image_bytes, mime_type=mime_type)
+            image_sha256 = hashlib.sha256(image_bytes).hexdigest()
+
         current_prompt = initial_prompt
 
         for attempt in range(max_attempts):
             require_paid_production_enabled()
-            requested_seconds = duration_seconds or settings.veo_duration_seconds
             audit_dir = settings.output_dir / "evaluation" / "visual_attempts"
             audit_dir.mkdir(parents=True, exist_ok=True)
             audit_path = audit_dir / f"{uuid.uuid4().hex}.json"
@@ -252,9 +281,9 @@ class VideoGenerator:
                 "resolution": "720p",
                 "generate_audio": False,
                 "number_of_videos": 1,
-                "estimated_output_usd": round(
-                    VIDEO_USD_PER_SECOND[model_id] * requested_seconds, 4,
-                ) if model_id in VIDEO_USD_PER_SECOND else None,
+                "estimated_output_usd": round(estimated_output, 4),
+                "input_type": "image_first_frame" if first_frame is not None else "text",
+                "input_image_sha256": image_sha256,
                 "actual_billed_usd": None,
                 "status": "submitted_or_pending",
             }
@@ -263,17 +292,20 @@ class VideoGenerator:
             try:
                 self.logger.info(f"    Generating (Attempt {attempt + 1}/{max_attempts})...")
 
-                operation = self.client.models.generate_videos(
-                    model=model_id,
-                    prompt=current_prompt,
-                    config={
+                request = {
+                    "model": model_id,
+                    "prompt": current_prompt,
+                    "config": {
                         "aspect_ratio": "9:16",
                         "duration_seconds": requested_seconds,
                         "resolution": "720p",
                         "generate_audio": False,
                         "number_of_videos": 1,
                     },
-                )
+                }
+                if first_frame is not None:
+                    request["image"] = first_frame
+                operation = self.client.models.generate_videos(**request)
                 for _ in range(90):  # 최대 15분 대기
                     if operation.done:
                         break

@@ -393,7 +393,7 @@ class ReviewRegressions(unittest.TestCase):
             settings, "output_dir", Path(directory),
         ), patch("shorts_maker.generator.video_generator.time.sleep"):
             with self.assertRaisesRegex(TimeoutError, "VEO_RESULT_UNVERIFIED"):
-                generator._retry_veo_call("model", "prompt", "unused.mp4", "fallback")
+                generator._retry_veo_call("veo-3.1-lite-generate-001", "prompt", "unused.mp4", "fallback")
         generator.client.models.generate_videos.assert_called_once()
         self.assertFalse(generator.client.models.generate_videos.call_args.kwargs["config"]["generate_audio"])
         self.assertEqual(generator.client.models.generate_videos.call_args.kwargs["config"]["number_of_videos"], 1)
@@ -423,7 +423,7 @@ class ReviewRegressions(unittest.TestCase):
                 settings, "output_dir", Path(directory),
             ), patch(
                 "shorts_maker.generator.video_generator.time.sleep"
-            ) as sleep:
+            ) as sleep, patch.object(settings, "max_visual_cost_usd", 10):
                 request.reset_mock(side_effect=True)
                 request.side_effect = error
                 with self.assertRaisesRegex(RuntimeError, "RESOURCE_EXHAUSTED"):
@@ -448,7 +448,9 @@ class ReviewRegressions(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory, patch.object(
             settings, "output_dir", Path(directory),
-        ), patch("shorts_maker.generator.video_generator.time.sleep") as sleep:
+        ), patch("shorts_maker.generator.video_generator.time.sleep") as sleep, patch.object(
+            settings, "max_visual_cost_usd", 2,
+        ):
             output = str(Path(directory) / "saved.mp4")
             generator._retry_veo_call(
                 settings.veo_model_id, "prompt", output, "fallback",
@@ -490,6 +492,88 @@ class ReviewRegressions(unittest.TestCase):
         self.assertEqual(record["estimated_output_usd"], 0.24)
         self.assertIsNone(record["actual_billed_usd"])
         self.assertNotIn("private prompt", json.dumps(record))
+
+    def test_veo_first_frame_is_validated_and_audited_before_one_request(self):
+        generator = object.__new__(VideoGenerator)
+        generator.logger = Mock()
+        saved_video = Mock()
+        saved_video.save.side_effect = lambda path: Path(path).write_bytes(b"clip")
+        operation = SimpleNamespace(done=True, result=SimpleNamespace(
+            generated_videos=[SimpleNamespace(video=saved_video)]),
+        )
+        request = Mock(return_value=operation)
+        generator.client = SimpleNamespace(models=SimpleNamespace(generate_videos=request))
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            settings, "output_dir", Path(directory),
+        ), patch.object(settings, "max_visual_cost_usd", 0.30):
+            frame = Path(directory) / "frame.png"
+            Image.new("RGB", (720, 1280), "white").save(frame)
+            output = str(Path(directory) / "clip.mp4")
+            generator._retry_veo_call(
+                "veo-3.1-lite-generate-001", "motion only", output, "fallback",
+                duration_seconds=8, scene_number=1, first_frame_path=str(frame),
+            )
+            record = json.loads(next((Path(directory) / "evaluation/visual_attempts").glob(
+                "*.json")).read_text(encoding="utf-8"))
+            kwargs = request.call_args.kwargs
+            self.assertEqual(kwargs["image"].image_bytes, frame.read_bytes())
+            self.assertEqual(kwargs["image"].mime_type, "image/png")
+            self.assertEqual(kwargs["config"]["number_of_videos"], 1)
+            self.assertFalse(kwargs["config"]["generate_audio"])
+            self.assertEqual(record["input_type"], "image_first_frame")
+            self.assertEqual(record["estimated_output_usd"], 0.24)
+            self.assertEqual(record["status"], "saved")
+            self.assertEqual(len(record["input_image_sha256"]), 64)
+            self.assertNotIn("motion only", json.dumps(record))
+
+    def test_direct_veo_preflight_blocks_overspend_and_invalid_frame(self):
+        generator = object.__new__(VideoGenerator)
+        generator.logger = Mock()
+        request = Mock()
+        generator.client = SimpleNamespace(models=SimpleNamespace(generate_videos=request))
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            settings, "output_dir", Path(directory),
+        ):
+            frame = Path(directory) / "wrong.png"
+            Image.new("RGB", (1280, 720), "white").save(frame)
+            oversized = Path(directory) / "oversized.png"
+            with oversized.open("wb") as file:
+                file.seek(20_000_000)
+                file.write(b"x")
+            with patch.object(settings, "max_visual_cost_usd", 0.20):
+                with self.assertRaisesRegex(ValueError, "상한"):
+                    generator._retry_veo_call(
+                        "veo-3.1-lite-generate-001", "motion", "unused.mp4", "fallback",
+                        duration_seconds=8, first_frame_path=str(frame),
+                    )
+            with patch.object(settings, "max_visual_cost_usd", 0.30):
+                with self.assertRaisesRegex(ValueError, "20 MB"):
+                    generator._retry_veo_call(
+                        "veo-3.1-lite-generate-001", "motion", "unused.mp4", "fallback",
+                        duration_seconds=8, first_frame_path=str(oversized),
+                    )
+                with self.assertRaisesRegex(ValueError, "상한"):
+                    generator._retry_veo_call(
+                        "veo-3.1-lite-generate-001", "motion", "unused.mp4", "fallback",
+                        duration_seconds=8, max_attempts=2,
+                    )
+                with self.assertRaisesRegex(ValueError, "세로 9:16"):
+                    generator._retry_veo_call(
+                        "veo-3.1-lite-generate-001", "motion", "unused.mp4", "fallback",
+                        duration_seconds=8, first_frame_path=str(frame),
+                    )
+                with self.assertRaisesRegex(ValueError, "시도 횟수"):
+                    generator._retry_veo_call(
+                        "veo-3.1-lite-generate-001", "motion", "unused.mp4", "fallback",
+                        max_attempts=0,
+                    )
+                with self.assertRaisesRegex(ValueError, "생성 길이"):
+                    generator._retry_veo_call(
+                        "veo-3.1-lite-generate-001", "motion", "unused.mp4", "fallback",
+                        duration_seconds=5,
+                    )
+            self.assertFalse(list((Path(directory) / "evaluation").glob("**/*.json")))
+            request.assert_not_called()
 
     def test_veo_does_not_call_provider_when_attempt_record_cannot_be_written(self):
         generator = object.__new__(VideoGenerator)
