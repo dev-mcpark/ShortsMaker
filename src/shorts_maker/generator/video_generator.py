@@ -295,9 +295,9 @@ class VideoGenerator:
                 error_info = getattr(operation, "error", "Unknown Error")
                 raise Exception(f"No video generated. Error: {error_info}")
 
-            except TimeoutError:
+            except TimeoutError as e:
                 record["status"] = "timed_out_unknown"
-                raise
+                raise TimeoutError("VEO_RESULT_UNVERIFIED: Veo 작업의 완료 여부를 확인할 수 없습니다") from e
             except Exception as e:
                 record.update(status="failed_or_unknown", error_type=type(e).__name__)
                 provider_error = getattr(operation, "error", None)
@@ -322,6 +322,9 @@ class VideoGenerator:
                     self.logger.warning("    ⚠️ Safety violation, simplifying prompt...")
                     current_prompt = fallback_prompt
                     continue
+
+                if operation is not None:
+                    raise RuntimeError("VEO_RESULT_UNVERIFIED: 제출된 작업에서 영상 파일을 확인할 수 없습니다") from e
 
                 self.logger.error(f"    ❌ Error: {e}")
                 raise

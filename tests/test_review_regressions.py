@@ -191,6 +191,30 @@ class ReviewRegressions(unittest.TestCase):
                 asyncio.run(manager._execute_pipeline(schedule))
             self.assertTrue(manager.get_schedule(schedule["id"])["enabled"])
 
+    def test_completed_veo_without_video_pauses_repeating_schedule(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("Veo pilot", "09:00")
+            failure = ProductionService()._failed_result("VEO_RESULT_UNVERIFIED: no verified video")
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, return_value=failure,
+            ):
+                asyncio.run(manager._execute_pipeline(schedule))
+            stored = manager.get_schedule(schedule["id"])
+            self.assertFalse(stored["enabled"])
+            self.assertEqual(stored["last_result"], "veo_result_unverified")
+            self.assertEqual(stored["run_count"], 1)
+
+            raised = manager.create_schedule("Thrown Veo", "10:00")
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, side_effect=RuntimeError("VEO_RESULT_UNVERIFIED"),
+            ):
+                asyncio.run(manager._execute_pipeline(raised))
+            self.assertFalse(manager.get_schedule(raised["id"])["enabled"])
+            self.assertEqual(manager.get_schedule(raised["id"])["last_result"], "veo_result_unverified")
+
     def test_planning_provider_limit_survives_pipeline_without_stale_errors(self):
         service = ProductionService(editor_options={"bgm_volume": 0})
         service._planner = SimpleNamespace(plan_content=AsyncMock(
@@ -368,7 +392,7 @@ class ReviewRegressions(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, patch.object(
             settings, "output_dir", Path(directory),
         ), patch("shorts_maker.generator.video_generator.time.sleep"):
-            with self.assertRaises(TimeoutError):
+            with self.assertRaisesRegex(TimeoutError, "VEO_RESULT_UNVERIFIED"):
                 generator._retry_veo_call("model", "prompt", "unused.mp4", "fallback")
         generator.client.models.generate_videos.assert_called_once()
         self.assertFalse(generator.client.models.generate_videos.call_args.kwargs["config"]["generate_audio"])
@@ -451,7 +475,7 @@ class ReviewRegressions(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, patch.object(
             settings, "output_dir", Path(directory),
         ):
-            with self.assertRaisesRegex(Exception, "No video generated"):
+            with self.assertRaisesRegex(RuntimeError, "VEO_RESULT_UNVERIFIED"):
                 generator._retry_veo_call(
                     "veo-3.1-lite-generate-001", "private prompt", "unused.mp4", "fallback",
                     duration_seconds=8, scene_number=1,
