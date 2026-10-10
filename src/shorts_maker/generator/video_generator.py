@@ -247,6 +247,7 @@ class VideoGenerator:
                         "duration_seconds": duration_seconds or settings.veo_duration_seconds,
                         "resolution": "720p",
                         "generate_audio": False,
+                        "number_of_videos": 1,
                     },
                 )
 
@@ -304,7 +305,7 @@ class VideoGenerator:
         motion_desc = (getattr(scene, "motion_instruction", "") or "").strip().rstrip(".")
 
         initial_prompt = (
-            f"One continuous vertical 9:16 shot. {original_prompt}. "
+            f"One continuous vertical shot. {original_prompt}. "
             f"Motion: {motion_desc + '.' if motion_desc else 'Steady camera.'} "
             "Plain unlettered surfaces and an uncluttered lower third for captions added in editing. "
             "Silent background footage."

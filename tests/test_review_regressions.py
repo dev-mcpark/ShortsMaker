@@ -370,6 +370,7 @@ class ReviewRegressions(unittest.TestCase):
                 generator._retry_veo_call("model", "prompt", "unused.mp4", "fallback")
         generator.client.models.generate_videos.assert_called_once()
         self.assertFalse(generator.client.models.generate_videos.call_args.kwargs["config"]["generate_audio"])
+        self.assertEqual(generator.client.models.generate_videos.call_args.kwargs["config"]["number_of_videos"], 1)
 
         character_generator = object.__new__(CharacterVideoGenerator)
         character_generator.client = SimpleNamespace(
@@ -439,7 +440,8 @@ class ReviewRegressions(unittest.TestCase):
         generator._run_veo_background_only("model", scene, "clip.mp4", 6)
 
         prompt = generator._retry_veo_call.call_args.args[1]
-        self.assertIn("One continuous vertical 9:16 shot", prompt)
+        self.assertIn("One continuous vertical shot", prompt)
+        self.assertNotIn("9:16", prompt)
         self.assertIn(scene.visual_description, prompt)
         self.assertIn(scene.motion_instruction, prompt)
         self.assertIn("Silent background footage", prompt)
