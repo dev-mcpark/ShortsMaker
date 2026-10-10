@@ -7,6 +7,16 @@ from scripts.render_sillim_depot_storyboard import BG, frame
 
 
 class SillimDepotStoryboardTests(unittest.TestCase):
+    def test_opening_bus_arrives_before_reservoir_reveal(self):
+        first = frame(1, 0, 7.89).crop((20, 225, 360, 325))
+        arrived = frame(1, 1.7, 7.89).crop((20, 225, 360, 325))
+        settled = frame(1, 3, 7.89).crop((20, 225, 360, 325))
+        self.assertIsNotNone(ImageChops.difference(first, arrived).getbbox())
+        self.assertIsNone(ImageChops.difference(arrived, settled).getbbox())
+        before_reveal = frame(1, 2.2, 7.89).crop((75, 450, 465, 500))
+        after_reveal = frame(1, 2.4, 7.89).crop((75, 450, 465, 500))
+        self.assertIsNotNone(ImageChops.difference(before_reveal, after_reveal).getbbox())
+
     def test_tank_and_attribution_appear_later(self):
         early_tank = frame(3, 1, 7).crop((58, 438, 482, 566))
         late_tank = frame(3, 4, 7).crop((58, 438, 482, 566))

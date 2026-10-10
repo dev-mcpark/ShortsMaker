@@ -42,7 +42,8 @@ def frame(scene, t, duration):
 
     if scene == 1:
         label(d, (270, 115), "차고지 아래에는?", 39, anchor="ma")
-        bus(d, 195, 235)
+        arrival = min(max(t / 1.6, 0), 1)
+        bus(d, 195 - round(345 * (1 - arrival) ** 3), 235)
         d.line((35, 330, 505, 330), fill=INK, width=6)
         d.rounded_rectangle((80, 365, 460, 575), radius=22, outline=MUTED, width=4)
         label(d, (270, 400), "지하 공간", 26, MUTED, "ma")
