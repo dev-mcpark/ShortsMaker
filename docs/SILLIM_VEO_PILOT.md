@@ -2,6 +2,8 @@
 
 Prepared and attempted: 2026-10-10. The owner found the [`nova` review cut](../outputs/evaluation/sillim_depot_nova_review.html) broadly okay and thought Veo footage could make it a stronger Short. The owner then authorized one request within a **$0.15 visual ceiling**. [STATUS.md](STATUS.md) owns the current review state; this page holds the exact attempted shot and acceptance checks.
 
+After comparing the zero-API opening alternative, the owner preferred its motion but said a final cut needs Veo-generated footage. The next staged, five-scene proposal is in [SILLIM_VEO_CUT_PLAN.md](SILLIM_VEO_CUT_PLAN.md); this rejected pilot grants no further API spending authority.
+
 ## Result
 
 One 4-second silent 720p Lite clip was generated and saved under ignored `outputs/evaluation/sillim_veo_lite/opening.mp4`. [The private comparison page](../outputs/evaluation/sillim_veo_lite_review.html) shows that raw result beside the existing whole cut. Sampled frames have a large literal `9:16` in the image and invented route-style text, side markings, and plate on the bus. This fails the unlettered, generic explanatory-visual gate. **Reject the clip; do not splice or publish it.** The existing `nova` cut remains the baseline; no retry, re-edit, or upload ran. The prompt wrapper's literal aspect-ratio phrase may have contributed to the large number, but that cause is not proven. The generator now requests one output explicitly and leaves aspect ratio to API configuration instead of repeating `9:16` in prose. That change has not been tested with another paid clip.
