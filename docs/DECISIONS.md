@@ -243,3 +243,7 @@ The shared white `soft` caption reads as hollow dark outlines on the Sillim depo
 ## 2026-10-10 — Reveal the Sillim question and second role with narration
 
 The local story held some central diagrams for several seconds, but motion for its own sake would add no explanation. Two premature reveals were concrete: the opening diagram wrote its question before the question caption, and the concluding diagram showed the flood-response role before the transport-first phrase. Delay only those elements to the matching Yuna scratch narration beats; retain the remaining concept diagrams, music mixes, and dark soft captions. Re-render every music candidate from the same updated scene clips so the comparison stays music-only. A final voice will need its own timing pass because its duration and phrasing can differ.
+
+## 2026-10-10 — Carry RnB 2 forward for the Sillim edit
+
+The owner preferred Arulo's “RnB 2” if choosing among the Sillim music comparisons. Carry its documented local MP3 and provisional normalized 20% mix into the next Sillim review. This is a choice among the heard tracks, not approval of the complete video or proof that it fits a final voice. Recheck speech masking after final narration, and do not turn this story-specific preference into an automatic mapping for every `curious` script.
