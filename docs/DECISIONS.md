@@ -287,3 +287,7 @@ The tracked Sillim opening image could not pass through the existing text-only V
 ## 2026-10-10 — Require a ceiling on every low-level Veo request
 
 The first-frame helper can be called directly while the paid switch is temporarily enabled; the configured per-video cap alone does not encode the owner's smaller authorization for a single pilot. Require a finite, nonnegative `request_budget_usd` at the shared Veo boundary and reject any output reserve for all requested attempts above it before submission. The regular scene path passes its existing configured cap, while direct pilots must pass their separately approved ceiling. Store the ceiling in each private attempt record without presenting it as an actual bill or cumulative account limit. This does not reuse an earlier authorization or constrain provider-side charges outside the listed output estimate.
+
+## 2026-10-11 — Keep the selected Sillim miniature style and stage factual overlays
+
+The owner chose the fictional depot miniature after reviewing its static first-scene placement. Carry that image as the candidate for one later image-to-video test; the preference does not establish moving-shot quality or authorize another paid call. Complete the source-grounded local cue sheet for all five scenes over blank proxy backgrounds, which exposes timing and caption collisions without duplicating the existing diagram text. Treat the positions as provisional until the cards are checked over each accepted Veo shot. Keep the approved speech and RnB 2 mix unchanged for this isolated layout check.
