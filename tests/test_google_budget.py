@@ -11,7 +11,8 @@ from unittest.mock import Mock, patch
 
 from shorts_maker.generator.video_generator import VideoGenerator
 from shorts_maker.services.google_budget import (
-    budget_status, check_google_budget, mark_google_result, reserve_google_output,
+    budget_status, check_google_budget, initialize_google_budget,
+    mark_google_result, reserve_google_output,
 )
 from shorts_maker.utils.character_video_generator import CharacterVideoGenerator
 from shorts_maker.utils.config import Settings, settings
@@ -20,7 +21,8 @@ from shorts_maker.utils.config import Settings, settings
 class GoogleBudgetTests(unittest.TestCase):
     def test_enabled_budget_requires_opening_month_and_rate(self):
         with self.assertRaisesRegex(ValueError, "Google 월 예산"):
-            Settings(google_monthly_budget_krw=10000)
+            Settings(google_monthly_budget_krw=10000, google_budget_month="",
+                     google_budget_opening_krw=None, google_usd_krw_rate=None)
 
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -39,6 +41,34 @@ class GoogleBudgetTests(unittest.TestCase):
         period = patch("shorts_maker.services.google_budget._period", return_value="2026-10")
         period.start()
         self.addCleanup(period.stop)
+        initialize_google_budget()
+
+    def test_deleted_ledger_blocks_instead_of_resetting_spend(self):
+        request_id = reserve_google_output("image", settings.image_model_id)
+        ledger = Path(self.directory.name) / "evaluation" / "google_budget.sqlite3"
+        ledger.unlink()
+        with self.assertRaisesRegex(RuntimeError, "GOOGLE_BUDGET_EXCEEDED"):
+            reserve_google_output("image", settings.image_model_id)
+        with self.assertRaisesRegex(RuntimeError, "GOOGLE_BUDGET_EXCEEDED"):
+            check_google_budget(0.034)
+        with self.assertRaisesRegex(RuntimeError, "GOOGLE_BUDGET_EXCEEDED"):
+            budget_status()
+        self.assertFalse(mark_google_result(request_id, "saved"))
+        self.assertFalse(ledger.exists())
+
+    def test_initializer_does_not_overwrite_existing_reservations(self):
+        reserve_google_output("image", settings.image_model_id)
+        with self.assertRaises(FileExistsError):
+            initialize_google_budget()
+        self.assertEqual(budget_status()["local_reserved_krw"], 68)
+
+    def test_batch_preflight_includes_each_request_rounding(self):
+        with patch.object(settings, "google_usd_krw_rate", 1501), patch.object(
+            settings, "google_monthly_budget_krw", 1103
+        ):
+            check_google_budget(0.068)
+            with self.assertRaisesRegex(RuntimeError, "GOOGLE_BUDGET_EXCEEDED"):
+                check_google_budget(0.068, 2)
 
     def test_model_price_reserves_and_failed_request_keeps_budget(self):
         self.assertEqual(budget_status()["remaining_krw"], 500)
@@ -71,7 +101,7 @@ class GoogleBudgetTests(unittest.TestCase):
 
     def test_unreadable_ledger_fails_closed(self):
         ledger = Path(self.directory.name) / "evaluation" / "google_budget.sqlite3"
-        ledger.parent.mkdir(parents=True)
+        ledger.parent.mkdir(parents=True, exist_ok=True)
         ledger.write_bytes(b"not a sqlite database")
         with self.assertRaisesRegex(RuntimeError, "GOOGLE_BUDGET_EXCEEDED"):
             reserve_google_output("image", settings.image_model_id)

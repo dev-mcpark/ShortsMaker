@@ -36,6 +36,9 @@ class ReviewRegressions(unittest.TestCase):
         paid = patch.object(settings, "paid_production_enabled", True)
         paid.start()
         self.addCleanup(paid.stop)
+        budget = patch.object(settings, "google_monthly_budget_krw", None)
+        budget.start()
+        self.addCleanup(budget.stop)
 
     def test_planning_openai_clients_have_no_hidden_sdk_retries(self):
         with patch.object(settings, "openai_api_key", "test-key"):

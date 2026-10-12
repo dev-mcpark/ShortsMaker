@@ -561,6 +561,7 @@ class ProductionService:
                 for scene, mode in zip(script.scenes, visual_modes)
             ]
             cached_paths = []
+            visual_request_count = 0
             for scene, mode, directory in zip(script.scenes, visual_modes, cache_dirs):
                 cached = (
                     await asyncio.to_thread(self._cached_clip, directory, mode)
@@ -573,13 +574,15 @@ class ProductionService:
                                 else settings.veo_duration_seconds)
                     attempts = self.max_veo_attempts if mode == "video" else 1
                     estimated_cost += attempts * estimated_scene_cost(mode, model, duration)
+                    visual_request_count += attempts
             if estimated_cost > settings.max_visual_cost_usd:
                 return self._failed_result(
                     f"예상 비주얼 비용 ${estimated_cost:.3f}가 설정 상한 "
                     f"${settings.max_visual_cost_usd:.2f}를 초과합니다. "
                     "이미지 모드 또는 MAX_VISUAL_COST_USD 설정을 확인하세요.", clips,
                 )
-            check_google_budget(estimated_cost)
+            if visual_request_count:
+                check_google_budget(estimated_cost, visual_request_count)
             if not settings.paid_production_enabled and (
                 estimated_cost > 0 or prepared_audio_paths is None
             ):

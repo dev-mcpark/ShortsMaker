@@ -25,6 +25,9 @@ class WorkflowTests(unittest.TestCase):
         paid = patch.object(settings, "paid_production_enabled", True)
         paid.start()
         self.addCleanup(paid.stop)
+        budget = patch.object(settings, "google_monthly_budget_krw", None)
+        budget.start()
+        self.addCleanup(budget.stop)
 
     def test_topic_scoring_asks_for_stakes_and_source_supported_payoff(self):
         planner = object.__new__(ScriptPlanner)

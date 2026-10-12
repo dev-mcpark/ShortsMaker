@@ -91,7 +91,12 @@ class VideoGenerator:
             for index, scene in enumerate(script.scenes)
         )
         self._check_visual_cap(reserve)
-        check_google_budget(reserve)
+        request_count = sum(
+            self.max_veo_attempts if scene_mode(self.mode, scene, index) == "video" else 1
+            for index, scene in enumerate(script.scenes)
+        )
+        if reserve:
+            check_google_budget(reserve, request_count)
         if parallel and self.mode == "image":
             return await self._generate_clips_parallel(script)
         return await self._generate_clips_sequential(script)
@@ -116,7 +121,7 @@ class VideoGenerator:
         mode = mode_override or self.mode
         reserve = self._scene_output_reserve(mode)
         self._check_visual_cap(reserve)
-        check_google_budget(reserve)
+        check_google_budget(reserve, self.max_veo_attempts if mode == "video" else 1)
         if mode == "video":
             path = (await self._generate_background_video(
                 scene, settings.hybrid_veo_duration_seconds,

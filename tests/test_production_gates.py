@@ -52,6 +52,9 @@ class ProductionGateTests(unittest.TestCase):
         paid = patch.object(settings, "paid_production_enabled", True)
         paid.start()
         self.addCleanup(paid.stop)
+        budget = patch.object(settings, "google_monthly_budget_krw", None)
+        budget.start()
+        self.addCleanup(budget.stop)
 
     def test_prepared_narration_manifest_rejects_wrong_script_or_file(self):
         script = sample_script()
