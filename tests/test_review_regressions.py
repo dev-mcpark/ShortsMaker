@@ -454,6 +454,31 @@ class ReviewRegressions(unittest.TestCase):
                 request.assert_called_once()
                 sleep.assert_not_called()
 
+    def test_completed_veo_code_8_stops_without_retry(self):
+        generator = object.__new__(VideoGenerator)
+        generator.logger = Mock()
+        operation = SimpleNamespace(
+            done=True, result=None,
+            error={"code": 8, "message": "The service is experiencing high load"},
+            name="projects/example/operations/operation-id",
+        )
+        request = Mock(return_value=operation)
+        generator.client = SimpleNamespace(models=SimpleNamespace(generate_videos=request))
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            settings, "output_dir", Path(directory),
+        ), patch("shorts_maker.generator.video_generator.time.sleep") as sleep:
+            with self.assertRaisesRegex(RuntimeError, "RESOURCE_EXHAUSTED"):
+                generator._retry_veo_call(
+                    "veo-3.1-lite-generate-001", "prompt", "unused.mp4", "fallback",
+                    duration_seconds=8, max_attempts=2, request_budget_usd=0.6,
+                )
+            path = next((Path(directory) / "evaluation/visual_attempts").glob("*.json"))
+            record = json.loads(path.read_text(encoding="utf-8"))
+        request.assert_called_once()
+        sleep.assert_not_called()
+        self.assertEqual(record["status"], "provider_limited")
+        self.assertEqual(record["provider_error_code"], "8")
+
     def test_veo_keeps_explicit_retry_for_server_error(self):
         generator = object.__new__(VideoGenerator)
         generator.logger = Mock()

@@ -370,9 +370,10 @@ class VideoGenerator:
                 if provider_code is not None:
                     record["provider_error_code"] = str(provider_code)
                 err_str = str(e).lower()
-                if getattr(e, "status_code", None) == 429 or any(
+                if str(provider_code) == "8" or getattr(e, "status_code", None) == 429 or any(
                     term in err_str for term in ("429", "resource_exhausted", "resource exhausted")
                 ):
+                    record["status"] = "provider_limited"
                     raise RuntimeError("RESOURCE_EXHAUSTED: 공급자 제한으로 Veo 생성 중단") from e
 
                 if any(term in err_str for term in (
