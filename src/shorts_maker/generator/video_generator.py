@@ -19,6 +19,9 @@ from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
+from shorts_maker.services.google_budget import (
+    check_google_budget, mark_google_result, reserve_google_output,
+)
 
 VIDEO_PROMPT_VERSION = 2
 
@@ -88,6 +91,7 @@ class VideoGenerator:
             for index, scene in enumerate(script.scenes)
         )
         self._check_visual_cap(reserve)
+        check_google_budget(reserve)
         if parallel and self.mode == "image":
             return await self._generate_clips_parallel(script)
         return await self._generate_clips_sequential(script)
@@ -110,7 +114,9 @@ class VideoGenerator:
     async def generate_scene_clip(self, scene, mode_override: Optional[str] = None) -> str:
         """현재 생성 모드에 맞는 단일 씬 클립을 만듭니다."""
         mode = mode_override or self.mode
-        self._check_visual_cap(self._scene_output_reserve(mode))
+        reserve = self._scene_output_reserve(mode)
+        self._check_visual_cap(reserve)
+        check_google_budget(reserve)
         if mode == "video":
             path = (await self._generate_background_video(
                 scene, settings.hybrid_veo_duration_seconds,
@@ -301,7 +307,10 @@ class VideoGenerator:
             }
             audit_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
             operation = None
+            budget_request_id = None
             try:
+                budget_request_id = reserve_google_output("video", model_id, requested_seconds)
+                record["budget_request_id"] = budget_request_id
                 self.logger.info(f"    Generating (Attempt {attempt + 1}/{max_attempts})...")
 
                 request = {
@@ -343,7 +352,13 @@ class VideoGenerator:
                 record["status"] = "timed_out_unknown"
                 raise TimeoutError("VEO_RESULT_UNVERIFIED: Veo 작업의 완료 여부를 확인할 수 없습니다") from e
             except Exception as e:
-                record.update(status="failed_or_unknown", error_type=type(e).__name__)
+                record.update(
+                    status="budget_blocked" if "GOOGLE_BUDGET_EXCEEDED" in str(e)
+                    else "failed_or_unknown",
+                    error_type=type(e).__name__,
+                )
+                if record["status"] == "budget_blocked":
+                    raise
                 provider_error = getattr(operation, "error", None)
                 provider_code = (provider_error.get("code") if isinstance(provider_error, dict)
                                  else getattr(provider_error, "code", None))
@@ -378,6 +393,8 @@ class VideoGenerator:
                     record["operation_id"] = operation_name.rsplit("/", 1)[-1]
                 record["finished_utc"] = datetime.now(timezone.utc).isoformat()
                 audit_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+                if not mark_google_result(budget_request_id, record["status"]):
+                    self.logger.error("Google 예산 장부 상태 갱신 실패: 예약액은 유지됩니다.")
 
     def _run_veo_background_only(
         self, model_id: str, scene, output_path: str, duration_seconds: Optional[int] = None,
@@ -434,22 +451,29 @@ class VideoGenerator:
 
     def _run_image_generation(self, model_id: str, scene, output_path: str) -> None:
         require_paid_production_enabled()
+        budget_request_id = reserve_google_output("image", model_id)
         if self.image_client is None:
             self.image_client = genai.Client(
                 vertexai=True, project=self.project_id, location="global",
             )
-        response = self.image_client.models.generate_content(
-            model=model_id,
-            contents=scene.visual_description,
-            config=types.GenerateContentConfig(
-                response_modalities=["TEXT", "IMAGE"],
-                image_config=types.ImageConfig(aspect_ratio="9:16", image_size="1K"),
-            ),
-        )
-        for candidate in response.candidates or []:
-            for part in (candidate.content.parts or []) if candidate.content else []:
-                image = part.as_image()
-                if image:
-                    image.save(output_path)
-                    return
-        raise RuntimeError("No image returned")
+        status = "unknown"
+        try:
+            response = self.image_client.models.generate_content(
+                model=model_id,
+                contents=scene.visual_description,
+                config=types.GenerateContentConfig(
+                    response_modalities=["TEXT", "IMAGE"],
+                    image_config=types.ImageConfig(aspect_ratio="9:16", image_size="1K"),
+                ),
+            )
+            for candidate in response.candidates or []:
+                for part in (candidate.content.parts or []) if candidate.content else []:
+                    image = part.as_image()
+                    if image:
+                        image.save(output_path)
+                        status = "saved"
+                        return
+            raise RuntimeError("No image returned")
+        finally:
+            if not mark_google_result(budget_request_id, status):
+                self.logger.error("Google 예산 장부 상태 갱신 실패: 예약액은 유지됩니다.")

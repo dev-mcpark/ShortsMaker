@@ -537,6 +537,24 @@ class ProductionGateTests(unittest.TestCase):
         service._editor.prepare_narration.assert_not_awaited()
         service._generator.generate_scene_clip.assert_not_awaited()
 
+    def test_monthly_google_budget_blocks_before_tts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = ProductionService(mode="image")
+            service._editor = fake_editor("unused.mp4")
+            service._generator = SimpleNamespace(generate_scene_clip=AsyncMock())
+            with patch.object(settings, "google_monthly_budget_krw", 1000), patch.object(
+                settings, "google_budget_month", "2026-10"
+            ), patch.object(settings, "google_budget_opening_krw", 1000), patch.object(
+                settings, "google_usd_krw_rate", 2000
+            ), patch.object(settings, "output_dir", Path(directory)), patch.object(
+                settings, "clips_dir", Path(directory) / "clips"
+            ), patch("shorts_maker.services.google_budget._period", return_value="2026-10"):
+                result = asyncio.run(service.produce_video(sample_script()))
+            self.assertFalse(result.success)
+            self.assertIn("GOOGLE_BUDGET_EXCEEDED", result.error)
+            service._editor.prepare_narration.assert_not_awaited()
+            service._generator.generate_scene_clip.assert_not_awaited()
+
     def test_veo_retry_reserve_blocks_before_paid_work(self):
         self.assertEqual(ProductionService(mode="hybrid").max_veo_attempts, 1)
         with self.assertRaisesRegex(ValueError, "max_veo_attempts"):

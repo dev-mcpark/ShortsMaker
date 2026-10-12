@@ -29,6 +29,7 @@ from shorts_maker.utils.character_overlay import CharacterOverlayConfig
 from shorts_maker.utils.config import settings
 from shorts_maker.editor.quality_check import check_video_quality
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
+from shorts_maker.services.google_budget import check_google_budget
 
 
 class ProductionPhase(Enum):
@@ -578,6 +579,7 @@ class ProductionService:
                     f"${settings.max_visual_cost_usd:.2f}를 초과합니다. "
                     "이미지 모드 또는 MAX_VISUAL_COST_USD 설정을 확인하세요.", clips,
                 )
+            check_google_budget(estimated_cost)
             if not settings.paid_production_enabled and (
                 estimated_cost > 0 or prepared_audio_paths is None
             ):

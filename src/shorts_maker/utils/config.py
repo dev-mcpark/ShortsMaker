@@ -12,6 +12,7 @@ ShortsMaker 중앙 설정 관리 모듈.
 """
 import os
 import math
+import re
 import sys
 from pathlib import Path
 from typing import Optional
@@ -78,6 +79,19 @@ class Settings:
     veo_duration_seconds: int = field(default_factory=lambda: int(os.getenv("VEO_DURATION_SECONDS", "8")))
     hybrid_veo_duration_seconds: int = field(default_factory=lambda: int(os.getenv("HYBRID_VEO_DURATION_SECONDS", "6")))
     max_visual_cost_usd: float = field(default_factory=lambda: float(os.getenv("MAX_VISUAL_COST_USD", "1.0")))
+    google_monthly_budget_krw: Optional[int] = field(
+        default_factory=lambda: int(os.environ["GOOGLE_MONTHLY_BUDGET_KRW"])
+        if "GOOGLE_MONTHLY_BUDGET_KRW" in os.environ else None
+    )
+    google_budget_month: str = field(default_factory=lambda: os.getenv("GOOGLE_BUDGET_MONTH", ""))
+    google_budget_opening_krw: Optional[int] = field(
+        default_factory=lambda: int(os.environ["GOOGLE_BUDGET_OPENING_KRW"])
+        if "GOOGLE_BUDGET_OPENING_KRW" in os.environ else None
+    )
+    google_usd_krw_rate: Optional[int] = field(
+        default_factory=lambda: int(os.environ["GOOGLE_USD_KRW_RESERVE_RATE"])
+        if "GOOGLE_USD_KRW_RESERVE_RATE" in os.environ else None
+    )
     paid_production_enabled: bool = field(
         default_factory=lambda: os.getenv("PAID_PRODUCTION_ENABLED", "false").strip().lower()
         in {"true", "1", "yes"}
@@ -134,6 +148,14 @@ class Settings:
             raise ValueError("Veo 생성 길이는 4, 6, 8초 중 하나여야 합니다.")
         if not math.isfinite(self.max_visual_cost_usd) or self.max_visual_cost_usd < 0:
             raise ValueError("MAX_VISUAL_COST_USD는 0 이상의 유한한 숫자여야 합니다.")
+        if self.google_monthly_budget_krw is not None:
+            if (self.google_monthly_budget_krw <= 0
+                    or self.google_budget_opening_krw is None
+                    or self.google_budget_opening_krw < 0
+                    or self.google_usd_krw_rate is None
+                    or self.google_usd_krw_rate <= 0
+                    or not re.fullmatch(r"\d{4}-(?:0[1-9]|1[0-2])", self.google_budget_month)):
+                raise ValueError("Google 월 예산에는 양의 한도·환산값, 0 이상 기초 사용액, YYYY-MM 월이 필요합니다.")
         # 디렉토리 생성
         for dir_path in [self.temp_dir, self.output_dir, self.scripts_dir,
                          self.clips_dir, self.bgm_dir, self.logs_dir,

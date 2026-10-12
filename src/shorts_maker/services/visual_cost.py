@@ -1,7 +1,8 @@
 """Conservative, per-output visual estimates used before paid generation.
 
-Update these rates when the provider changes its public pricing. The image
-estimate uses the published 1K output example and includes a small buffer.
+Reviewed 2026-10-12 against Google's public Agent Platform pricing. Update these
+rates when the provider changes its pricing. The image estimate uses the
+published 1K output example and includes a small buffer.
 """
 
 IMAGE_USD = {

@@ -25,6 +25,7 @@ from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.services.visual_cost import estimated_scene_cost
+from shorts_maker.services.google_budget import mark_google_result, reserve_google_output
 
 
 class CharacterVideoGenerator:
@@ -175,6 +176,8 @@ class CharacterVideoGenerator:
                 f"예상 비주얼 비용 ${reserve:.3f}가 설정 상한 "
                 f"${settings.max_visual_cost_usd:.2f}를 초과합니다."
             )
+        budget_request_id = reserve_google_output("video", model_id, duration_seconds)
+        status = "unknown"
         try:
             operation = self.client.models.generate_videos(
                 model=model_id,
@@ -196,12 +199,16 @@ class CharacterVideoGenerator:
             response = operation.result
             if response and response.generated_videos:
                 response.generated_videos[0].video.save(output_path)
+                status = "saved"
                 return True
             error_info = getattr(operation, "error", "Unknown Error")
             raise RuntimeError(f"No video generated. Error: {error_info}")
         except Exception as error:
             self.logger.error(f"   ❌ Veo generation failed: {error}")
             return False
+        finally:
+            if not mark_google_result(budget_request_id, status):
+                self.logger.error("Google 예산 장부 상태 갱신 실패: 예약액은 유지됩니다.")
 
 
 async def main():
