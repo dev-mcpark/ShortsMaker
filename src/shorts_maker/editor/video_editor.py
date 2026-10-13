@@ -16,7 +16,7 @@ from moviepy.config import FFMPEG_BINARY
 import moviepy.video.fx as vfx
 from moviepy.audio.fx import AudioFadeIn, AudioFadeOut
 from openai import APIConnectionError, AsyncOpenAI, InternalServerError
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageColor, ImageDraw, ImageFont
 from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
@@ -42,6 +42,7 @@ class VideoEditor:
         bgm_mood: Optional[str] = None,
         bgm_track: Optional[str] = None,
         subtitle_style: str = "soft",
+        subtitle_colors_by_scene: Optional[dict] = None,
         text_overlays: Optional[dict] = None,
     ):
         """
@@ -73,6 +74,14 @@ class VideoEditor:
         if subtitle_style not in {"soft", "card"}:
             raise ValueError("subtitle_style은 soft 또는 card여야 합니다.")
         self.subtitle_style = subtitle_style
+        self.subtitle_colors_by_scene = {}
+        for scene_number, color in (subtitle_colors_by_scene or {}).items():
+            if not isinstance(scene_number, int) or isinstance(scene_number, bool) or scene_number < 1:
+                raise ValueError("자막 색상 장면 번호는 양의 정수여야 합니다.")
+            if not isinstance(color, str):
+                raise ValueError("자막 색상은 색상 문자열이어야 합니다.")
+            ImageColor.getrgb(color)
+            self.subtitle_colors_by_scene[scene_number] = color
         self.text_overlays = text_overlays or {}
 
         self.voice_map = {
@@ -264,7 +273,10 @@ class VideoEditor:
                 layers.extend(self._create_text_overlay_clips(scene.scene_number, duration))
 
                 # 3. Subtitle (Flattened structure)
-                subtitle_clips = self._create_subtitle_clips(scene.script_text, duration)
+                subtitle_clips = self._create_subtitle_clips(
+                    scene.script_text, duration,
+                    color=self.subtitle_colors_by_scene.get(scene.scene_number),
+                )
                 if subtitle_clips:
                     layers.extend(subtitle_clips)
 
@@ -546,7 +558,7 @@ class VideoEditor:
             self._cleanup_clips(clips)
             raise
 
-    def _create_subtitle_clips(self, text, duration) -> List:
+    def _create_subtitle_clips(self, text, duration, color: Optional[str] = None) -> List:
         """Returns a list of clips for clean subtitle rendering using user-configurable settings."""
         def place(clip, start, length):
             margin = 80
@@ -601,7 +613,8 @@ class VideoEditor:
                 raise
 
         try:
-            return render('/System/Library/Fonts/AppleSDGothicNeo.ttc', self.subtitle_size, self.subtitle_color, 2)
+            return render('/System/Library/Fonts/AppleSDGothicNeo.ttc', self.subtitle_size,
+                          color or self.subtitle_color, 2)
         except Exception as e:
             self.logger.error(f"❌ Subtitle error: {e}")
             try:

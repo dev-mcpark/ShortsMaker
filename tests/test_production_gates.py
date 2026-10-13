@@ -792,6 +792,19 @@ class ProductionGateTests(unittest.TestCase):
             for clip in soft + card:
                 clip.close()
 
+    def test_scene_subtitle_color_overrides_default_soft_color(self):
+        editor = VideoEditor(bgm_volume=0, subtitle_color="#F6F8FA",
+                             subtitle_colors_by_scene={1: "#19384a"})
+        with patch("shorts_maker.editor.video_editor.TextClip", wraps=TextClip) as text_clip:
+            clips = editor._create_subtitle_clips("한 장면의 자막입니다.", 2,
+                                                   color=editor.subtitle_colors_by_scene[1])
+        try:
+            self.assertEqual(text_clip.call_args.kwargs["color"], "#19384a")
+            self.assertEqual(editor.subtitle_style, "soft")
+        finally:
+            for clip in clips:
+                clip.close()
+
     def test_caption_segments_reveal_without_early_payoff(self):
         text = "드론이 새 지점을 찾았습니다. 하던 임무는 멈춰야 할까요?"
         segments = VideoEditor._caption_segments(text, 4.0)

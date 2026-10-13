@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from scripts.local_review import collect_local_inputs, load_text_overlays, render_local
+from scripts.local_review import collect_local_inputs, load_subtitle_colors, load_text_overlays, render_local
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.models import ShortsScript, VideoScene
 
@@ -71,6 +71,34 @@ class LocalReviewTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     asyncio.run(render_local(script, root, root, 0, subtitle_color="not-a-color"))
                 invalid_service.assert_not_called()
+
+    def test_scene_caption_colors_are_validated_and_forwarded(self):
+        script = ShortsScript(
+            title="Review", description="", tags=[], mood="calm", style="plain",
+            source_name="test", source_url="https://example.com", generation_mode="video",
+            scenes=[VideoScene(scene_number=1, visual_description="diagram", script_text="line")],
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            colors_file = root / "colors.json"
+            colors_file.write_text('{"1":"#19384a"}', encoding="utf-8")
+            colors = load_subtitle_colors(colors_file, script)
+            self.assertEqual(colors, {1: "#19384a"})
+            (root / "scene_1.mp4").touch()
+            (root / "scene_1.aiff").touch()
+            with patch("scripts.local_review.ProductionService") as service:
+                service.return_value.produce_video = AsyncMock(return_value=MagicMock(
+                    success=True, video_path="review.mp4", report_path="review.json",
+                    estimated_visual_cost_usd=0,
+                ))
+                asyncio.run(render_local(script, root, root, 0, subtitle_colors_by_scene=colors))
+            self.assertEqual(service.call_args.kwargs["editor_options"]["subtitle_colors_by_scene"], colors)
+            colors_file.write_text('{"2":"#F6F8FA"}', encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_subtitle_colors(colors_file, script)
+            colors_file.write_text('{"1":"invalid"}', encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_subtitle_colors(colors_file, script)
 
     def test_complete_local_inputs_required_before_service(self):
         script = ShortsScript(

@@ -741,6 +741,7 @@ class ProductionService:
                 "bgm_source_target_lufs": VideoEditor.BGM_TARGET_LUFS if music_path else None,
                 "subtitle_style": getattr(editor, "subtitle_style", "soft"),
                 "subtitle_color": getattr(editor, "subtitle_color", "#F6F8FA"),
+                "subtitle_colors_by_scene": getattr(editor, "subtitle_colors_by_scene", {}),
                 "text_overlays": getattr(editor, "text_overlays", {}),
                 "generated_scenes": generated_scenes,
                 "reused_or_manual_scenes": reused_scenes,
