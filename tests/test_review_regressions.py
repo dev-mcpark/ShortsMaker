@@ -721,6 +721,8 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("Music direction", prompt)
         self.assertIn("primary article's real location", prompt)
         self.assertIn("clearly illustrative diagram", prompt)
+        self.assertIn("show its parts and their connection", prompt)
+        self.assertIn("A mood shot or labels naming the parts alone do not explain it", prompt)
         self.assertIn("one coherent shot", prompt)
         self.assertIn("source-supported dilemma, decision, and result", prompt)
         self.assertIn("Separate measured results from model projections", prompt)
@@ -856,7 +858,7 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("The factory expanded.", request[1]["content"])
         self.assertIn("30% increase", request[1]["content"])
 
-    def test_validator_rejects_misleading_visual_reason(self):
+    def test_validator_rejects_visual_failure_reasons(self):
         validator = object.__new__(ScriptValidator)
         validator.logger = Mock()
         completion = AsyncMock(return_value=SimpleNamespace(choices=[SimpleNamespace(
@@ -874,11 +876,26 @@ class ReviewRegressions(unittest.TestCase):
             scenes=[VideoScene(scene_number=1, visual_description="desert", script_text="지상 시험")],
         )
 
-        result = asyncio.run(validator.validate_script(
-            script, source_text="The field test took place in Virginia.",
-        ))
-        self.assertFalse(result.is_valid)
-        self.assertEqual(result.reason, "unsupported_visual")
+        for reason in ("unsupported_visual", "missing_visual_proof"):
+            with self.subTest(reason=reason):
+                source = "The field test took place in Virginia."
+                if reason == "missing_visual_proof":
+                    script.scenes[0].visual_description = "Decorative exterior of a bus depot"
+                    script.scenes[0].script_text = "지상과 지하 1층은 차고지, 지하 2층은 빗물저류조입니다."
+                    source = "The depot occupies the ground and basement 1; the reservoir is in basement 2."
+                completion.return_value.choices[0].message.content = json.dumps({
+                    "is_valid": True, "score": 90, "reason": reason,
+                    "feedback": "Scene 1's visual fails the explanation",
+                })
+                result = asyncio.run(validator.validate_script(
+                    script, source_text=source,
+                ))
+                self.assertFalse(result.is_valid)
+                self.assertEqual(result.reason, reason)
+                self.assertIn(script.scenes[0].visual_description,
+                              completion.await_args.kwargs["messages"][1]["content"])
+        prompt = completion.await_args.kwargs["messages"][0]["content"]
+        self.assertIn("parts and connection", prompt)
 
     def test_planner_requires_source_before_approving_script(self):
         script = ShortsScript(

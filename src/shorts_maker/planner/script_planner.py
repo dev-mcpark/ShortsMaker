@@ -573,6 +573,7 @@ class ScriptPlanner:
         - Match the primary article's real location, period, setting, participant count, equipment, and roles. Never turn a field test into an actual space mission or another location.
         - If the source does not establish how an event looked, use a clearly illustrative diagram or symbolic image. Mark future or hypothetical scenes as conceptual in the description.
         - Show one narrated idea per scene. Specify the subject, one action or state, its context, and a useful composition. Avoid invented signs, numbers, interface labels, logos, and extra people.
+        - When narration explains a spatial or causal relationship, show its parts and their connection with shapes, placement, or change. A mood shot or labels naming the parts alone do not explain it. Put this visible proof before camera and style details.
         - Leave the lower third visually simple for captions. Exact words and data are added by the editor, not drawn by the image or video model.
         - When a photorealistic reconstruction would be mistaken for actual footage, describe a visibly stylized diagram instead. Actual source photos require separate editorial selection and rights review.
         """
