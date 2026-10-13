@@ -32,6 +32,8 @@ class _FeedEntryProxy:
 # RSSCache → shorts_maker/utils/rss_cache.py로 이동
 
 class ScriptPlanner:
+    MIN_SCENES = 6
+
     def __init__(self, generation_mode: str = "image"):
         self.logger = get_logger(__name__)
 
@@ -625,7 +627,7 @@ class ScriptPlanner:
           2. **Turn (5-15s):** Reveal what actually happened in the source instead of delaying the answer with a vague teaser.
           3. **Mechanism (15-35s):** Explain only the two or three details needed to understand that choice, using cause and effect.
           4. **Payoff (35-50s):** State what this specific result changes or demonstrates. Distinguish a field test from a future mission; avoid generic future promises.
-        - **Scenes:** Generate 6-8 scenes with one point each. Keep the sum of scene durations under 50 seconds.
+        - **Scenes:** Generate {self.MIN_SCENES}-8 scenes with one point each. Keep the sum of scene durations under 50 seconds.
         - **Duration:** Plan about 5-8 seconds per scene; the renderer uses measured narration duration.
 
         {visual_truth_instruction}

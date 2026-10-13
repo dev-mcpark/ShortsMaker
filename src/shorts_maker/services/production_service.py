@@ -577,7 +577,7 @@ class ProductionService:
                     visual_request_count += attempts
             if estimated_cost > settings.max_visual_cost_usd:
                 return self._failed_result(
-                    f"예상 비주얼 비용 ${estimated_cost:.3f}가 설정 상한 "
+                    f"VISUAL_COST_CAP_EXCEEDED: 예상 비주얼 비용 ${estimated_cost:.3f}가 설정 상한 "
                     f"${settings.max_visual_cost_usd:.2f}를 초과합니다. "
                     "이미지 모드 또는 MAX_VISUAL_COST_USD 설정을 확인하세요.", clips,
                 )
@@ -862,6 +862,24 @@ class ProductionService:
         # Step 1: Script Generation, or a reviewed script supplied by the caller.
         script = approved_script
         if script is None:
+            if settings.paid_production_enabled:
+                # shortcut: future cache hits are unknown; use approved_script to reuse existing visuals.
+                cheapest_mode = "video" if self.mode == "video" else "image"
+                model = settings.veo_model_id if cheapest_mode == "video" else settings.image_model_id
+                attempts = self.max_veo_attempts if cheapest_mode == "video" else 1
+                duration = settings.veo_duration_seconds if cheapest_mode == "video" else 0
+                try:
+                    minimum_cost = (ScriptPlanner.MIN_SCENES * attempts
+                                    * estimated_scene_cost(cheapest_mode, model, duration))
+                    if minimum_cost > settings.max_visual_cost_usd:
+                        return self._failed_result(
+                            f"VISUAL_COST_CAP_EXCEEDED: 자동 대본의 최소 {ScriptPlanner.MIN_SCENES}장면 "
+                            f"비주얼 예약액 ${minimum_cost:.3f}가 상한 "
+                            f"${settings.max_visual_cost_usd:.2f}를 초과합니다."
+                        )
+                    check_google_budget(minimum_cost, ScriptPlanner.MIN_SCENES * attempts)
+                except (ValueError, RuntimeError) as error:
+                    return self._failed_result(str(error))
             script, _context = await self.generate_script(topic=topic, direct_url=direct_url)
         if not script:
             if self.is_cancelled():

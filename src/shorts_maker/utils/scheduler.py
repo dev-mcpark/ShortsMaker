@@ -18,6 +18,7 @@ from shorts_maker.utils.logger import get_logger
 _PROVIDER_LIMIT = re.compile(r"(?<!\d)429(?!\d)|RESOURCE_EXHAUSTED", re.IGNORECASE)
 _VEO_RESULT_UNVERIFIED = "VEO_RESULT_UNVERIFIED"
 _GOOGLE_BUDGET_EXCEEDED = "GOOGLE_BUDGET_EXCEEDED"
+_VISUAL_COST_CAP_EXCEEDED = "VISUAL_COST_CAP_EXCEEDED"
 
 
 class ScheduleManager:
@@ -373,6 +374,7 @@ class ScheduleManager:
             provider_limited = not result.success and bool(_PROVIDER_LIMIT.search(result.error or ""))
             veo_unverified = not result.success and _VEO_RESULT_UNVERIFIED in (result.error or "")
             google_budget_exceeded = not result.success and _GOOGLE_BUDGET_EXCEEDED in (result.error or "")
+            visual_cost_cap_exceeded = not result.success and _VISUAL_COST_CAP_EXCEEDED in (result.error or "")
             # 공급자 제한 뒤의 다음 일정이 계획·내레이션 비용을 다시 쓰지 않도록 멈춘다.
             last_result = 'success' if result.success else 'failed'
             if billing_disabled:
@@ -385,12 +387,15 @@ class ScheduleManager:
                 last_result = 'veo_result_unverified'
             elif google_budget_exceeded:
                 last_result = 'google_budget_exceeded'
+            elif visual_cost_cap_exceeded:
+                last_result = 'visual_cost_cap_exceeded'
             updates = {
                 'last_run': datetime.now().isoformat(),
                 'run_count': schedule.get('run_count', 0) + 1,
                 'last_result': last_result,
             }
-            if billing_disabled or music_missing or provider_limited or veo_unverified or google_budget_exceeded:
+            if (billing_disabled or music_missing or provider_limited or veo_unverified
+                    or google_budget_exceeded or visual_cost_cap_exceeded):
                 updates['enabled'] = False
             self.update_schedule(schedule['id'], updates)
 
@@ -413,6 +418,9 @@ class ScheduleManager:
                                run_count=schedule.get('run_count', 0) + 1)
             elif _GOOGLE_BUDGET_EXCEEDED in str(e):
                 updates.update(enabled=False, last_result='google_budget_exceeded',
+                               run_count=schedule.get('run_count', 0) + 1)
+            elif _VISUAL_COST_CAP_EXCEEDED in str(e):
+                updates.update(enabled=False, last_result='visual_cost_cap_exceeded',
                                run_count=schedule.get('run_count', 0) + 1)
             self.update_schedule(schedule['id'], updates)
 

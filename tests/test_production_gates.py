@@ -536,9 +536,36 @@ class ProductionGateTests(unittest.TestCase):
         with patch.object(settings, "max_visual_cost_usd", 0.10):
             result = asyncio.run(service.produce_video(sample_script()))
         self.assertFalse(result.success)
+        self.assertIn("VISUAL_COST_CAP_EXCEEDED", result.error)
         self.assertIn("예상 비주얼 비용", result.error)
         service._editor.prepare_narration.assert_not_awaited()
         service._generator.generate_scene_clip.assert_not_awaited()
+
+    def test_full_video_pipeline_rejects_impossible_round_before_paid_planning(self):
+        service = ProductionService(mode="video")
+        service.generate_script = AsyncMock()
+        with patch.object(settings, "veo_model_id", "veo-3.1-fast-generate-001"), patch.object(
+            settings, "veo_duration_seconds", 8,
+        ), patch.object(settings, "max_visual_cost_usd", 1.0):
+            result = asyncio.run(service.full_pipeline())
+        self.assertFalse(result.success)
+        self.assertIn("VISUAL_COST_CAP_EXCEEDED", result.error)
+        self.assertIn("$3.840", result.error)
+        service.generate_script.assert_not_awaited()
+
+    def test_full_video_pipeline_checks_monthly_room_before_paid_planning(self):
+        service = ProductionService(mode="video")
+        service.generate_script = AsyncMock()
+        with patch.object(settings, "veo_model_id", "veo-3.1-fast-generate-001"), patch.object(
+            settings, "veo_duration_seconds", 8,
+        ), patch.object(settings, "max_visual_cost_usd", 4.0), patch(
+            "shorts_maker.services.production_service.check_google_budget",
+            side_effect=RuntimeError("GOOGLE_BUDGET_EXCEEDED: monthly room"),
+        ) as check:
+            result = asyncio.run(service.full_pipeline())
+        self.assertEqual(result.error, "GOOGLE_BUDGET_EXCEEDED: monthly room")
+        check.assert_called_once_with(3.84, 6)
+        service.generate_script.assert_not_awaited()
 
     def test_monthly_google_budget_blocks_before_tts(self):
         with tempfile.TemporaryDirectory() as directory:

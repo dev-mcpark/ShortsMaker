@@ -232,6 +232,20 @@ class ReviewRegressions(unittest.TestCase):
             self.assertFalse(stored["enabled"])
             self.assertEqual(stored["last_result"], "google_budget_exceeded")
 
+    def test_impossible_visual_cap_pauses_repeating_schedule(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("Too costly", "09:00")
+            failure = ProductionService()._failed_result("VISUAL_COST_CAP_EXCEEDED: minimum round")
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, return_value=failure,
+            ):
+                asyncio.run(manager._execute_pipeline(schedule))
+            stored = manager.get_schedule(schedule["id"])
+            self.assertFalse(stored["enabled"])
+            self.assertEqual(stored["last_result"], "visual_cost_cap_exceeded")
+
     def test_planning_provider_limit_survives_pipeline_without_stale_errors(self):
         service = ProductionService(editor_options={"bgm_volume": 0})
         service._planner = SimpleNamespace(plan_content=AsyncMock(

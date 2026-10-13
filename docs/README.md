@@ -21,6 +21,7 @@ Earlier PDCA plans, designs, analyses, and reports under `01-plan/` through `04-
 NiceGUI / scheduler
   -> AppState / ProductionService
   -> paid-production gate before new planning, narration, or visuals
+  -> minimum automatic visual-cost and local monthly-room preflight before full-run planning
   -> ScriptPlanner: RSS or URL -> extraction -> analysis -> script -> source-grounded validation
   -> visual cost preflight -> narration duration check
   -> VideoGenerator: per-scene Veo or Gemini, with visual cache
