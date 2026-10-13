@@ -1,27 +1,22 @@
-"""Explanatory cards add the relationships missing from the raw Veo shots."""
+"""Small explanatory insets keep the Veo scenes visible."""
 
 import unittest
 
-from PIL import Image, ImageChops
+from PIL import ImageChops
 
-from scripts.render_sillim_depot_storyboard import frame
-from scripts.sillim_explanatory_composite import proof_card
+from scripts.sillim_explanatory_composite import CARD_POSITION, REVEALS, proof_card
 
 
 class SillimExplanatoryCompositeTests(unittest.TestCase):
-    def test_missing_relationships_are_drawn_in_the_card(self):
-        for scene, time, region in (
-            (2, 4, (100, 400, 380, 455)),
-            (3, 4, (150, 435, 340, 475)),
-            (4, 5, (100, 400, 380, 475)),
-        ):
+    def test_insets_leave_most_of_the_footage_visible_and_reveal_the_relationship(self):
+        self.assertNotIn(5, REVEALS)
+        for scene, early, late in ((2, 1, 4), (3, 1, 4), (4, 1, 5)):
             with self.subTest(scene=scene):
-                original = frame(scene, time, 8).crop((0, 100, 540, 650))
-                original = original.resize((480, 489), Image.Resampling.LANCZOS)
-                revised = proof_card(scene, time).convert("RGB")
-                self.assertIsNotNone(ImageChops.difference(
-                    original.crop(region), revised.crop(region)
-                ).getbbox())
+                first, revealed = proof_card(scene, early), proof_card(scene, late)
+                self.assertEqual(first.size, revealed.size)
+                self.assertLess(first.width * first.height / (720 * 1280), 0.12)
+                self.assertLess(CARD_POSITION[1] + first.height, 700)
+                self.assertIsNotNone(ImageChops.difference(first, revealed).getbbox())
 
 
 if __name__ == "__main__":

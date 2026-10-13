@@ -327,3 +327,7 @@ The automatic writer requests at least six scenes, but the full pipeline previou
 ## 2026-10-13 — Reject unsupported music moods instead of changing the story's tone
 
 The automatic writer previously replaced every out-of-list mood with `energetic`. This could turn a quiet or curious explanation into an unrelated voice and stock-music choice, while the output looked valid to later stages. Treat an unsupported model mood as a planning error and stop before source validation, TTS, or visual generation. Propagate the specific failure through the full pipeline and pause a repeating schedule instead of repurchasing planning on its next run. A valid broad mood still does not prove that its first documented track fits the script; retain the exact-track listening gate for editorial acceptance.
+
+## 2026-10-13 — Keep explanatory overlays small after full-cut playback
+
+The owner found the source-checked Sillim diagram cards too large over otherwise attractive Veo footage. Preserve each narrated relationship with a compact editor-drawn inset only in scenes that need it, rather than leaving a full storyboard crop over most of the shot. The three replacement insets occupy under 12% of their scene frames; scene 5 needs only the existing small, attributed editor labels. Retain the original moving shots, narration, music, and subtitle treatment for a visual-only comparison. This is a local editorial choice, not a universal overlay-size rule; the full compact cut still needs owner review before acceptance or publication.

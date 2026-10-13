@@ -13,52 +13,63 @@ from moviepy import CompositeVideoClip, ImageClip, VideoFileClip
 from PIL import Image, ImageDraw
 
 if __package__:
-    from scripts.render_sillim_depot_storyboard import BG, MUTED, TEAL, frame, label
+    from scripts.render_sillim_depot_storyboard import BG, INK, MUTED, TEAL, label
 else:
-    from render_sillim_depot_storyboard import BG, MUTED, TEAL, frame, label
+    from render_sillim_depot_storyboard import BG, INK, MUTED, TEAL, label
 
 
-CARD_WIDTH = 480
-CARD_POSITION = (28, 190)
+CARD_POSITION = (24, 190)
+CARD_SIZES = {2: (360, 196), 3: (360, 268), 4: (350, 210)}
 REVEALS = {
     2: ((0.2, 1.0), (2.7, 4.0)),
     3: ((0.2, 1.0), (2.8, 4.0)),
     4: ((0.2, 1.0), (1.5, 2.5), (3.6, 5.0)),
-    5: ((0.2, 1.0), (1.5, 2.0), (3.6, 5.0)),
 }
 
 
 def proof_card(scene: int, storyboard_time: float) -> Image.Image:
-    """Crop the already source-checked diagram into a rounded editor card."""
-    artwork = frame(scene, storyboard_time, 8).crop((0, 100, 540, 650))
+    """Draw only the narrated relationship in a compact, legible inset."""
+    width, height = CARD_SIZES[scene]
+    artwork = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(artwork)
+    draw.rounded_rectangle((0, 0, width - 1, height - 1), radius=20,
+                           fill=(245, 241, 232, 224))
     if scene == 2 and storyboard_time >= 4:
-        # The two pressures must visibly point to the same land-use decision.
-        draw.line((170, 461, 270, 492), fill=TEAL, width=5)
-        draw.line((370, 461, 270, 492), fill=TEAL, width=5)
-        draw.polygon(((260, 486), (280, 486), (270, 501)), fill=TEAL)
-        label(draw, (270, 510), "한 부지", 22, TEAL, "ma")
+        draw.line((208, 77, 270, 153), fill=TEAL, width=4)
+        draw.line((208, 119, 270, 153), fill=TEAL, width=4)
+        draw.polygon(((264, 143), (278, 153), (260, 157)), fill=TEAL)
+        draw.rounded_rectangle((247, 153, 340, 185), radius=9, fill=TEAL)
+        label(draw, (293, 160), "한 부지", 21, BG, "ma")
+    if scene == 2:
+        label(draw, (20, 16), "한 부지, 두 문제", 25)
+        label(draw, (24, 62), "차고지 부족", 23)
+        if storyboard_time >= 4:
+            label(draw, (24, 104), "침수 위험", 23, TEAL)
     elif scene == 3:
-        label(draw, (270, 510), "설명용 단면", 21, MUTED, "ma")
-    elif scene == 4 and storyboard_time >= 5:
-        # A later, thinner arrow signals delayed inflow, not measured output.
-        draw.rectangle((0, 438, 540, 550), fill=BG)
-        draw.ellipse((78, 447, 122, 491), outline=TEAL, width=4)
-        draw.line((100, 469, 100, 453), fill=TEAL, width=3)
-        draw.line((100, 469, 112, 476), fill=TEAL, width=3)
-        draw.line((143, 469, 418, 469), fill=TEAL, width=4)
-        draw.polygon(((418, 459), (437, 469), (418, 479)), fill=TEAL)
-        label(draw, (270, 492), "유입을 늦추는 설계", 23, TEAL, "ma")
-        label(draw, (270, 522), "하천 수위 급등 완화 목표", 19, TEAL, "ma")
-    height = round(artwork.height * CARD_WIDTH / artwork.width)
-    artwork = artwork.resize((CARD_WIDTH, height), Image.Resampling.LANCZOS)
-    mask = Image.new("L", artwork.size, 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        (0, 0, artwork.width - 1, artwork.height - 1), radius=24, fill=245,
-    )
-    card = artwork.convert("RGBA")
-    card.putalpha(mask)
-    return card
+        label(draw, (20, 14), "설명용 단면", 23, MUTED)
+        for index, title in enumerate(("지상 · 차고지", "지하 1층 · 차고지", "지하 2층 · 빗물저류조")):
+            top = 47 + index * 68
+            active = index != 2 or storyboard_time >= 4
+            draw.rounded_rectangle((16, top, 344, top + 57), radius=10,
+                                   fill=(112, 183, 212, 240) if index == 2 and active
+                                   else (228, 233, 230, 240), outline=MUTED, width=2)
+            if active:
+                label(draw, (180, top + 14), title, 23 if index < 2 else 21, INK, "ma")
+    elif scene == 4:
+        label(draw, (20, 15), "빗물을 잠시 저장", 24)
+        for x in (105, 175, 245):
+            draw.line((x, 49, x, 82), fill=TEAL, width=4)
+            draw.polygon(((x - 7, 78), (x + 7, 78), (x, 88)), fill=TEAL)
+        draw.rounded_rectangle((48, 91, 303, 146), radius=10, outline=INK, width=3)
+        if storyboard_time >= 2.5:
+            draw.rounded_rectangle((53, 116, 298, 141), radius=6, fill=(112, 183, 212, 240))
+        label(draw, (175, 94), "일시 저장", 21, INK, "ma")
+        if storyboard_time >= 5:
+            draw.line((127, 169, 275, 169), fill=TEAL, width=4)
+            draw.polygon(((275, 160), (290, 169), (275, 178)), fill=TEAL)
+            label(draw, (26, 166), "늦은 유입", 20, TEAL)
+            label(draw, (175, 185), "하천 유입 완화 목표", 18, MUTED, "ma")
+    return artwork
 
 
 def render_scene(source: Path, destination: Path, scene: int) -> None:
@@ -107,7 +118,7 @@ def render(inputs: Path, outputs: Path) -> Path:
     for scene in range(1, 6):
         source = (inputs / f"scene_{scene}.mp4").resolve(strict=True)
         destination = outputs / f"scene_{scene}.mp4"
-        if scene == 1:
+        if scene not in REVEALS:
             if destination.exists():
                 raise FileExistsError(destination)
             destination.symlink_to(source)
@@ -119,8 +130,14 @@ def render(inputs: Path, outputs: Path) -> Path:
             {"text": "서울시 발표 · 빗물 3만 5천 톤", "start": 2.3, "x": 60, "y": 160},
         ],
     }
-    for scene in range(2, 6):
+    for scene in range(2, 5):
         cues[str(scene)] = [{"text": "AI 설명용 영상", "start": 0, "x": 760, "y": 40}]
+    cues["5"] = [
+        {"text": "AI 설명용 영상", "start": 0, "x": 760, "y": 40},
+        {"text": "평소 · 교통시설", "start": 0.2, "x": 60, "y": 300},
+        {"text": "폭우 · 방재시설", "start": 1.5, "x": 60, "y": 430},
+        {"text": "약 10cm · 서울시 설명", "start": 3.6, "x": 60, "y": 560},
+    ]
     cue_path = outputs / "text_overlays.json"
     cue_path.write_text(json.dumps(cues, ensure_ascii=False, indent=2), encoding="utf-8")
     return cue_path
