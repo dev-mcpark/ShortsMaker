@@ -833,7 +833,10 @@ class ProductionService:
         topic: Optional[str] = None,
         direct_url: Optional[str] = None,
         auto_upload: bool = False,
-        upload_metadata: Optional[Dict[str, Any]] = None
+        upload_metadata: Optional[Dict[str, Any]] = None,
+        approved_script: Optional[ShortsScript] = None,
+        manual_clip_paths: Optional[Dict[int, str]] = None,
+        prepared_audio_paths: Optional[List[str]] = None,
     ) -> ProductionResult:
         """
         전체 프로덕션 파이프라인 실행
@@ -843,12 +846,22 @@ class ProductionService:
             direct_url: 직접 URL 입력 (선택)
             auto_upload: True면 자동으로 YouTube 업로드
             upload_metadata: 업로드 메타데이터 (auto_upload가 True일 때 필요)
+            approved_script: 이미 검토한 대본. 지정하면 새 대본 생성 생략.
+            manual_clip_paths: 재사용할 씬별 영상 클립.
+            prepared_audio_paths: 재사용할 씬별 내레이션.
 
         Returns:
             ProductionResult 객체
         """
-        # Step 1: Script Generation
-        script, _context = await self.generate_script(topic=topic, direct_url=direct_url)
+        if approved_script is not None and (topic or direct_url):
+            return self._failed_result("승인된 대본과 새 소재 입력을 함께 사용할 수 없습니다.")
+        if approved_script is None and (manual_clip_paths is not None or prepared_audio_paths is not None):
+            return self._failed_result("재사용 클립과 음성에는 승인된 대본이 필요합니다.")
+
+        # Step 1: Script Generation, or a reviewed script supplied by the caller.
+        script = approved_script
+        if script is None:
+            script, _context = await self.generate_script(topic=topic, direct_url=direct_url)
         if not script:
             if self.is_cancelled():
                 reason = "사용자에 의해 취소됨"
@@ -863,7 +876,14 @@ class ProductionService:
             return self._failed_result(reason)
 
         # Step 2: Video Production
-        result = await self.produce_video(script, finish_phase=not auto_upload)
+        production_options = {}
+        if manual_clip_paths is not None:
+            production_options["manual_clip_paths"] = manual_clip_paths
+        if prepared_audio_paths is not None:
+            production_options["prepared_audio_paths"] = prepared_audio_paths
+        result = await self.produce_video(
+            script, finish_phase=not auto_upload, **production_options,
+        )
         result.script = script
         if not result.success:
             return result

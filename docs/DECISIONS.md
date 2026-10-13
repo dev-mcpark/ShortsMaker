@@ -303,3 +303,7 @@ Review found that automatically creating the SQLite ledger during a preflight or
 ## 2026-10-12 — Stop on a completed Veo operation with resource-exhausted code 8
 
 The approved Sillim image-to-video pilot reached a completed Google operation whose error code was 8 and whose message said the service was under high load. It returned no video. The Veo helper previously recognized 429 text or HTTP status, but a completed operation's canonical code 8 became a generic unverified-result error; with explicit extra attempts it could have retried. Treat code 8 as a provider limit, retain its budget reservation and private operation record, and stop without another generation call. A high-load message does not prove that the attempt was free or establish when capacity will return.
+
+## 2026-10-13 — Reuse approved production assets in the full upload flow
+
+The approved Sillim narration and local scene clips allow a bounded private test of editing, quality checks, and YouTube delivery without another planning, TTS, or Veo request. Let `ProductionService.full_pipeline` accept a reviewed script and prepared scene assets while preserving the existing topic/URL route. Reject conflicting new-topic input, keep the paid production switch off for this local run, and supply reviewed metadata because the historical script description still calls itself a draft. A private upload proves the delivery path only; it does not reverse the owner's rejection of the diagram cut as a public release candidate or establish Veo footage quality.

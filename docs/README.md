@@ -28,6 +28,7 @@ NiceGUI / scheduler
 ```
 
 The app is a Python modular monolith. `ProductionService` owns orchestration, progress, cancellation, scene routing, and upload readiness. External API and media details stay in their own modules. The scheduler invokes the same service without browser state.
+For a reviewed story with retained assets, `ProductionService.full_pipeline` also accepts `approved_script`, `manual_clip_paths`, and `prepared_audio_paths`. That route skips new planning and narration, reuses the normal editor and quality gate, and can continue to the same private upload path with `auto_upload=True`. The caller supplies complete scene assets and reviewed upload metadata; the ordinary topic/URL path is unchanged.
 
 ## Find the owner
 

@@ -262,6 +262,47 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(result.clips, ["scene.png"])
         self.assertTrue(result.ready_for_upload)
 
+    def test_full_pipeline_reuses_approved_script_and_assets_for_private_upload(self):
+        service = ProductionService(mode="video")
+        script = SimpleNamespace(title="Approved", description="Source", tags=["Shorts"])
+        clips = {1: "scene.mp4"}
+        audio = ["scene.mp3"]
+        service.generate_script = AsyncMock()
+        service.produce_video = AsyncMock(return_value=ProductionResult(
+            success=True, video_path="render.mp4", ready_for_upload=True,
+        ))
+        service.upload_to_youtube = AsyncMock(return_value=ProductionResult(
+            success=True, video_path="render.mp4", youtube_id="private-id",
+        ))
+        metadata = {"title": "Approved", "description": "Source", "contains_synthetic_media": True}
+
+        result = asyncio.run(service.full_pipeline(
+            approved_script=script, manual_clip_paths=clips,
+            prepared_audio_paths=audio, auto_upload=True, upload_metadata=metadata,
+        ))
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.youtube_id, "private-id")
+        self.assertIs(result.script, script)
+        service.generate_script.assert_not_awaited()
+        service.produce_video.assert_awaited_once_with(
+            script, finish_phase=False, manual_clip_paths=clips, prepared_audio_paths=audio,
+        )
+        service.upload_to_youtube.assert_awaited_once_with("render.mp4", metadata)
+
+    def test_full_pipeline_rejects_conflicting_approved_inputs(self):
+        service = ProductionService()
+        service.generate_script = AsyncMock()
+        service.produce_video = AsyncMock()
+
+        result = asyncio.run(service.full_pipeline(
+            topic="new topic", approved_script=SimpleNamespace(), auto_upload=True,
+        ))
+
+        self.assertFalse(result.success)
+        service.generate_script.assert_not_awaited()
+        service.produce_video.assert_not_awaited()
+
     @patch("shorts_maker.services.production_service.check_video_quality")
     def test_full_pipeline_completes_only_after_upload(self, _check):
         with tempfile.TemporaryDirectory() as directory:
