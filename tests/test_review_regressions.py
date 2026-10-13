@@ -246,6 +246,31 @@ class ReviewRegressions(unittest.TestCase):
             self.assertFalse(stored["enabled"])
             self.assertEqual(stored["last_result"], "visual_cost_cap_exceeded")
 
+    def test_unsupported_music_mood_pauses_repeating_schedule(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("Music review", "09:00")
+            failure = ProductionService()._failed_result("BGM_SELECTION_REQUIRED: unsupported mood")
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, return_value=failure,
+            ):
+                asyncio.run(manager._execute_pipeline(schedule))
+            stored = manager.get_schedule(schedule["id"])
+            self.assertFalse(stored["enabled"])
+            self.assertEqual(stored["last_result"], "music_selection_required")
+
+    def test_unsupported_music_mood_stops_pipeline_before_media(self):
+        service = ProductionService(editor_options={"bgm_volume": 0})
+        service._planner = SimpleNamespace(plan_content=AsyncMock(
+            side_effect=ValueError("BGM_SELECTION_REQUIRED: unsupported mood"),
+        ))
+        service.produce_video = AsyncMock()
+        result = asyncio.run(service.full_pipeline())
+        self.assertFalse(result.success)
+        self.assertIn("BGM_SELECTION_REQUIRED", result.error)
+        service.produce_video.assert_not_awaited()
+
     def test_planning_provider_limit_survives_pipeline_without_stale_errors(self):
         service = ProductionService(editor_options={"bgm_volume": 0})
         service._planner = SimpleNamespace(plan_content=AsyncMock(
@@ -752,6 +777,14 @@ class ReviewRegressions(unittest.TestCase):
         legacy = script.copy()
         legacy.pop("music_direction")
         self.assertEqual(ShortsScript.model_validate(legacy).music_direction, "")
+
+        script["mood"] = "curious"
+        completion.return_value.choices[0].message.content = json.dumps(script)
+        with self.assertRaisesRegex(ValueError, "BGM_SELECTION_REQUIRED"):
+            asyncio.run(planner._write_script({
+                "category": "Tech", "title": "ASTRA field test",
+                "content": "Three robots were tested in Virginia.",
+            }))
 
     def test_scene_error_stops_before_editing(self):
         service = ProductionService(mode="image")

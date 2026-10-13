@@ -890,6 +890,8 @@ class ProductionService:
                 "429" in self._progress.error or "RESOURCE_EXHAUSTED" in self._progress.error.upper()
             ):
                 reason = "RESOURCE_EXHAUSTED: 공급자 제한으로 스크립트 생성 중단"
+            elif self._progress.error and "BGM_SELECTION_REQUIRED" in self._progress.error:
+                reason = self._progress.error
             else:
                 reason = "스크립트 생성 실패"
             return self._failed_result(reason)

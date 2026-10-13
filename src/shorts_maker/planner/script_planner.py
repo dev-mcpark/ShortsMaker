@@ -670,7 +670,8 @@ class ScriptPlanner:
             response_format={"type": "json_object"}
         )
         data = json.loads(response.choices[0].message.content)
-        if data.get('mood') not in self.allowed_moods: data['mood'] = 'energetic'
+        if data.get('mood') not in self.allowed_moods:
+            raise ValueError("BGM_SELECTION_REQUIRED: 생성된 각본의 분위기가 지원 목록에 없습니다. BGM 선택을 검토하세요.")
         # Ensure generation_mode is consistent
         data['generation_mode'] = self.generation_mode
         # Inject source info from the item to ensure accuracy
