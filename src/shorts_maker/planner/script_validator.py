@@ -70,7 +70,7 @@ class ScriptValidator:
         1. **Policy Safety:** No hate speech, explicit violence, sexual content, or copyright infringement.
         2. **Engagement (Hook):** The first 5 seconds (Scene 1) MUST be gripping/surprising. No "Did you know?" or slow intros.
         3. **Visual Feasibility:** Visual descriptions must be concrete (objects, lighting, style) for AI Video Generators. Avoid abstract concepts.
-           When narration depends on a spatial or causal relationship, the described image must show its parts and connection without relying on speech or captions. A decorative atmosphere shot or labels naming objects alone do not establish it. A clearly illustrative diagram is acceptable. Reject a missing relationship with reason `missing_visual_proof` and name the scene.
+           When narration depends on a spatial or causal relationship, the generated visual plan itself must show its parts and connection without relying on speech, captions, or a diagram to be added in editing. For video scenes, inspect visual_description and motion_instruction together: a narrated change needs a visible before, change, and resulting state in the same shot. A decorative atmosphere shot or labels naming objects alone do not establish it. A clearly illustrative generated image or cutaway is acceptable. Reject a missing relationship with reason `missing_visual_proof` and name the scene.
         4. **Length:** Total duration must be under 60 seconds (ideally 40-50s).
         5. **Language:** Must be Natural Korean suitable for narration.
         6. **NO ADVERTISING/PROMOTIONAL CONTENT:** This is CRITICAL. Reject any script that:

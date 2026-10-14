@@ -1,6 +1,6 @@
 # Visual prompt practice
 
-Reviewed: 2026-10-13. This guide records public techniques selected for ShortsMaker's source-grounded, low-cost workflow. [STATUS.md](STATUS.md) owns current production evidence; [DECISIONS.md](DECISIONS.md) owns durable choices. A well-written prompt improves direction but cannot prove that a generated frame is accurate.
+Reviewed: 2026-10-14. This guide records public techniques selected for ShortsMaker's source-grounded, low-cost workflow. [STATUS.md](STATUS.md) owns current production evidence; [DECISIONS.md](DECISIONS.md) owns durable choices. A well-written prompt improves direction but cannot prove that a generated frame is accurate.
 
 ## Evidence and application
 
@@ -18,9 +18,9 @@ Reviewed: 2026-10-13. This guide records public techniques selected for ShortsMa
 2. Choose one point the viewer should understand in this scene. For Veo, specify one shot and one movement. For Gemini stills, specify one static composition.
 3. If the source cannot support a realistic depiction, request a visibly stylized explanatory image. Use a separately cleared source photo or a local diagram when accuracy depends on exact equipment or labels.
 4. Leave exact words, numbers, credits, and subtitles to the editor. Review the resulting frame for extra objects, readable invented labels, setting mismatch, and any appearance of real footage.
-5. State the **visible proof** for the narrated claim before camera and style instructions. If a prompt omits a required structure, name the local diagram that will supply it and verify the finished edit actually contains that diagram. Text labels alone do not show a spatial or causal relationship; the [Sillim review](SILLIM_VISUAL_ALIGNMENT_REVIEW.md) is the regression example.
+5. State the **visible proof** for the narrated claim before camera and style instructions. A generated explanation shot must contain the required structure itself. For a narrated change, specify what is visible before, during, and after it, keeping the relevant parts in frame. Use local text for exact names, numbers, subtitles, and attribution; do not assign the core spatial or causal explanation to a later overlay. The [Sillim review](SILLIM_VISUAL_ALIGNMENT_REVIEW.md) is the regression example.
 
-The automatic script writer now asks for that proof when narration depends on a spatial or causal relationship; the existing source validator rejects a missing relationship before visual generation. This is a prompt-level gate only. The automatic editor cannot infer and add an omitted factual diagram, and a passing model judgment cannot replace silent, caption-hidden review of the rendered scene.
+The automatic script writer now asks for that proof when narration depends on a spatial or causal relationship; the existing source validator rejects a missing relationship before visual generation. This is a prompt-level gate only. Before accepting a returned clip, watch it muted with captions and editor graphics hidden at the first frame, key change, and end. Record whether the required relationship is visible in the raw pixels. If it needs an explanatory diagram added later, reject the shot for an explanatory cut and revise only that scene's brief. Technical quality, pleasing motion, and a passing model judgment cannot replace this review.
 
 Example for the NASA pilot: `A clearly stylized top-down diagram of one scouting drone and two distinct ground rovers on a grassy research field; one point of interest; simple shapes; calm open lower third.` The location and robot count come from the [NASA article](https://science.nasa.gov/blogs/planetary-expeditions/2026/09/15/nasa-field-tests-ai-fleet-capability-for-science-exploration/). If a real device appearance is needed, choose the credited source photo in editorial review instead of inventing one.
 

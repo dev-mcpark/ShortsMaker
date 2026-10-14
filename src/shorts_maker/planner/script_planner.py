@@ -575,17 +575,17 @@ class ScriptPlanner:
         - Match the primary article's real location, period, setting, participant count, equipment, and roles. Never turn a field test into an actual space mission or another location.
         - If the source does not establish how an event looked, use a clearly illustrative diagram or symbolic image. Mark future or hypothetical scenes as conceptual in the description.
         - Show one narrated idea per scene. Specify the subject, one action or state, its context, and a useful composition. Avoid invented signs, numbers, interface labels, logos, and extra people.
-        - When narration explains a spatial or causal relationship, show its parts and their connection with shapes, placement, or change. A mood shot or labels naming the parts alone do not explain it. Put this visible proof before camera and style details.
+        - When narration explains a spatial or causal relationship, show its parts and their connection with shapes, placement, or change in the generated visual itself. A mood shot, labels naming the parts, or a diagram promised for later editing do not supply this proof. Put the visible proof before camera and style details.
         - Leave the lower third visually simple for captions. Exact words and data are added by the editor, not drawn by the image or video model.
         - When a photorealistic reconstruction would be mistaken for actual footage, describe a visibly stylized diagram instead. Actual source photos require separate editorial selection and rights review.
         """
         if self.generation_mode == "video":
             visual_instruction = """
-            **VIDEO:** Each visual_description is one coherent 9:16 shot: camera framing, subject, one action, real or clearly conceptual context, and restrained lighting. Use motion_instruction for one simple camera or subject movement. Describe only what will fit in a short silent clip; narration is added later.
+            **VIDEO:** Each visual_description is one coherent 9:16 shot: camera framing, subject, one action, real or clearly conceptual context, and restrained lighting. Use motion_instruction for one simple camera or subject movement. When a claim describes a change, make the before, change, and resulting state visible in that shot; keep the important parts in frame. Describe only what will fit in a short silent clip; narration is added later.
             """
         elif self.generation_mode == "hybrid":
             visual_instruction = """
-            **HYBRID:** Use a video hook only when one clear motion helps explain the opening. Set scene 1 visual_mode to "video" in that case, with one coherent shot and one simple motion_instruction. If motion would imply undocumented real footage, choose visual_mode "image" and describe an illustrative still instead. Use visual_mode "image" for later scenes; describe a static subject, context, and composition without motion language.
+            **HYBRID:** Use a video hook only when one clear motion helps explain the opening. Set scene 1 visual_mode to "video" in that case, with one coherent shot and one simple motion_instruction; if the hook describes a change, keep its before and resulting state visible. If motion would imply undocumented real footage, choose visual_mode "image" and describe an illustrative still instead. Use visual_mode "image" for later scenes; describe a static subject, context, and composition without motion language.
             """
         else:
             visual_instruction = """

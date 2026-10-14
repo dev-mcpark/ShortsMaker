@@ -761,8 +761,10 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("primary article's real location", prompt)
         self.assertIn("clearly illustrative diagram", prompt)
         self.assertIn("show its parts and their connection", prompt)
-        self.assertIn("A mood shot or labels naming the parts alone do not explain it", prompt)
+        self.assertIn("A mood shot, labels naming the parts", prompt)
+        self.assertIn("a diagram promised for later editing do not supply this proof", prompt)
         self.assertIn("one coherent shot", prompt)
+        self.assertIn("keep its before and resulting state visible", prompt)
         self.assertIn("source-supported dilemma, decision, and result", prompt)
         self.assertIn("Separate measured results from model projections", prompt)
         self.assertIn("STORY IDEAS FROM AN EARLIER MODEL PASS (NOT EVIDENCE)", prompt)
@@ -943,6 +945,8 @@ class ReviewRegressions(unittest.TestCase):
                               completion.await_args.kwargs["messages"][1]["content"])
         prompt = completion.await_args.kwargs["messages"][0]["content"]
         self.assertIn("parts and connection", prompt)
+        self.assertIn("diagram to be added in editing", prompt)
+        self.assertIn("visible before, change, and resulting state", prompt)
 
     def test_planner_requires_source_before_approving_script(self):
         script = ShortsScript(

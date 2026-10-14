@@ -1,6 +1,6 @@
 # Sillim narration-to-visual review
 
-Reviewed: 2026-10-13. This evaluates the approved five-scene narration, exact prompts in `scripts/sillim_veo_round.py`, returned shots, and privately uploaded 37.5-second cut. It is **not** a new generation order or approval to replace the narration. [STATUS.md](STATUS.md) owns the active gate; [SILLIM_VEO_CUT_PLAN.md](SILLIM_VEO_CUT_PLAN.md) owns the completed request and cost record.
+Reviewed: 2026-10-14. This evaluates the approved five-scene narration, exact prompts in `scripts/sillim_veo_round.py`, returned shots, and privately uploaded 37.5-second cut. The overlay experiments below are historical; the owner's latest direction is the native-shot gate at the end. This is **not** a new generation order or approval to replace the narration. [STATUS.md](STATUS.md) owns the active gate; [SILLIM_VEO_CUT_PLAN.md](SILLIM_VEO_CUT_PLAN.md) owns the completed request and cost record.
 
 ## Finding
 
@@ -25,7 +25,7 @@ Keep the approved `nova` audio for the next local edit. Its question → two pre
 
 The last line's roughly 10 cm is a **city-stated effect**, not observed flood-damage reduction. Do not animate an exact before/after gauge as though measured.
 
-## Next visual brief
+## Historical overlay brief — superseded on 2026-10-14
 
 Write one source-backed relationship the viewer must **see** per scene. Decide which shapes come from Veo and which factual labels or diagrams come from the editor. Camera moves and miniature style are secondary. At the first frame, reveal, and end, hide subtitles and mute audio: if the relationship cannot be inferred from shapes and motion, the image is only decoration.
 
@@ -48,9 +48,21 @@ The owner said the explanatory diagrams covered too much of the Veo footage. The
 
 The ignored `outputs/final_shorts_1791896514303367000.mp4` is the current [local comparison target](../outputs/evaluation/sillim_veo_round_20261013/explanatory_review.html). It uses the same five Veo clips and retained audio as the uploaded baseline. FFprobe reports 37.5 seconds, 1080×1920/24 fps, and audio; the sidecar quality gate passes with five manual/reused scenes, no YouTube ID, and $0 estimated **new** visual output. The encoded audio stream matches the private baseline. Sampled final frames at 12, 18.5, 27, and 33 seconds show small insets clear of the subtitles and the restored attribution; all 149 offline tests pass. This verifies smaller coverage and technical delivery, not whether the owner now finds the complete cut clear or publishable. No new API request or upload ran.
 
-## Acceptance for the next private cut
+## Native-shot direction — 2026-10-14
 
-- Silent, caption-hidden playback of scenes 2–4 conveys **two problems → three levels → temporary hold** through shapes and motion.
-- Graphics appear with the corresponding narration, avoid the moving subject and soft subtitles, and identify the section as explanatory.
-- The 35,000-tonne and roughly 10 cm claims are readable, attributed, and never shown as observed flood outcomes.
-- The owner prefers the compact explanatory revision over the attractive baseline. Editorial acceptance stays blank until then.
+The owner wants the **generated footage itself** to make the narration understandable. The compact insets reduced coverage but do not solve the raw-shot mismatch; do not use them as the default recipe for new scenes. The October 13 round and its `*.accepted` hashes verified usable files and permitted sequential spending, but scene 3's raw review explicitly deferred the essential floor relationship to editorial. That is no longer an acceptable explanatory-shot decision. Keep the old records and private upload for comparison; do not rewrite them as successes.
+
+| Scene | Relationship the raw generated clip must convey with sound and editor text hidden | Reject when |
+| --- | --- | --- |
+| 2 — two pressures | One clearly fictional site has crowded bus use at one edge and stormwater pressure near the stream at the other; the same parcel is the focus of both. | Only a depot and approaching cloud appear, or flooding is depicted as an observed event. |
+| 3 — stacked uses | A stable, visibly conceptual three-band cutaway puts bus use on the surface **and** one lower level, with a separate blue water basin below both. | Opaque walls hide the bands, a camera move swaps their order, or names/labels are needed to infer the stack. |
+| 4 — temporary hold | Water enters a **bounded** lower basin, remains there, and a smaller later outlet is distinct from the initial inflow. | Water falls into an open void or the clip only shows continuous flow; do not imply a measured reduction. |
+| 5 — shared site | The same fictional site visibly supports bus movement above and water storage below at once. | Bus and blue volume appear side by side without a visible vertical relationship. |
+
+The first proposed replacement is **scene 3 only**, because its prior prompt explicitly excluded the needed structure. Before any paid request, prepare and inspect an original unlettered first-frame still with three broad fixed bands, matching the approved cream and dark-teal miniature style. The top and middle bands must have distinct bus bays; the lowest must be a bounded blue basin. This is an invented conceptual arrangement of the source-reported functions, **not** an engineering cross-section of the real facility. If the still is unclear without a label, revise it locally rather than testing Veo.
+
+Candidate motion prompt for that still: `One continuous vertical shot of the supplied fictional miniature cutaway. Keep its three horizontal bands fixed and visible: an open bus bay at ground level, a second bus bay one level below, and a separate bounded blue rainwater basin at the lowest level. One bus moves slowly in each bus area while blue water gradually collects inside the lowest basin. The camera remains still; the structure and band order do not change. Conceptual civic explanation, not footage or an engineering drawing of the real Sillim depot. Blank surfaces, no readable writing, numbers, logos, people, flooding, or damage.` The first frame supplies layout and style; the prompt asks only for one simple temporal change. If this proves too much for one short clip, simplify motion before paying for more variants, while keeping all three roles visible.
+
+**Raw acceptance before editing or another scene request:** retain the prompt, input hash, model, duration, request estimate, output hash, and one-attempt result in ignored runtime records. Watch the raw clip muted with subtitles and overlays absent at its opening, water reveal, and end. Mark explanatory acceptance only if the three levels remain distinct and in order, both bus levels are visible, the lower basin is bounded, and no invented labels or apparent real-site claim mislead. A playable file and technical quality pass are insufficient. Record a rejection with the specific missing relation; do not repair that relation with cards. Exact Korean floor names, `35,000톤`, `약 10cm · 서울시 설명`, subtitles, and `AI 설명용 영상` remain editor text. The returned output still needs whole-cut review with the approved voice and music.
+
+Only after scene 3 passes should scenes 2, 4, and 5 receive their own one-shot briefs and spending decisions. The earlier $1.50 authorization was consumed. Recheck current official model price, possible input/output exposure, app ledger room, and the owner's new request ceiling before generating even one replacement. No new API call, render, or upload is recorded by this direction change.
