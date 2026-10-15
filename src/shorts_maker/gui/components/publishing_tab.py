@@ -18,7 +18,7 @@ def render_publishing_tab(state: 'AppState') -> None:
 
     with ui.column().classes('w-full max-w-2xl mx-auto mt-10'):
         with card_with_header('YouTube Upload', 'cloud_upload', 'danger'):
-            with ui.element('div').classes('p-6'):
+            with ui.element('div').classes('w-full p-6'):
                 # 입력 필드들
                 title_input = ui.input('Video Title').props('outlined dark').classes('w-full mb-4')
                 desc_input = ui.textarea('Description').props('outlined dark').classes('w-full h-32 mb-4')
@@ -45,20 +45,27 @@ def render_publishing_tab(state: 'AppState') -> None:
 
                 async def upload_video():
                     """YouTube에 비디오 업로드"""
+                    if state.youtube_upload_in_progress:
+                        return
                     if not state.final_video_path:
                         safe_notify("No video to upload", type='warning')
+                        return
+                    if not (title_input.value or '').strip():
+                        safe_notify('영상 제목을 입력하세요', type='warning')
                         return
                     if synthetic_input.value not in ('yes', 'no'):
                         safe_notify('AI 사용 공개 여부를 선택하세요', type='warning')
                         return
 
+                    state.youtube_upload_in_progress = True
+                    upload_btn.disable()
                     safe_notify("Uploading...", type='info')
 
                     try:
                         meta = {
-                            "title": title_input.value,
-                            "description": desc_input.value,
-                            "tags": [t.strip() for t in tags_input.value.split(',')],
+                            "title": title_input.value.strip(),
+                            "description": desc_input.value or '',
+                            "tags": [t.strip() for t in (tags_input.value or '').split(',') if t.strip()],
                             "contains_synthetic_media": synthetic_input.value == 'yes',
                         }
 
@@ -69,11 +76,18 @@ def render_publishing_tab(state: 'AppState') -> None:
                             safe_notify(f"Uploaded! ID: {vid_id}", type='positive')
                             logger.info(f"Upload success: https://youtube.com/shorts/{vid_id}")
                         else:
-                            safe_notify("Upload failed", type='negative')
+                            safe_notify(f"Upload failed: {result.error or 'unknown error'}", type='negative')
 
                     except Exception as e:
                         safe_notify(f"Error: {e}", type='negative')
                         logger.error(f"Upload error: {e}")
+                    finally:
+                        state.youtube_upload_in_progress = False
+                        if state.final_video_path:
+                            try:
+                                upload_btn.enable()
+                            except RuntimeError:
+                                pass
 
                 # 영상 경로 표시
                 with ui.row().classes('w-full items-center gap-2 mb-4 p-3 rounded-lg bg-slate-900/60 border border-slate-700'):
@@ -90,7 +104,7 @@ def render_publishing_tab(state: 'AppState') -> None:
                     'Upload to YouTube',
                     on_click=upload_video
                 ).classes('w-full').props('color=red unelevated size=lg icon=cloud_upload')
-                upload_btn.bind_enabled_from(state, 'final_video_path', backward=lambda p: bool(p))
+                upload_btn.bind_enabled_from(state, 'final_video_path', backward=lambda p: bool(p) and not state.youtube_upload_in_progress)
 
         # 업로드 상태 정보
         with ui.card().classes('w-full p-4 bg-slate-800 border border-slate-700 mt-4'):

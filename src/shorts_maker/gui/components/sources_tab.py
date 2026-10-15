@@ -17,12 +17,12 @@ def render_sources_tab(state: 'AppState') -> None:
     source_manager = SourceManager()
 
     # 와이드 2단 레이아웃
-    with ui.row().classes('w-full h-full gap-6 bg-slate-950 p-1'):
+    with ui.row().classes('w-full h-auto lg:h-full gap-6 flex flex-col lg:flex-row flex-nowrap bg-slate-950 p-1'):
 
         # =====================================================================
         # === 1. LEFT PANEL: FEED REGISTRATION & STATS (380px 고정폭) ===
         # =====================================================================
-        with ui.column().classes('w-96 min-w-[380px] gap-4 shrink-0'):
+        with ui.column().classes('w-full lg:w-96 gap-4 shrink-0'):
 
             # --- RSS 피드 추가 카드 ---
             with ui.card().classes('w-full p-0 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg'):
@@ -35,14 +35,15 @@ def render_sources_tab(state: 'AppState') -> None:
                 with ui.column().classes('p-5 w-full gap-4'):
                     # Category 입력
                     with ui.column().classes('w-full gap-1'):
-                        ui.label('연동 카테고리').classes('text-[10px] text-slate-500 font-bold uppercase tracking-widest')
+                        ui.label('연동 카테고리').classes('text-[10px] text-slate-400 font-bold uppercase tracking-widest')
                         cat_input = ui.input(
+                            '카테고리',
                             placeholder='예: Technology, AI, 경제, 세계 뉴스'
                         ).props('outlined dense dark').classes('w-full text-xs')
 
                     # 퀵 카테고리 추천 버튼
                     with ui.column().classes('w-full gap-1.5'):
-                        ui.label('자주 쓰는 키워드 선택').classes('text-[10px] text-slate-500 font-bold')
+                        ui.label('자주 쓰는 키워드 선택').classes('text-[10px] text-slate-400 font-bold')
                         with ui.row().classes('w-full flex-wrap gap-2'):
                             quick_cats = ['Technology', 'AI', 'Business', 'Science', 'World']
                             for qcat in quick_cats:
@@ -54,8 +55,9 @@ def render_sources_tab(state: 'AppState') -> None:
 
                     # URL 입력
                     with ui.column().classes('w-full gap-1'):
-                        ui.label('RSS 피드 XML 주소').classes('text-[10px] text-slate-500 font-bold uppercase tracking-widest')
+                        ui.label('RSS 피드 XML 주소').classes('text-[10px] text-slate-400 font-bold uppercase tracking-widest')
                         url_input = ui.input(
+                            'RSS 피드 URL',
                             placeholder='https://example.com/rss.xml'
                         ).props('outlined dense dark').classes('w-full text-xs')
 
@@ -68,7 +70,11 @@ def render_sources_tab(state: 'AppState') -> None:
                             safe_notify('RSS 피드 URL 주소를 입력해주십시오.', type='warning')
                             return
 
-                        source_manager.add_source(cat_input.value, url_input.value)
+                        try:
+                            source_manager.add_source(cat_input.value.strip(), url_input.value.strip())
+                        except (OSError, ValueError) as error:
+                            safe_notify(f'RSS 추가 실패: {error}', type='negative')
+                            return
                         safe_notify(f"✅ RSS 소스 추가 성공: {cat_input.value}", type='positive')
                         safe_refresh(sources_list)
                         safe_refresh(stats_card)
@@ -78,7 +84,7 @@ def render_sources_tab(state: 'AppState') -> None:
                     ui.button(
                         'RSS 소스 추가',
                         on_click=add_feed
-                    ).classes('w-full font-bold text-xs py-2 bg-gradient-to-r from-violet-600 to-indigo-600').props('unelevated icon=add')
+                    ).classes('w-full font-bold text-xs py-2 bg-gradient-to-r from-violet-600 to-indigo-600').props('color=purple-9 unelevated icon=add')
 
             # --- RSS 통계 상황판 ---
             @ui.refreshable
@@ -96,14 +102,14 @@ def render_sources_tab(state: 'AppState') -> None:
                         # 카테고리 수
                         with ui.column().classes('items-center gap-1'):
                             ui.label(str(total_cats)).classes('text-2xl font-bold text-white font-mono')
-                            ui.label('카테고리').classes('text-[10px] text-slate-500 font-semibold uppercase')
+                            ui.label('카테고리').classes('text-[10px] text-slate-400 font-semibold uppercase')
 
                         ui.element('div').classes('w-px h-10 bg-slate-800')
 
                         # 피드 주소 수
                         with ui.column().classes('items-center gap-1'):
                             ui.label(str(total_feeds)).classes('text-2xl font-bold text-violet-400 font-mono')
-                            ui.label('피드 소스').classes('text-[10px] text-slate-500 font-semibold uppercase')
+                            ui.label('피드 소스').classes('text-[10px] text-slate-400 font-semibold uppercase')
 
             stats_card()
 
@@ -125,7 +131,7 @@ def render_sources_tab(state: 'AppState') -> None:
                     ):
                         with ui.column().classes('gap-0.5 overflow-hidden'):
                             ui.label(name).classes('text-xs text-white font-semibold')
-                            ui.label(cat).classes('text-[10px] text-slate-500')
+                            ui.label(cat).classes('text-[10px] text-slate-400')
 
                         def make_add_rec_fn(c=cat, u=url, n=name):
                             def add_recommended():
@@ -138,12 +144,12 @@ def render_sources_tab(state: 'AppState') -> None:
                         ui.button(
                             icon='add',
                             on_click=make_add_rec_fn()
-                        ).props('flat round size=xs color=violet').classes('bg-slate-800/80')
+                        ).props(f'flat round size=xs color=violet aria-label="{name} 피드 추가"').classes('bg-slate-800/80')
 
         # =====================================================================
         # === 2. RIGHT PANEL: ACTIVE SOURCE LIST (가변폭) ===
         # =====================================================================
-        with ui.column().classes('flex-grow gap-4'):
+        with ui.column().classes('w-full lg:w-auto lg:flex-grow min-w-0 gap-4'):
 
             with ui.card().classes('w-full p-0 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg flex-grow flex flex-col'):
                 # 헤더 바
@@ -158,7 +164,7 @@ def render_sources_tab(state: 'AppState') -> None:
                         safe_refresh(stats_card)
                         safe_notify('🔄 RSS 소스 동기화 완료!', type='info')
 
-                    ui.button(icon='refresh', on_click=refresh_all).props('flat round color=violet size=sm').classes('bg-slate-800/80')
+                    ui.button(icon='refresh', on_click=refresh_all).props('flat round color=violet size=sm aria-label="RSS 목록 새로고침"').classes('bg-slate-800/80')
 
                 # 소스 피드 리스트 바디
                 @ui.refreshable
@@ -169,8 +175,8 @@ def render_sources_tab(state: 'AppState') -> None:
                         with ui.element('div').classes('w-full py-20 flex-grow flex items-center justify-center'):
                             with ui.column().classes('items-center gap-4'):
                                 ui.icon('rss_feed', size='xl').classes('text-slate-700 animate-pulse')
-                                ui.label('등록된 RSS 소스가 없습니다').classes('text-base font-bold text-slate-500')
-                                ui.label('좌측 추가 패널이나 추천 피드에서 첫 RSS 연동을 시작하십시오.').classes('text-xs text-slate-600')
+                                ui.label('등록된 RSS 소스가 없습니다').classes('text-base font-bold text-slate-400')
+                                ui.label('좌측 추가 패널이나 추천 피드에서 첫 RSS 연동을 시작하십시오.').classes('text-xs text-slate-400')
                         return
 
                     with ui.scroll_area().classes('w-full flex-grow max-h-[560px]'):
@@ -190,16 +196,29 @@ def render_sources_tab(state: 'AppState') -> None:
                                         # 카테고리 전체 삭제 버튼
                                         def make_del_cat_fn(c=category):
                                             def delete_category():
-                                                source_manager.remove_category(c)
-                                                safe_notify(f"🗑️ 카테고리 삭제됨: {c}", type='warning')
-                                                safe_refresh(sources_list)
-                                                safe_refresh(stats_card)
+                                                with ui.dialog() as dialog, ui.card():
+                                                    ui.label(f'{c} 카테고리와 모든 피드를 삭제할까요?')
+                                                    with ui.row():
+                                                        ui.button('취소', on_click=dialog.close)
+
+                                                        def confirm():
+                                                            try:
+                                                                source_manager.remove_category(c)
+                                                                dialog.close()
+                                                                safe_notify(f'카테고리 삭제됨: {c}', type='warning')
+                                                                safe_refresh(sources_list)
+                                                                safe_refresh(stats_card)
+                                                            except (OSError, ValueError) as error:
+                                                                safe_notify(f'삭제 실패: {error}', type='negative')
+
+                                                        ui.button('삭제', on_click=confirm).props('color=red')
+                                                dialog.open()
                                             return delete_category
 
                                         ui.button(
                                             icon='delete',
                                             on_click=make_del_cat_fn()
-                                        ).props('flat round size=xs color=red').classes('bg-slate-900/50')
+                                        ).props('flat round size=xs color=red aria-label="카테고리 삭제"').classes('bg-slate-900/50')
 
                                     # 등록된 피드 주소록 목록
                                     with ui.column().classes('p-3 w-full gap-2 bg-slate-900/20'):
@@ -208,21 +227,24 @@ def render_sources_tab(state: 'AppState') -> None:
                                                 'w-full items-center justify-between p-2.5 bg-slate-950/40 border border-slate-800/60 hover:bg-slate-900/60 rounded-lg no-wrap transition-colors duration-200'
                                             ):
                                                 with ui.row().classes('items-center gap-2 overflow-hidden flex-grow mr-4'):
-                                                    ui.icon('link', size='xs').classes('text-slate-500 shrink-0')
+                                                    ui.icon('link', size='xs').classes('text-slate-400 shrink-0')
                                                     # 긴 URL 말줄임표 처리
                                                     ui.label(url).classes('text-xs text-slate-400 truncate font-mono')
 
                                                 def make_rem_feed_fn(c=category, u=url):
                                                     def remove_feed():
-                                                        source_manager.remove_source(c, u)
-                                                        safe_notify('RSS 피드 매핑 제거됨', type='info')
-                                                        safe_refresh(sources_list)
-                                                        safe_refresh(stats_card)
+                                                        try:
+                                                            source_manager.remove_source(c, u)
+                                                            safe_notify('RSS 피드 매핑 제거됨', type='info')
+                                                            safe_refresh(sources_list)
+                                                            safe_refresh(stats_card)
+                                                        except (OSError, ValueError) as error:
+                                                            safe_notify(f'삭제 실패: {error}', type='negative')
                                                     return remove_feed
 
                                                 ui.button(
                                                     icon='close',
                                                     on_click=make_rem_feed_fn()
-                                                ).props('flat round size=xs color=gray').classes('bg-slate-900/50 hover:bg-rose-950/20 shrink-0')
+                                                ).props('flat round size=xs color=gray aria-label="RSS 피드 삭제"').classes('bg-slate-900/50 hover:bg-rose-950/20 shrink-0')
 
                 sources_list()

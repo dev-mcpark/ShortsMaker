@@ -168,6 +168,7 @@ The storyboard keeps each reveal on its authored cue while its progress indicato
 shorts-maker
 ```
 Launch your browser and go to `http://127.0.0.1:8080`. Studio binds to loopback on port 8080.
+On narrow screens, Studio stacks the workspace and settings below its navigation. The script preview's **new visual output estimate** follows the selected image, hybrid, or video mode and current model prices; it assumes one new output per scene before reuse. It excludes narration, planning, and actual provider charges. Switching to **Local File (Manual)** immediately shows scene upload cards, and a finished manual edit remains in that mode for review.
 
 ---
 

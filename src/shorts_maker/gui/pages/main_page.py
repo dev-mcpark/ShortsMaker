@@ -55,21 +55,22 @@ def render_main_page() -> None:
     step_indicators = []
 
     # 전체 화면 바인딩
-    with ui.column().classes('w-full h-screen bg-slate-950 overflow-hidden flex flex-col'):
+    with ui.column().classes('w-full min-h-screen lg:h-screen bg-slate-950 overflow-y-auto lg:overflow-hidden flex flex-col'):
 
         # === 1. TOP HEADER ===
-        with ui.element('header').classes('w-full bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center justify-between shrink-0'):
+        with ui.element('header').classes('w-full bg-slate-900 border-b border-slate-800 px-4 lg:px-6 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0'):
             # 로고 및 타이틀
             with ui.row().classes('items-center gap-3'):
                 ui.icon('movie', size='md').classes('text-violet-400')
                 with ui.column().classes('gap-0'):
                     ui.label('ShortsMaker Studio').classes('text-lg font-bold text-white leading-none')
                     # 활성화된 스크립트 상태 노출
-                    script_title = state.script.title if state.script else 'No script selected'
-                    ui.label(f'Project: {script_title}').classes('text-xs text-slate-400 mt-1')
+                    ui.label().bind_text_from(
+                        state, 'script', backward=lambda script: f'Project: {script.title}' if script else 'Project: No script selected'
+                    ).classes('text-xs text-slate-400 mt-1')
 
             # 파이프라인 단계 표시기 (헤더 중앙 배치)
-            with ui.row().classes('items-center gap-2 hidden lg:flex'):
+            with ui.row().classes('items-center gap-2 max-lg:hidden'):
                 for i, (phase_name, phase_icon) in enumerate(zip(PHASE_NAMES, PHASE_ICONS)):
                     container = ui.element('div').classes(
                         'w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center transition-all'
@@ -125,14 +126,14 @@ def render_main_page() -> None:
                     ui.notify('⚠️ 파이프라인 취소가 요청되었습니다.', type='warning')
 
                 ui.button('Run Pipeline', on_click=run_entire_pipeline).props('color=violet size=sm icon=play_arrow unelevated').classes('rounded font-semibold text-xs')
-                ui.button(on_click=stop_pipeline).props('flat round color=red icon=stop size=sm').classes('bg-slate-800/80')
+                ui.button(on_click=stop_pipeline).props('flat round color=red icon=stop size=sm aria-label="파이프라인 중단"').classes('bg-slate-800/80')
 
         # === 2. MAIN BODY (3단 분할 레이아웃) ===
-        with ui.row().classes('w-full flex-grow overflow-hidden no-wrap'):
+        with ui.row().classes('w-full flex-1 min-h-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden no-wrap'):
 
             # --- 2A. LEFT SIDEBAR RAIL (좌측 메뉴 바) ---
             with ui.element('div').classes(SIDEBAR_LEFT):
-                with ui.column().classes('w-full items-center gap-4'):
+                with ui.column().classes('w-full items-center justify-center gap-2 lg:gap-4 flex-row lg:flex-col'):
                     menu_items = [
                         ('workspace', 'edit_document', 'Studio'),
                         ('pipeline', 'rocket_launch', 'Console'),
@@ -147,14 +148,14 @@ def render_main_page() -> None:
                         return lambda: select_view(view_name)
 
                     for view, icon, tooltip in menu_items:
-                        btn = ui.button(icon=icon).props('flat round color=gray size=md')
-                        with ui.tooltip(tooltip):
+                        btn = ui.button(icon=icon).props(f'flat round color=gray size=md aria-label="{tooltip}"')
+                        with ui.tooltip(tooltip).classes('bg-slate-700 text-white'):
                             ui.label(tooltip)
                         btn.on('click', make_select_view_fn(view))
                         buttons[view] = btn
 
                 # 하단 정보 아이콘
-                with ui.column().classes('items-center'):
+                with ui.column().classes('items-center max-lg:hidden'):
                     ui.icon('info', size='xs').classes('text-slate-600')
                     ui.label('v0.3').classes('text-[10px] text-slate-600 font-mono mt-1')
 
@@ -166,7 +167,7 @@ def render_main_page() -> None:
                 ui.label('Model Settings').classes('text-xs font-bold text-slate-400 uppercase tracking-widest mb-4')
 
                 # Generation Mode
-                ui.label('MODEL TYPE').classes('text-[10px] text-slate-500 font-semibold mb-1')
+                ui.label('MODEL TYPE').classes('text-[10px] text-slate-400 font-semibold mb-1')
                 mode_select = ui.select(
                     options={
                         'hybrid': 'Hybrid · Veo hook + Gemini images',
@@ -174,25 +175,27 @@ def render_main_page() -> None:
                         'video': 'Google Veo 3.1 videos',
                     },
                     value=state.mode
-                ).props('outlined dense dark').classes('w-full mb-4')
+                ).props('outlined dense dark aria-label="비주얼 생성 모드"').classes('w-full mb-4')
 
                 def on_mode_change(e):
                     state.mode = e.value
                     ui.notify(f'생성 모드가 {e.value.upper()}로 전환되었습니다.', type='info')
                     # 모드 변경 시 에디터 영역 갱신 필요 시 호출 가능
-                mode_select.on('change', on_mode_change)
+                mode_select.on_value_change(on_mode_change)
 
                 # Cost/API Mode Toggle
-                ui.label('GENERATION SOURCE').classes('text-[10px] text-slate-500 font-semibold mb-1')
+                ui.label('GENERATION SOURCE').classes('text-[10px] text-slate-400 font-semibold mb-1')
                 api_source_radio = ui.radio(
                     ['Vertex AI API (Auto)', 'Local File (Manual)'],
                     value='Local File (Manual)' if state.manual_video_mode else 'Vertex AI API (Auto)'
-                ).props('color=violet dense').classes('w-full text-xs text-slate-300 mb-4')
+                ).props('color=violet size=32px').classes('w-full text-xs text-slate-300 mb-4')
 
                 def on_api_source_change(e):
                     state.manual_video_mode = (e.value == 'Local File (Manual)')
                     ui.notify(f'소스 모드: {e.value}', type='info')
-                api_source_radio.on('change', on_api_source_change)
+                    if state.current_view == 'workspace' and state.workspace_sub_tab == 'preview':
+                        render_active_view()
+                api_source_radio.on_value_change(on_api_source_change)
 
                 ui.separator().classes('bg-slate-800 my-2')
 
@@ -203,7 +206,7 @@ def render_main_page() -> None:
                 overlay_checkbox.bind_value(state, 'character_overlay_enabled')
 
                 with ui.column().bind_visibility_from(overlay_checkbox, 'value'):
-                    ui.label('POSITION').classes('text-[10px] text-slate-500 font-semibold mb-1')
+                    ui.label('POSITION').classes('text-[10px] text-slate-400 font-semibold mb-1')
                     pos_select = ui.select(
                         options={
                             'bottom_right': 'Bottom Right',
@@ -215,9 +218,9 @@ def render_main_page() -> None:
                     ).props('outlined dense dark').classes('w-full mb-3')
                     pos_select.bind_value(state, 'character_position')
 
-                    ui.label('SIZE RATIO').classes('text-[10px] text-slate-500 font-semibold mb-1')
-                    size_slider = ui.slider(min=0.1, max=0.5, step=0.05, value=state.character_size_ratio).props('color=violet')
-                    size_label = ui.label('25%').classes('text-xs text-slate-400 self-end -mt-2 mb-3')
+                    ui.label('SIZE RATIO').classes('text-[10px] text-slate-400 font-semibold mb-1')
+                    size_slider = ui.slider(min=0.1, max=0.5, step=0.05, value=state.character_size_ratio).props('color=violet aria-label="캐릭터 크기"')
+                    size_label = ui.label(f'{int(state.character_size_ratio * 100)}%').classes('text-xs text-slate-400 self-end -mt-2 mb-3')
                     size_slider.bind_value(state, 'character_size_ratio')
                     size_slider.on('change', lambda e: size_label.set_text(f'{int(e.value * 100)}%'))
 
@@ -226,21 +229,21 @@ def render_main_page() -> None:
                 # Audio & Subtitle Parameters
                 ui.label('Audio & Text Settings').classes('text-xs font-bold text-slate-400 uppercase tracking-widest mt-2 mb-3')
 
-                ui.label('TTS VOICE').classes('text-[10px] text-slate-500 font-semibold mb-1')
+                ui.label('TTS VOICE').classes('text-[10px] text-slate-400 font-semibold mb-1')
                 voice_select = ui.select(
                     options={'alloy': 'Alloy (Default)', 'echo': 'Echo (Deep)', 'fable': 'Fable (Narrator)', 'onyx': 'Onyx', 'nova': 'Nova', 'shimmer': 'Shimmer'},
                     value=state.tts_voice
-                ).props('outlined dense dark').classes('w-full mb-3')
+                ).props('outlined dense dark aria-label="TTS 음성"').classes('w-full mb-3')
                 voice_select.bind_value(state, 'tts_voice')
 
-                ui.label('BGM MOOD').classes('text-[10px] text-slate-500 font-semibold mb-1')
+                ui.label('BGM MOOD').classes('text-[10px] text-slate-400 font-semibold mb-1')
                 bgm_select = ui.select(
                     options={'auto': 'Follow Script', 'calm': 'Calm & Soft', 'sci-fi': 'Sci-Fi', 'futuristic': 'Curious Tech', 'mysterious': 'Mysterious', 'energetic': 'Energetic Pop', 'dark': 'Dark Mystery', 'synthwave': 'Retro Synthwave'},
                     value=state.bgm_mood
-                ).props('outlined dense dark').classes('w-full mb-3')
+                ).props('outlined dense dark aria-label="BGM 분위기"').classes('w-full mb-3')
                 bgm_select.bind_value(state, 'bgm_mood')
 
-                ui.label('BGM TRACK').classes('text-[10px] text-slate-500 font-semibold mb-1')
+                ui.label('BGM TRACK').classes('text-[10px] text-slate-400 font-semibold mb-1')
                 track_options = {'': 'Auto by mood'}
                 track_options.update(BGMManager().list_documented_tracks())
                 if state.bgm_track and state.bgm_track not in track_options:
@@ -248,13 +251,13 @@ def render_main_page() -> None:
                 bgm_track_select = ui.select(
                     options=track_options,
                     value=state.bgm_track,
-                ).props('outlined dense dark').classes('w-full mb-1')
+                ).props('outlined dense dark aria-label="BGM 트랙"').classes('w-full mb-1')
                 bgm_track_select.bind_value(state, 'bgm_track')
                 ui.label('Choose an exact licensed track after listening; it overrides the mood.') \
-                    .classes('text-[10px] text-slate-500 mb-3')
+                    .classes('text-[10px] text-slate-400 mb-3')
 
-                ui.label('BGM LEVEL').classes('text-[10px] text-slate-500 font-semibold mb-1')
-                bgm_slider = ui.slider(min=0, max=1, step=0.05, value=state.bgm_volume).props('color=violet')
+                ui.label('BGM LEVEL').classes('text-[10px] text-slate-400 font-semibold mb-1')
+                bgm_slider = ui.slider(min=0, max=1, step=0.05, value=state.bgm_volume).props('color=violet aria-label="BGM 음량"')
                 bgm_label = ui.label(f'{int(state.bgm_volume * 100)}%').classes('text-xs text-slate-400 self-end -mt-2 mb-3')
                 bgm_slider.bind_value(state, 'bgm_volume')
                 bgm_slider.on('change', lambda e: bgm_label.set_text(f'{int(e.value * 100)}%'))
@@ -301,7 +304,7 @@ def render_main_page() -> None:
                 with center_container:
                     if state.current_view == 'workspace':
                         # Google AI Studio 워크스페이스: 내부 상단에 Prompt Editor / Visual Preview 토글 바 제공
-                        with ui.element('div').classes('w-full bg-slate-900 border-b border-slate-800 px-6 py-2 flex items-center justify-between shrink-0'):
+                        with ui.element('div').classes('w-full bg-slate-900 border-b border-slate-800 px-3 lg:px-6 py-2 flex flex-wrap items-center justify-between gap-2 shrink-0'):
                             with ui.row().classes('items-center gap-1'):
                                 ui.icon('psychology', size='xs').classes('text-violet-400')
                                 ui.label('Workspace Studio').classes('text-sm font-bold text-white mr-4')
@@ -322,10 +325,10 @@ def render_main_page() -> None:
                                     editor_btn.on('click', lambda: set_sub_tab('editor'))
                                     preview_btn.on('click', lambda: set_sub_tab('preview'))
 
-                            ui.badge('AI Studio Mode').classes('bg-violet-900/30 text-violet-400 text-[10px] px-2 py-0.5')
+                            ui.label('AI Studio Mode').classes('rounded bg-violet-950 text-violet-200 text-[10px] px-2 py-0.5')
 
                         # 하위 탭 분기 렌더링
-                        with ui.element('div').classes('w-full flex-grow overflow-auto p-6'):
+                        with ui.element('div').classes('w-full flex-grow overflow-auto p-3 lg:p-6'):
                             if state.workspace_sub_tab == 'editor':
                                 render_planning_tab(state)
                             else:
@@ -335,7 +338,7 @@ def render_main_page() -> None:
                         with ui.element('div').classes('w-full bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center gap-2 shrink-0'):
                             ui.icon('terminal', size='xs').classes('text-teal-400')
                             ui.label('Production Console & Logging').classes('text-sm font-bold text-white')
-                        with ui.element('div').classes('w-full flex-grow overflow-auto p-6'):
+                        with ui.element('div').classes('w-full flex-grow overflow-auto p-3 lg:p-6'):
                             render_pipeline_tab(
                                 state,
                                 step_indicators=step_indicators,
@@ -346,21 +349,21 @@ def render_main_page() -> None:
                         with ui.element('div').classes('w-full bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center gap-2 shrink-0'):
                             ui.icon('rss_feed', size='xs').classes('text-orange-400')
                             ui.label('Content Sources & RSS Management').classes('text-sm font-bold text-white')
-                        with ui.element('div').classes('w-full flex-grow overflow-auto p-6'):
+                        with ui.element('div').classes('w-full flex-grow overflow-auto p-3 lg:p-6'):
                             render_sources_tab(state)
 
                     elif state.current_view == 'scheduling':
                         with ui.element('div').classes('w-full bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center gap-2 shrink-0'):
                             ui.icon('schedule', size='xs').classes('text-amber-400')
                             ui.label('Cron Automation Scheduler').classes('text-sm font-bold text-white')
-                        with ui.element('div').classes('w-full flex-grow overflow-auto p-6'):
+                        with ui.element('div').classes('w-full flex-grow overflow-auto p-3 lg:p-6'):
                             render_scheduling_tab(state)
 
                     elif state.current_view == 'publishing':
                         with ui.element('div').classes('w-full bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center gap-2 shrink-0'):
                             ui.icon('cloud_upload', size='xs').classes('text-rose-400')
                             ui.label('YouTube Publishing & Downloads').classes('text-sm font-bold text-white')
-                        with ui.element('div').classes('w-full flex-grow overflow-auto p-6'):
+                        with ui.element('div').classes('w-full flex-grow overflow-auto p-3 lg:p-6'):
                             render_publishing_tab(state)
 
             # 최초 기본 뷰 설정 및 구동

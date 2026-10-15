@@ -80,7 +80,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                     ui.icon('info', size='xs').classes('text-violet-400 mt-0.5 shrink-0')
                     ui.label('각 씬의 프롬프트를 복사하여 Veo 3.1이나 외부 AI Studio에서 생성한 후, 씬 카드 내에 업로드해주십시오. 모든 씬 영상이 로드되면 인코딩 및 자막 믹싱을 시작할 수 있습니다.').classes('text-xs text-slate-300 leading-relaxed')
 
-                with ui.column().classes('justify-center gap-2 min-w-[240px] border-l border-slate-800 pl-4'):
+                with ui.column().classes('justify-center gap-2 w-full sm:w-auto sm:min-w-[240px] sm:border-l border-slate-800 sm:pl-4'):
                     def copy_all_json():
                         json_str = exporter.export_json(state.script, state.manual_script_id)
                         ui.run_javascript(f'navigator.clipboard.writeText({json.dumps(json_str)})')
@@ -206,10 +206,10 @@ def render_generation_tab(state: 'AppState') -> None:
             logger.debug(f"Progress UI sync skipped: {e}")
 
     # 전체를 아우르는 반응형 컬럼 구조
-    with ui.column().classes('w-full h-full gap-0 overflow-hidden bg-slate-950'):
+    with ui.column().classes('w-full h-auto lg:h-full gap-0 overflow-visible lg:overflow-hidden bg-slate-950'):
 
         # ── 1. TOP PIPELINE ACTION BAR ──
-        with ui.element('div').classes('w-full px-6 py-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0 gap-4'):
+        with ui.element('div').classes('w-full px-4 lg:px-6 py-4 bg-slate-900 border-b border-slate-800 flex flex-wrap items-center justify-between shrink-0 gap-4'):
             with ui.row().classes('items-center gap-3'):
                 ui.icon('smart_display', size='sm').classes('text-violet-400')
                 with ui.column().classes('gap-0'):
@@ -256,11 +256,11 @@ def render_generation_tab(state: 'AppState') -> None:
                 gen_spinner.visible = False
 
         # ── 2. MAIN PRODUCTION WORKSPACE ──
-        with ui.row().classes('w-full flex-grow overflow-hidden no-wrap gap-0'):
+        with ui.row().classes('w-full flex-grow overflow-visible lg:overflow-hidden gap-0'):
 
             # --- 2A. LEFT SIDE: WIDE PREVIEW MONITOR (자동 모드 시 메인, 수동 모드 시 숨김/작게) ---
             # 자동 모드와 수동 모드 모두의 통합 뷰어
-            with ui.column().classes('flex-grow h-full p-6 overflow-y-auto gap-5') as main_workspace_area:
+            with ui.column().classes('w-full flex-grow h-auto lg:h-full p-4 lg:p-6 overflow-visible lg:overflow-y-auto gap-5') as main_workspace_area:
 
                 # ── 대형 프리뷰 모니터 카드 (자동 생성 시 혹은 수동 편집 완료 시 띄움) ──
                 with ui.element('div').classes('w-full rounded-xl bg-slate-900 border border-slate-800 overflow-hidden flex flex-col shadow-xl') as preview_monitor_card:
@@ -327,8 +327,12 @@ def render_generation_tab(state: 'AppState') -> None:
                     scene_progress_container.visible = False
 
             # --- 2B. RIGHT SIDE: SCENE MANUAL GRID UPLOADER (수동 모드 시 화면 가득 활성화) ---
-            with ui.scroll_area().classes('flex-grow h-full bg-slate-950') as manual_uploader_area:
-                scene_cards_container = ui.grid(columns='repeat(auto-fill, minmax(320px, 1fr))').classes('w-full gap-4 p-6')
+            with ui.scroll_area().classes('w-full flex-grow h-auto lg:h-full bg-slate-950') as manual_uploader_area:
+                with ui.column().classes('w-full p-4 lg:p-6 gap-2') as manual_preview:
+                    ui.label('편집 결과 미리보기').classes('text-sm font-bold text-white')
+                    manual_video_player = ui.video(state.final_video_path or '').classes('w-full max-w-[220px] max-h-[360px] bg-black')
+                manual_preview.visible = bool(state.final_video_path)
+                scene_cards_container = ui.grid(columns='repeat(auto-fill, minmax(min(100%, 320px), 1fr))').classes('w-full gap-4 p-4 lg:p-6')
 
         # ── 3. VISIBILITY SWITCHING LOGIC ──
         def sync_layout_visibility():
@@ -424,12 +428,11 @@ def render_generation_tab(state: 'AppState') -> None:
                         type='positive',
                     )
 
-                    if video_player and state.final_video_path:
+                    if manual_clip_paths is not None:
+                        manual_video_player.set_source(state.final_video_path)
+                        manual_preview.visible = True
+                    elif video_player and state.final_video_path:
                         try:
-                            # 믹싱 성공 시 항상 프리뷰 모니터 영역으로 유도하여 재생
-                            state.manual_video_mode = False
-                            sync_layout_visibility()
-
                             video_player.set_source(state.final_video_path)
                             video_player.visible = True
                             if placeholder_content:
@@ -472,17 +475,3 @@ def render_generation_tab(state: 'AppState') -> None:
                 safe_notify("각본을 먼저 로드해주십시오.", type='warning')
                 return
             await _run_production_core(manual_clip_paths=clips)
-
-        # 우측 설정 패널에서 모드가 바뀌면 현재 탭의 레이아웃을 갱신합니다.
-        def check_mode_and_sync():
-            """글로벌 State의 manual_video_mode와 본 탭 레이아웃 상태를 유기적으로 감지 및 매핑"""
-            try:
-                # 상태가 불일치 시 UI 토글 동기화
-                is_manual = state.manual_video_mode
-                if is_manual != manual_uploader_area.visible:
-                    sync_layout_visibility()
-            except RuntimeError:
-                pass
-
-        # 1초 주기로 글로벌 모드 변경 감지 및 반응형 레이아웃 갱신
-        ui.timer(1.0, check_mode_and_sync)

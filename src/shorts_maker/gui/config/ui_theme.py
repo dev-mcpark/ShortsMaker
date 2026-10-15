@@ -31,9 +31,9 @@ HEADER_TEXT = 'text-base font-semibold text-white tracking-wide'
 LABEL_MUTED = 'text-xs text-slate-400 uppercase tracking-widest font-semibold'
 
 # Google AI Studio Specific Panel Styles
-SIDEBAR_LEFT = 'w-[70px] bg-slate-950 border-r border-slate-800 flex flex-col items-center py-4 justify-between shrink-0'
-WORKSPACE_CENTER = 'flex-grow h-full bg-slate-900/40 overflow-hidden flex flex-col'
-CONFIG_PANEL_RIGHT = 'w-[340px] bg-slate-950 border-l border-slate-800 h-full overflow-y-auto shrink-0 flex flex-col p-5'
+SIDEBAR_LEFT = 'w-full lg:w-[70px] bg-slate-950 border-b lg:border-b-0 lg:border-r border-slate-800 flex flex-row lg:flex-col items-center py-2 lg:py-4 justify-between shrink-0'
+WORKSPACE_CENTER = 'w-full lg:w-auto lg:flex-grow min-h-[520px] lg:min-h-0 lg:h-full bg-slate-900/40 overflow-hidden flex flex-col flex-nowrap'
+CONFIG_PANEL_RIGHT = 'w-full lg:w-[340px] bg-slate-950 border-t lg:border-t-0 lg:border-l border-slate-800 h-auto lg:h-full overflow-y-auto shrink-0 flex flex-col p-5'
 
 # Status Colors
 STATUS_COLORS = {

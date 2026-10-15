@@ -335,3 +335,7 @@ The owner found the source-checked Sillim diagram cards too large over otherwise
 ## 2026-10-14 — Make explanatory motion part of the generated shot
 
 The owner reviewed the smaller Sillim diagram approach and directed future work toward footage that explains the narration by itself. Retire editor-drawn relationship diagrams as the planned repair for generated scenes. For an explanatory Veo shot, the brief and returned raw clip must show the narrated spatial or causal relationship without voice, captions, or graphics. Editor text may still supply exact words, numbers, and source attribution. This reverses the earlier Sillim plan to accept abstract scene 3 and supply its floor arrangement only in the edit; the compact cut remains a local comparison, not an accepted production format. Keep the existing source and cost gates, and request a new ceiling before any replacement generation.
+
+## 2026-10-15 — Keep Studio estimates and manual mode aligned with production
+
+The script preview's visual estimate uses the same scene-mode and model-price functions as the production preflight, assuming one new output per scene before cache or manual reuse. The label names that scope so it cannot be mistaken for a total bill. Mode and source selections update the active view immediately. After a manual edit, keep manual mode selected while showing its finished preview; silently returning to automatic generation would misstate what the next action can spend. This UI contract does not change provider pricing, local budget reservations, or the owner's editorial gate.

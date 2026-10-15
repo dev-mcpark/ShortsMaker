@@ -20,9 +20,9 @@ schedule_manager = ScheduleManager()
 def render_scheduling_tab(state: 'AppState') -> None:
     """Schedule Management 탭 렌더링"""
 
-    with ui.row().classes('w-full h-full gap-6'):
+    with ui.row().classes('w-full h-auto lg:h-full gap-6 flex flex-col lg:flex-row flex-nowrap'):
         # === Left Panel: Create & Control ===
-        with ui.column().classes('w-96 min-w-[380px] gap-4'):
+        with ui.column().classes('w-full lg:w-96 gap-4'):
 
             # === Scheduler Status Card ===
             with ui.card().classes('w-full p-0 bg-slate-800 border border-slate-600 overflow-hidden'):
@@ -37,8 +37,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                 status_label = ui.label('Stopped').classes('text-lg font-bold text-white')
 
                         with ui.row().classes('gap-2'):
-                            start_btn = ui.button(icon='play_arrow').props('round color=white text-color=green-600 size=md')
-                            stop_btn = ui.button(icon='stop').props('round color=white text-color=red-600 size=md')
+                            start_btn = ui.button(icon='play_arrow').props('round color=white text-color=green-600 size=md aria-label="스케줄러 시작"')
+                            stop_btn = ui.button(icon='stop').props('round color=white text-color=red-600 size=md aria-label="스케줄러 중지"')
 
                 def update_status():
                     try:
@@ -76,7 +76,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                     # Schedule Name
                     with ui.column().classes('w-full gap-1 mb-4'):
                         ui.label('Schedule Name').classes('text-xs text-gray-400 uppercase tracking-wider')
-                        schedule_name = ui.input(value='Daily Tech News').props('outlined dense dark').classes('w-full')
+                        schedule_name = ui.input('Schedule Name', value='Daily Tech News').props('outlined dense dark').classes('w-full')
 
                     # Time & Frequency
                     with ui.row().classes('w-full gap-4 mb-4'):
@@ -86,12 +86,12 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                 hour_select = ui.select(
                                     options={str(i).zfill(2): str(i).zfill(2) for i in range(24)},
                                     value='09'
-                                ).props('outlined dense dark').classes('w-20')
+                                ).props('outlined dense dark aria-label="실행 시"').classes('w-20')
                                 ui.label(':').classes('text-xl text-gray-400 self-center')
                                 minute_select = ui.select(
                                     options={str(i).zfill(2): str(i).zfill(2) for i in range(0, 60, 5)},
                                     value='00'
-                                ).props('outlined dense dark').classes('w-20')
+                                ).props('outlined dense dark aria-label="실행 분"').classes('w-20')
 
                         with ui.column().classes('flex-grow gap-1'):
                             ui.label('Frequency').classes('text-xs text-gray-400 uppercase tracking-wider')
@@ -107,7 +107,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                     'Weekly (Sun)': '📆 Sun',
                                 },
                                 value='Daily'
-                            ).props('outlined dense dark').classes('w-full')
+                            ).props('outlined dense dark aria-label="반복 주기"').classes('w-full')
 
                     ui.separator().classes('bg-slate-600 my-4')
 
@@ -118,7 +118,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                         source_mode = ui.radio(
                             ['Auto-Discovery (RSS)', 'Direct URL'],
                             value='Auto-Discovery (RSS)'
-                        ).props('color=purple dense')
+                        ).props('color=purple size=32px')
 
                     topic_input = ui.input(
                         'Topic Keyword',
@@ -139,20 +139,20 @@ def render_scheduling_tab(state: 'AppState') -> None:
 
                     with ui.row().classes('w-full gap-4 mb-4'):
                         with ui.column().classes('gap-1'):
-                            ui.label('Mode').classes('text-xs text-gray-500')
+                            ui.label('Mode').classes('text-xs text-gray-300')
                             with ui.button_group().props('rounded'):
                                 mode_hybrid_btn = ui.button(
                                     'HYBRID',
                                     on_click=lambda: mode_select.set_value('hybrid')
-                                ).props('color=purple size=sm')
+                                ).props('color=purple-9 size=sm')
                                 mode_img_btn = ui.button(
                                     'IMAGE',
                                     on_click=lambda: mode_select.set_value('image')
-                                ).props('outline color=purple size=sm')
+                                ).props('outline color=purple-3 size=sm')
                                 mode_vid_btn = ui.button(
                                     'VIDEO',
                                     on_click=lambda: mode_select.set_value('video')
-                                ).props('outline color=purple size=sm')
+                                ).props('outline color=purple-3 size=sm')
                             mode_select = ui.radio(['hybrid', 'image', 'video'], value='hybrid').classes('hidden')
 
                             def update_mode_btns():
@@ -161,12 +161,14 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                     ('image', mode_img_btn),
                                     ('video', mode_vid_btn),
                                 ):
-                                    button.props(remove='outline' if mode_select.value == value else '',
-                                                 add='' if mode_select.value == value else 'outline')
+                                    if mode_select.value == value:
+                                        button.props(remove='outline color=purple-3', add='color=purple-9')
+                                    else:
+                                        button.props(remove='color=purple-9', add='outline color=purple-3')
                             mode_select.on_value_change(lambda: update_mode_btns())
 
                         with ui.column().classes('gap-1'):
-                            ui.label('YouTube').classes('text-xs text-gray-500')
+                            ui.label('YouTube').classes('text-xs text-gray-300')
                             auto_upload_check = ui.switch('Private Auto-Upload').props('color=red dense')
 
                     # Create Button
@@ -194,10 +196,10 @@ def render_scheduling_tab(state: 'AppState') -> None:
                     ui.button(
                         'Create Schedule',
                         on_click=create_schedule
-                    ).classes('w-full').props('color=purple unelevated icon=add size=lg')
+                    ).classes('w-full').props('color=purple-9 unelevated icon=add size=lg')
 
         # === Right Panel: Schedule List & History ===
-        with ui.column().classes('flex-grow gap-4'):
+        with ui.column().classes('w-full lg:w-auto lg:flex-grow min-w-0 gap-4'):
 
             # === Active Schedules Section ===
             with ui.card().classes('w-full p-0 bg-slate-800 border border-slate-600 overflow-hidden'):
@@ -207,7 +209,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                             ui.icon('event_available', size='sm').classes('text-teal-400')
                             ui.label('Active Schedules').classes('text-lg font-bold text-white')
 
-                        schedule_count_badge = ui.badge('0').classes('bg-teal-600 text-white')
+                        schedule_count_badge = ui.badge('0').props('color=teal-9 text-color=white')
 
                 @ui.refreshable
                 def schedule_list():
@@ -220,8 +222,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                     if not schedules:
                         with ui.element('div').classes('p-8'):
                             with ui.column().classes('items-center gap-3'):
-                                ui.icon('event_busy', size='xl').classes('text-slate-600')
-                                ui.label('No schedules configured').classes('text-gray-500')
+                                ui.icon('event_busy', size='xl').classes('text-slate-400')
+                                ui.label('No schedules configured').classes('text-gray-300')
                                 ui.label('Create your first schedule to automate video production').classes('text-xs text-gray-600')
                         return
 
@@ -237,7 +239,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                 if enabled:
                                     card_class += 'bg-gradient-to-r from-slate-700 to-slate-700/50 border-teal-500/30 hover:border-teal-500/60'
                                 else:
-                                    card_class += 'bg-slate-800/50 border-slate-700 opacity-60'
+                                    card_class += 'bg-slate-800/50 border-slate-700'
 
                                 with ui.card().classes(card_class):
                                     with ui.row().classes('w-full items-center justify-between'):
@@ -250,11 +252,11 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 ui.label(schedule['name']).classes('font-bold text-white text-lg')
 
                                                 mode = schedule.get('mode', 'image')
-                                                mode_color = 'bg-purple-600' if mode == 'video' else 'bg-teal-600' if mode == 'hybrid' else 'bg-blue-600'
-                                                ui.badge(mode.upper()).classes(f'{mode_color} text-white text-xs px-2')
+                                                mode_color = 'purple-9' if mode == 'video' else 'teal-9' if mode == 'hybrid' else 'blue-9'
+                                                ui.badge(mode.upper()).props(f'color={mode_color} text-color=white').classes('text-xs px-2')
 
                                                 if schedule.get('auto_upload'):
-                                                    ui.badge('YouTube').classes('bg-red-600 text-white text-xs px-2')
+                                                    ui.badge('YouTube').props('color=red-9 text-color=white').classes('text-xs px-2')
 
                                             with ui.row().classes('gap-4'):
                                                 with ui.row().classes('items-center gap-1'):
@@ -279,10 +281,23 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 safe_refresh(history_list)
 
                                             def delete_schedule(sid=schedule['id'], sname=schedule['name']):
-                                                schedule_manager.delete_schedule(sid)
-                                                safe_notify(f"🗑️ Deleted: {sname}", type='warning')
-                                                safe_refresh(schedule_list)
-                                                safe_refresh(history_list)
+                                                with ui.dialog() as dialog, ui.card():
+                                                    ui.label(f'{sname} 일정을 삭제할까요?')
+                                                    with ui.row():
+                                                        ui.button('취소', on_click=dialog.close)
+
+                                                        def confirm():
+                                                            try:
+                                                                schedule_manager.delete_schedule(sid)
+                                                                dialog.close()
+                                                                safe_notify(f'일정 삭제됨: {sname}', type='warning')
+                                                                safe_refresh(schedule_list)
+                                                                safe_refresh(history_list)
+                                                            except (OSError, ValueError) as error:
+                                                                safe_notify(f'삭제 실패: {error}', type='negative')
+
+                                                        ui.button('삭제', on_click=confirm).props('color=red')
+                                                dialog.open()
 
                                             toggle_icon = 'pause' if enabled else 'play_arrow'
                                             toggle_color = 'amber' if enabled else 'green'
@@ -290,12 +305,12 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                             ui.button(
                                                 icon=toggle_icon,
                                                 on_click=toggle_schedule
-                                            ).props(f'round size=md color={toggle_color}').tooltip(toggle_tip)
+                                            ).props(f'round size=md color={toggle_color} aria-label="일정 {"일시정지" if enabled else "재개"}"').tooltip(toggle_tip)
 
                                             ui.button(
                                                 icon='delete_outline',
                                                 on_click=delete_schedule
-                                            ).props('round size=md flat color=red').tooltip('Delete')
+                                            ).props('round size=md flat color=red aria-label="일정 삭제"').tooltip('Delete')
 
                 schedule_list()
 
@@ -315,8 +330,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                     if not run_schedules:
                         with ui.element('div').classes('p-8'):
                             with ui.column().classes('items-center gap-3'):
-                                ui.icon('hourglass_empty', size='xl').classes('text-slate-600')
-                                ui.label('No execution history yet').classes('text-gray-500')
+                                ui.icon('hourglass_empty', size='xl').classes('text-slate-400')
+                                ui.label('No execution history yet').classes('text-gray-300')
                                 ui.label('History will appear after schedules run').classes('text-xs text-gray-600')
                         return
 
@@ -339,12 +354,11 @@ def render_scheduling_tab(state: 'AppState') -> None:
 
                                             with ui.column().classes('gap-0'):
                                                 ui.label(schedule['name']).classes('text-sm font-medium text-white')
-                                                ui.label(schedule.get('last_run', '')[:19].replace('T', ' ')).classes('text-xs text-gray-500')
+                                                ui.label(schedule.get('last_run', '')[:19].replace('T', ' ')).classes('text-xs text-gray-300')
 
                                         with ui.row().classes('items-center gap-2'):
-                                            ui.badge(f'#{run_count}').classes('bg-slate-600 text-gray-300 text-xs')
-                                            result_badge_class = 'bg-green-600' if is_success else 'bg-red-600'
-                                            ui.badge(last_result[:15]).classes(f'{result_badge_class} text-white text-xs')
+                                            ui.badge(f'#{run_count}').props('color=blue-grey-8 text-color=white').classes('text-xs')
+                                            ui.badge(last_result[:15]).props(f'color={"green-9" if is_success else "red-9"} text-color=white').classes('text-xs')
 
                 history_list()
 

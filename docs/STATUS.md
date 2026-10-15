@@ -1,6 +1,6 @@
 # Current status
 
-Updated: 2026-10-14. This file owns the active milestone and known limits. Code and tests remain the final evidence.
+Updated: 2026-10-15. This file owns the active milestone and known limits. Code and tests remain the final evidence.
 
 ## Goal and milestones
 
@@ -12,6 +12,8 @@ Updated: 2026-10-14. This file owns the active milestone and known limits. Code 
 | 4. Outcome feedback | Offline path ready; live data pending | Private CSV scorecard computes separate paired and editorial-cut acceptance/cost, plus matched paired seven-day views, watch time, and revenue. No new published videos or analytics read scope/data exist yet. |
 
 ## Current evidence and limits
+
+- On 2026-10-15, the [Studio UI and code review](UI_UX_REVIEW.md) covered script planning, visual preview and manual uploads, pipeline console, RSS sources, scheduler, publishing, and settings. A 375px screen no longer hides the workspace and a 1440px screen keeps function content in the center pane; source-mode and cost displays react to selection; visual cost uses the shared model rates instead of a fixed per-scene guess. Accessible control names, touch targets, contrast, deletion confirmations, and upload validation were improved. A saved script was loaded locally and its hybrid/image visual estimate changed from $0.650 to $0.204. The standard offline suite passed 150 tests. This work made no paid API request or YouTube upload; live source/schedule deletion was not exercised, and no new generated-footage quality verdict was obtained. The production milestone above is unchanged.
 
 - On 2026-10-14, the owner said the compact Sillim overlays are not the path forward: future footage itself should make the explanation understandable. The five prior Veo requests remain closed, and this feedback is **not** approval of the compact cut, a replacement call, or an upload. The next test is a source-safe, unlettered native cutaway of scene 3, judged on the returned raw clip muted with captions hidden before any edit. The planner and source validator now explicitly reject a visual plan that delegates its core relationship to editor graphics; these are prompt checks, not computer-vision verification of an output. The revised [scene brief and raw-clip criteria](SILLIM_VISUAL_ALIGNMENT_REVIEW.md) must be reviewed with a fresh cost ceiling before any paid request. All 149 offline tests pass; no new API call or upload ran for this change.
 

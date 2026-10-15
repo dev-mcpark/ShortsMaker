@@ -65,21 +65,21 @@ def render_pipeline_tab(
             pass
 
     # 중앙 가변 영역에 최적화된 2단 레이아웃
-    with ui.row().classes('w-full h-full gap-5 overflow-hidden no-wrap bg-slate-950'):
+    with ui.row().classes('w-full h-auto lg:h-full gap-5 flex flex-col lg:flex-row flex-nowrap overflow-visible lg:overflow-hidden bg-slate-950'):
 
         # =====================================================================
         # === 1. LEFT PANEL: CONTROLS & STATUS (320px 고정폭) ===
         # =====================================================================
-        with ui.column().classes('w-80 min-w-[320px] bg-slate-900 border-r border-slate-800 p-5 gap-4 overflow-y-auto shrink-0'):
+        with ui.column().classes('w-full lg:w-80 bg-slate-900 border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:p-5 gap-4 overflow-visible lg:overflow-y-auto shrink-0'):
 
             # --- Pipeline Control ---
             with ui.column().classes('w-full gap-2.5'):
-                ui.label('콘텐츠 소스 입력').classes('text-[10px] text-slate-500 font-bold uppercase tracking-widest')
+                ui.label('콘텐츠 소스 입력').classes('text-[10px] text-slate-400 font-bold uppercase tracking-widest')
 
                 source_mode = ui.radio(
                     ['Auto (RSS)', 'Direct URL'],
                     value='Auto (RSS)'
-                ).props('color=violet dense').classes('text-xs text-slate-300 gap-4 mb-1')
+                ).props('color=violet size=32px').classes('text-xs text-slate-300 gap-4 mb-1')
 
                 topic_input = ui.input(
                     'RSS 토픽 키워드',
@@ -97,7 +97,7 @@ def render_pipeline_tab(
 
             # --- Options ---
             with ui.column().classes('w-full gap-2'):
-                ui.label('퍼블리싱 & 하이퍼파라미터').classes('text-[10px] text-slate-500 font-bold uppercase tracking-widest')
+                ui.label('퍼블리싱 & 하이퍼파라미터').classes('text-[10px] text-slate-400 font-bold uppercase tracking-widest')
 
                 auto_upload = ui.switch('유튜브에 비공개 자동 업로드').props('color=red dense').classes('text-xs text-slate-400')
                 parallel_clips = ui.switch('미디어 병렬 고속 생성').props('color=violet dense').classes('text-xs text-slate-400')
@@ -142,7 +142,7 @@ def render_pipeline_tab(
                 for label in phase_labels.values():
                     try:
                         label.text = '대기 중'
-                        label.classes(remove='text-violet-400 text-teal-400 text-rose-400', add='text-slate-500')
+                        label.classes(remove='text-violet-400 text-teal-400 text-rose-400', add='text-slate-400')
                     except RuntimeError:
                         pass
 
@@ -157,7 +157,7 @@ def render_pipeline_tab(
                     with scene_grid:
                         with ui.column().classes('w-full items-center justify-center py-8'):
                             ui.icon('burst_mode', size='md').classes('text-slate-700')
-                            ui.label('생성된 씬 클립들이 여기에 실시간 표시됩니다').classes('text-xs text-slate-500')
+                            ui.label('생성된 씬 클립들이 여기에 실시간 표시됩니다').classes('text-xs text-slate-400')
                 except RuntimeError:
                     pass
 
@@ -192,10 +192,10 @@ def render_pipeline_tab(
                                 try:
                                     if 0 < progress.progress_percent < 100:
                                         phase_labels[phase_key].text = f'{progress.progress_percent:.0f}% 진행'
-                                        phase_labels[phase_key].classes(remove='text-slate-500 text-violet-400', add='text-teal-400')
+                                        phase_labels[phase_key].classes(remove='text-slate-400 text-violet-400', add='text-teal-400')
                                     elif progress.progress_percent >= 100:
                                         phase_labels[phase_key].text = '✓ 완료'
-                                        phase_labels[phase_key].classes(remove='text-slate-500 text-teal-400', add='text-violet-400 font-bold')
+                                        phase_labels[phase_key].classes(remove='text-slate-400 text-teal-400', add='text-violet-400 font-bold')
                                 except RuntimeError:
                                     pass
 
@@ -333,24 +333,24 @@ def render_pipeline_tab(
                 start_btn = ui.button(
                     '실행 시작',
                     on_click=run_full_pipeline
-                ).classes('flex-grow font-bold text-xs py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600').props('unelevated icon=play_arrow')
+                ).classes('flex-grow font-bold text-xs py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600').props('color=purple-9 unelevated icon=play_arrow')
 
-                stop_btn = ui.button(on_click=stop_pipeline).props('flat round color=red icon=stop').classes('bg-slate-800/80')
+                stop_btn = ui.button(on_click=stop_pipeline).props('flat round color=red icon=stop aria-label="파이프라인 중단"').classes('bg-slate-800/80')
                 stop_btn.disable()
 
             ui.separator().classes('bg-slate-800 my-1')
 
             # --- Live Progress Monitor ---
             with ui.column().classes('w-full gap-2 p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl'):
-                ui.label('콘솔 모니터').classes('text-[10px] text-slate-500 font-bold uppercase tracking-widest')
+                ui.label('콘솔 모니터').classes('text-[10px] text-slate-400 font-bold uppercase tracking-widest')
 
                 with ui.row().classes('w-full justify-between items-center px-1'):
                     with ui.column().classes('items-start gap-0.5'):
                         elapsed_label = ui.label('00:00').classes('text-lg font-bold text-white font-mono')
-                        ui.label('경과 시간').classes('text-[10px] text-slate-500 font-semibold')
+                        ui.label('경과 시간').classes('text-[10px] text-slate-400 font-semibold')
                     with ui.column().classes('items-end gap-0.5'):
                         scenes_label = ui.label('0/0 씬').classes('text-lg font-bold text-violet-400')
-                        ui.label('완료 진행도').classes('text-[10px] text-slate-500 font-semibold')
+                        ui.label('완료 진행도').classes('text-[10px] text-slate-400 font-semibold')
 
                 current_task_label = ui.label('대기 중...').classes(
                     'text-[10px] text-slate-400 font-mono truncate w-full text-center py-2 px-1 bg-slate-900 border border-slate-800/80 rounded'
@@ -359,7 +359,7 @@ def render_pipeline_tab(
             # --- Recent Runs (Execution History) ---
             with ui.column().classes('w-full gap-2 mt-1'):
                 with ui.row().classes('w-full items-center justify-between'):
-                    ui.label('최근 실행 이력').classes('text-[10px] text-slate-500 font-bold uppercase tracking-widest')
+                    ui.label('최근 실행 이력').classes('text-[10px] text-slate-400 font-bold uppercase tracking-widest')
                     history_count_badge = ui.badge('0').classes('bg-slate-800 text-slate-400 text-[10px] border border-slate-700 px-1.5')
 
                 @ui.refreshable
@@ -372,7 +372,7 @@ def render_pipeline_tab(
 
                     if not history:
                         with ui.element('div').classes('w-full py-4 text-center border border-dashed border-slate-800 rounded-lg'):
-                            ui.label('기록 없음').classes('text-[11px] text-slate-600')
+                            ui.label('기록 없음').classes('text-[11px] text-slate-400')
                         return
 
                     with ui.scroll_area().classes('h-36 w-full'):
@@ -387,7 +387,7 @@ def render_pipeline_tab(
                                         with ui.column().classes('gap-0 overflow-hidden'):
                                             title = run.get('title', '자동 완성 쇼츠')[:14]
                                             ui.label(title).classes('text-xs text-white font-medium truncate')
-                                            ui.label(run.get('timestamp', '')).classes('text-[9px] text-slate-500 font-mono')
+                                            ui.label(run.get('timestamp', '')).classes('text-[9px] text-slate-400 font-mono')
 
                                         if is_success:
                                             ui.icon('check_circle', size='xs').classes('text-violet-400')
@@ -410,7 +410,7 @@ def render_pipeline_tab(
         # =====================================================================
         # === 2. RIGHT PANEL: PROGRESS GRID & PREVIEW (가변폭) ===
         # =====================================================================
-        with ui.column().classes('flex-grow h-full p-6 overflow-y-auto gap-5'):
+        with ui.column().classes('w-full lg:w-auto lg:flex-grow min-w-0 h-auto lg:h-full p-4 lg:p-6 overflow-visible lg:overflow-y-auto gap-5'):
 
             # --- 2A. Pipeline Milestone Progress Bar (진행 이정표) ---
             with ui.element('div').classes('w-full rounded-xl bg-slate-900 border border-slate-800 p-5'):
@@ -432,9 +432,9 @@ def render_pipeline_tab(
                                     ui.icon(phase_icon, size='xs').classes(f'text-{phase_color}-400')
                                 ui.label(phase_name).classes('text-xs font-bold text-slate-300')
 
-                            progress_bars[phase_key] = ui.linear_progress(value=0, show_value=False).props(f'color={phase_color} rounded size=4px').classes('w-full mt-1.5')
+                            progress_bars[phase_key] = ui.linear_progress(value=0, show_value=False).props(f'color={phase_color} rounded size=4px aria-label="{phase_name}"').classes('w-full mt-1.5')
 
-                            with ui.row().classes('w-full items-center justify-between text-[10px] text-slate-500 mt-1'):
+                            with ui.row().classes('w-full items-center justify-between text-[10px] text-slate-400 mt-1'):
                                 phase_labels[phase_key] = ui.label('대기 중').classes('font-semibold')
                                 phase_time_labels[phase_key] = ui.label('')
 
@@ -449,8 +449,8 @@ def render_pipeline_tab(
                 with scene_grid:
                     with ui.column().classes('w-full items-center justify-center col-span-full py-12'):
                         ui.icon('burst_mode', size='lg').classes('text-slate-800')
-                        ui.label('대기 중').classes('text-sm font-bold text-slate-500')
-                        ui.label('파이프라인이 기획 씬 분석을 통과하면 상황판이 격자 배열됩니다').classes('text-xs text-slate-600 mt-1')
+                        ui.label('대기 중').classes('text-sm font-bold text-slate-400')
+                        ui.label('파이프라인이 기획 씬 분석을 통과하면 상황판이 격자 배열됩니다').classes('text-xs text-slate-400 mt-1')
 
             # --- 2C. 에러 알림 박스 (실패 시에만 보임) ---
             error_panel = ui.element('div').classes('w-full rounded-xl p-4 bg-rose-950/20 border border-rose-500/30 flex items-start gap-3 shadow-lg')
@@ -469,8 +469,8 @@ def render_pipeline_tab(
                     # Placeholder
                     with ui.column().classes('items-center gap-2 z-10') as preview_placeholder:
                         ui.icon('videocam_off', size='lg').classes('text-slate-700')
-                        ui.label('미리보기 없음').classes('text-xs font-bold text-slate-500')
-                        ui.label('생성 프로세스 완료 시 여기에 믹싱된 영상이 노출됩니다').classes('text-[10px] text-slate-600')
+                        ui.label('미리보기 없음').classes('text-xs font-bold text-slate-400')
+                        ui.label('생성 프로세스 완료 시 여기에 믹싱된 영상이 노출됩니다').classes('text-[10px] text-slate-400')
 
                     # Video Player
                     video_preview = ui.video('').classes('max-h-full max-w-[200px] h-full shadow-2xl rounded bg-black')

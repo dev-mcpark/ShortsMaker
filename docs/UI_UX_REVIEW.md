@@ -1,0 +1,19 @@
+# Studio UI and code review
+
+Reviewed: 2026-10-15. Scope: the NiceGUI Studio on a local browser with `PAID_PRODUCTION_ENABLED=false`; no paid generation, scheduler start, or YouTube upload.
+
+| Function | Checked | Issue resolved |
+| --- | --- | --- |
+| Studio script editor | Saved script load, scene preview, hybrid/image cost change | Fixed per-scene dollar guess replaced by configured scene/model estimate; narrow and desktop pane layout plus low-contrast controls repaired. |
+| Visual preview and manual uploads | Automatic/manual switch, six scene cards from a saved script, empty and loaded states | Switch now refreshes the view immediately; manual edit keeps its source selection and exposes the finished preview. |
+| Pipeline console | Source/options form, progress stages, history, preview empty state | Narrow layout, progressbar names, input target size, and status contrast repaired. |
+| RSS sources | Add form, recommended feeds, current list and action labels | Invalid URL/file errors surface without clearing input; category removal requires confirmation; narrow layout and contrast repaired. |
+| Scheduler | Create form, active list, history and status controls | Schedule controls gained names; deletion requires confirmation; disabled cards remain legible on narrow screens. |
+| Publishing | Metadata form, AI disclosure choice, disabled upload without a video | Blank title rejected; duplicate upload click guarded; empty tags excluded, failures shown, and form fills its card. |
+| Shared settings/navigation | Mode and source selectors, voice/music fields, mobile navigation | Labels and touch targets improved; current script title follows session state; desktop phase indicators are visible while mobile navigation stays reachable. |
+
+The browser check used 375×812 and 1440×900 viewports plus a saved local script. Its visual estimate changed from $0.650 in hybrid mode to $0.204 in image mode. The document width stayed 375px in manual scene and scheduler views; desktop workspace content stayed inside its center pane after a flex-wrap repair. Final mobile Lighthouse snapshots scored 100 for accessibility in Studio, Console, Sources, Cron, and Publish. Automatic scoring is only a partial accessibility check. The standard offline suite passed 150 tests.
+
+The connected code-path review traced script loading into `AppState`, generation into `ProductionService` and `VideoGenerator`, the shared `visual_cost` and Google budget checks, editor quality checks, schedule dispatch, and YouTube upload validation. The UI changes keep those service gates in place. Repository assets remain separate from source code; no vendored runtime was added. The offline suite checks the service paths, while this browser pass checks layout and read-only controls.
+
+Boundaries: paid planning, narration, Veo/Gemini generation, actual file upload, scheduler execution, RSS mutation, and YouTube delivery were not run. A live click on an existing category's delete action was blocked by automatic approval review because it could change the user's source settings, so its confirmation is covered by code review only. The existing production and editorial gates remain required before publication. Lighthouse SEO's missing meta description is low priority for this local-only application; it does not affect the workflow.

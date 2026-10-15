@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.generator.video_generator import VideoGenerator
+from shorts_maker.gui.components.planning_tab import estimate_new_visual_cost
 from shorts_maker.gui.state.app_state import AppState
 from shorts_maker.planner.models import ScriptGenerationContext, TopicCandidate
 from shorts_maker.planner.script_planner import ScriptPlanner
@@ -28,6 +29,18 @@ class WorkflowTests(unittest.TestCase):
         budget = patch.object(settings, "google_monthly_budget_krw", None)
         budget.start()
         self.addCleanup(budget.stop)
+
+    def test_script_preview_uses_selected_visual_mode_and_model_duration(self):
+        script = SimpleNamespace(scenes=[
+            SimpleNamespace(visual_mode='video'),
+            SimpleNamespace(visual_mode='image'),
+        ])
+        with patch.object(settings, 'veo_model_id', 'veo-3.1-lite-generate-001'), \
+                patch.object(settings, 'veo_duration_seconds', 8), \
+                patch.object(settings, 'hybrid_veo_duration_seconds', 6):
+            self.assertAlmostEqual(estimate_new_visual_cost(script, 'image'), 0.068)
+            self.assertAlmostEqual(estimate_new_visual_cost(script, 'hybrid'), 0.214)
+            self.assertAlmostEqual(estimate_new_visual_cost(script, 'video'), 0.48)
 
     def test_topic_scoring_asks_for_stakes_and_source_supported_payoff(self):
         planner = object.__new__(ScriptPlanner)

@@ -48,6 +48,7 @@ class AppState:
     scene_clips: List[str] = field(default_factory=list)
     generated_clips: List[str] = field(default_factory=list)
     final_video_path: Optional[str] = None
+    youtube_upload_in_progress: bool = False
 
     # Service Reference (lazy init via property)
     _production_service: Optional["ProductionService"] = field(default=None, repr=False)

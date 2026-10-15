@@ -5,9 +5,9 @@ from nicegui import ui
 from typing import TYPE_CHECKING
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify
-from shorts_maker.gui.config.constants import SCENE_COST_MULTIPLIER
 from shorts_maker.gui.config.ui_theme import SCENE_GRADIENTS
 from shorts_maker.planner.script_planner import ShortsScript
+from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.logger import get_logger
 
@@ -24,6 +24,17 @@ ACCENT_COLORS = [
     ('from-teal-500', 'to-emerald-600', 'border-teal-500/30', 'text-teal-300'),
     ('from-amber-500', 'to-orange-600', 'border-amber-500/30', 'text-amber-300'),
 ]
+
+
+def estimate_new_visual_cost(script: ShortsScript, mode: str) -> float:
+    """Upper estimate before cache/manual reuse, using the production model and durations."""
+    total = 0.0
+    for index, scene in enumerate(script.scenes):
+        visual_mode = scene_mode(mode, scene, index)
+        model = settings.veo_model_id if visual_mode == 'video' else settings.image_model_id
+        duration = settings.hybrid_veo_duration_seconds if mode == 'hybrid' else settings.veo_duration_seconds
+        total += estimated_scene_cost(visual_mode, model, duration)
+    return total
 
 
 def render_planning_tab(state: 'AppState') -> None:
@@ -43,8 +54,8 @@ def render_planning_tab(state: 'AppState') -> None:
                 with ui.element('div').classes('w-full h-full flex items-center justify-center py-20'):
                     with ui.column().classes('items-center gap-4'):
                         ui.icon('auto_stories', size='xl').classes('text-slate-700')
-                        ui.label('각본이 아직 기획되지 않았습니다').classes('text-lg font-bold text-slate-500')
-                        ui.label('좌측 패널의 생성 컨트롤러를 통해 새로운 주제로 각본을 기획하세요.').classes('text-xs text-slate-600')
+                        ui.label('각본이 아직 기획되지 않았습니다').classes('text-lg font-bold text-slate-300')
+                        ui.label('각본 생성 컨트롤에서 주제를 정하고 각본을 기획하세요.').classes('text-xs text-slate-400')
             return
 
         script = state.script
@@ -142,19 +153,25 @@ def render_planning_tab(state: 'AppState') -> None:
                         (str(len(script.scenes)), 'Scenes', 'text-white'),
                         (f'{total_duration:.1f}', 'Seconds', 'text-emerald-400'),
                         (f'{total_duration/60:.1f}', 'Minutes', 'text-violet-400'),
-                        (f'${len(script.scenes) * SCENE_COST_MULTIPLIER:.2f}', 'Estimated Cost', 'text-amber-400'),
                     ]:
                         with ui.column().classes('items-center gap-1'):
                             ui.label(val).classes(f'text-xl font-extrabold {color} tracking-tight')
                             ui.label(label).classes('text-[10px] text-slate-500 uppercase tracking-wider font-bold')
-                        if label != 'Estimated Cost':
-                            ui.element('div').classes('w-px h-6 bg-slate-800')
+                        ui.element('div').classes('w-px h-6 bg-slate-800')
+                    with ui.column().classes('items-center gap-1'):
+                        def cost_label(mode: str) -> str:
+                            try:
+                                return f'${estimate_new_visual_cost(script, mode):.3f}'
+                            except ValueError:
+                                return '가격 미등록'
+                        ui.label().bind_text_from(state, 'mode', backward=cost_label).classes('text-xl font-extrabold text-amber-400 tracking-tight')
+                        ui.label('새 비주얼 출력 추정').classes('text-[10px] text-slate-500 font-bold')
 
     # ── 메인 레이아웃 ────────────────────────────────────────
-    with ui.row().classes('w-full h-full gap-0 overflow-hidden flex-nowrap'):
+    with ui.row().classes('w-full h-auto lg:h-full gap-0 flex flex-col lg:flex-row flex-nowrap overflow-visible lg:overflow-hidden'):
 
         # === Left Panel: 각본 생성 컨트롤 ===
-        with ui.column().classes('w-80 min-w-[320px] bg-slate-950/50 border-r border-slate-800 p-5 gap-4 h-full overflow-y-auto shrink-0'):
+        with ui.column().classes('w-full lg:w-80 bg-slate-950/50 border-b lg:border-b-0 lg:border-r border-slate-800 p-4 lg:p-5 gap-4 h-auto lg:h-full overflow-visible lg:overflow-y-auto shrink-0'):
 
 
             # 타이틀
@@ -164,12 +181,12 @@ def render_planning_tab(state: 'AppState') -> None:
 
             # 소스 선택
             with ui.element('div').classes('w-full rounded-xl bg-slate-900/60 border border-slate-600 p-4'):
-                ui.label('소스 방식').classes('text-xs text-gray-500 uppercase tracking-wider mb-3')
+                ui.label('소스 방식').classes('text-xs text-gray-300 uppercase tracking-wider mb-3')
 
                 source_mode = ui.radio(
                     ['RSS 자동 발견', '직접 URL 입력'],
                     value='RSS 자동 발견'
-                ).props('color=pink dense').classes('w-full mb-3')
+                ).props('color=pink size=32px').classes('w-full mb-3')
 
                 url_input = ui.input(
                     '기사 URL',
@@ -234,7 +251,7 @@ def render_planning_tab(state: 'AppState') -> None:
                 ui.button(
                     '각본 생성하기',
                     on_click=generate_script
-                ).classes('w-full mt-2').props('color=pink unelevated icon=auto_awesome size=md')
+                ).classes('w-full mt-2').props('color=pink-9 unelevated icon=auto_awesome size=md')
 
             # 저장된 각본 불러오기
             with ui.element('div').classes('w-full rounded-xl bg-slate-900/60 border border-slate-600 p-4'):
@@ -280,7 +297,7 @@ def render_planning_tab(state: 'AppState') -> None:
                     ui.label(f'{script_dir} 폴더 없음').classes('text-xs text-gray-600')
 
             # JSON 편집기 (고급)
-            with ui.expansion('JSON 편집기', icon='code').classes('w-full').props('header-class="text-xs text-gray-500 px-0"'):
+            with ui.expansion('JSON 편집기', icon='code').classes('w-full').props('header-class="text-xs text-gray-300 px-0"'):
                 editor_area = ui.textarea().classes('w-full font-mono text-xs bg-slate-900 text-green-300 p-2 rounded').props('outlined rows=10')
 
                 def save_script():
@@ -298,7 +315,7 @@ def render_planning_tab(state: 'AppState') -> None:
                     except Exception as e:
                         safe_notify(f'JSON 오류: {e}', type='negative')
 
-                ui.button('적용', on_click=save_script).props('flat color=green icon=save dense').classes('w-full mt-1')
+                ui.button('적용', on_click=save_script).props('flat color=green-4 icon=save dense').classes('w-full mt-1')
 
             # 피드백 섹션 (스크립트 생성 후 표시)
             with ui.element('div').classes('w-full rounded-xl bg-slate-900/60 border border-orange-500/30 p-4') as feedback_section:
@@ -374,10 +391,10 @@ def render_planning_tab(state: 'AppState') -> None:
                 ui.button(
                     '각본 확인 완료 →',
                     on_click=confirm_script
-                ).classes('w-full').props('color=green unelevated icon=check_circle size=md')
+                ).classes('w-full').props('color=green-9 unelevated icon=check_circle size=md')
 
         # === Right Panel: 주제 후보 + 각본 미리보기 ===
-        with ui.column().classes('flex-grow h-full overflow-hidden flex flex-col'):
+        with ui.column().classes('w-full lg:w-auto lg:flex-grow min-w-0 min-h-[400px] lg:h-full overflow-hidden flex flex-col flex-nowrap'):
 
             # 주제 후보 패널 (접힘 가능)
             candidates_container = None
@@ -419,7 +436,7 @@ def render_planning_tab(state: 'AppState') -> None:
                     status_dot_class = 'w-2 h-2 rounded-full bg-green-400' if state.script else 'w-2 h-2 rounded-full bg-gray-600'
                     ui.element('div').classes(status_dot_class)
 
-                ui.button(icon='refresh', on_click=update_script_preview).props('flat round color=gray dense size=sm')
+                ui.button(icon='refresh', on_click=update_script_preview).props('flat round color=gray dense size=sm aria-label="각본 미리보기 새로고침"')
 
             # 미리보기 스크롤 영역 — flex-grow로 남은 높이 모두 차지
             with ui.scroll_area().classes('w-full flex-grow'):
