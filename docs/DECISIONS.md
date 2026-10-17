@@ -339,3 +339,7 @@ The owner reviewed the smaller Sillim diagram approach and directed future work 
 ## 2026-10-15 — Keep Studio estimates and manual mode aligned with production
 
 The script preview's visual estimate uses the same scene-mode and model-price functions as the production preflight, assuming one new output per scene before cache or manual reuse. The label names that scope so it cannot be mistaken for a total bill. Mode and source selections update the active view immediately. After a manual edit, keep manual mode selected while showing its finished preview; silently returning to automatic generation would misstate what the next action can spend. This UI contract does not change provider pricing, local budget reservations, or the owner's editorial gate.
+
+## 2026-10-18 — Bind reviewed factual labels to their exact scene clips
+
+The first local cut with replacement Sillim scene 3 applied floor labels at positions reviewed for the older Veo shot, so those labels pointed above the new levels. An optional `_clip_sha256` map in a local cue sheet binds each labeled scene to its reviewed MP4. `scripts/local_review.py` checks all bindings before rendering and passes only cues to the editor and sidecar. Existing unbound sheets still load, while the tracked five-scene Sillim sheet and the ignored replacement override use bindings. A new shot requires a new placement review and hash, not just a changed filename; matching hashes cannot replace human playback or source checking.

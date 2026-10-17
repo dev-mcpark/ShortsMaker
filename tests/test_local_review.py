@@ -1,6 +1,7 @@
 """The local review command must fail before production when an input is incomplete."""
 
 import asyncio
+import hashlib
 import json
 import tempfile
 import unittest
@@ -23,7 +24,7 @@ class LocalReviewTests(unittest.TestCase):
             path = Path(directory) / "overlays.json"
             cues = {"1": [{"text": "AI 설명용 영상", "start": 0, "x": 60, "y": 75}]}
             path.write_text(json.dumps(cues), encoding="utf-8")
-            overlays = load_text_overlays(path, script)
+            overlays = load_text_overlays(path, script, Path(directory))
             editor = VideoEditor(bgm_volume=0, text_overlays=overlays)
             clips = editor._create_text_overlay_clips(1, 2.0)
             try:
@@ -37,18 +38,41 @@ class LocalReviewTests(unittest.TestCase):
             cues["1"][0]["end"] = 3
             path.write_text(json.dumps(cues), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "시간 또는 위치"):
-                VideoEditor(bgm_volume=0, text_overlays=load_text_overlays(path, script)) \
+                VideoEditor(bgm_volume=0, text_overlays=load_text_overlays(path, script, Path(directory))) \
                     ._create_text_overlay_clips(1, 2.0)
             cues["1"][0]["end"] = 1
             cues["1"][0]["x"] = 1070
             path.write_text(json.dumps(cues), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "화면 밖"):
-                VideoEditor(bgm_volume=0, text_overlays=load_text_overlays(path, script)) \
+                VideoEditor(bgm_volume=0, text_overlays=load_text_overlays(path, script, Path(directory))) \
                     ._create_text_overlay_clips(1, 2.0)
             cues["1"][0]["x"] = -1
             path.write_text(json.dumps(cues), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "시간 또는 위치"):
-                load_text_overlays(path, script)
+                load_text_overlays(path, script, Path(directory))
+
+    def test_text_cues_reject_a_different_clip_before_render(self):
+        script = ShortsScript(
+            title="Review", description="", tags=[], mood="calm", style="plain",
+            source_name="test", source_url="https://example.com", generation_mode="video",
+            scenes=[VideoScene(scene_number=1, visual_description="diagram", script_text="line")],
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            clip = root / "scene_1.mp4"
+            clip.write_bytes(b"reviewed clip")
+            path = root / "overlays.json"
+            cues = {"_clip_sha256": {"1": hashlib.sha256(clip.read_bytes()).hexdigest()},
+                    "1": [{"text": "지하 2층", "start": 0, "x": 60, "y": 1100}]}
+            path.write_text(json.dumps(cues), encoding="utf-8")
+            self.assertEqual(load_text_overlays(path, script, root), {"1": cues["1"]})
+            clip.write_bytes(b"different clip")
+            with self.assertRaisesRegex(ValueError, "검토본과 다릅니다"):
+                load_text_overlays(path, script, root)
+            cues["_clip_sha256"] = {}
+            path.write_text(json.dumps(cues), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "모든 표기 씬"):
+                load_text_overlays(path, script, root)
 
     def test_forwards_local_caption_color(self):
         script = ShortsScript(

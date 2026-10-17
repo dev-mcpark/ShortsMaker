@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -15,11 +16,27 @@ from shorts_maker.services.production_service import ProductionService
 AUDIO_SUFFIXES = {".aiff", ".wav", ".mp3", ".m4a"}
 
 
-def load_text_overlays(path: Path, script: ShortsScript) -> dict:
+def load_text_overlays(path: Path, script: ShortsScript, clips_dir: Path) -> dict:
     overlays = json.loads(path.read_text(encoding="utf-8"))
     valid_scenes = {str(scene.scene_number) for scene in script.scenes}
-    if not isinstance(overlays, dict) or not set(overlays) <= valid_scenes:
+    if not isinstance(overlays, dict):
         raise ValueError("화면 표기에는 대본에 있는 씬 번호만 사용할 수 있습니다.")
+    has_clip_hashes = "_clip_sha256" in overlays
+    clip_hashes = overlays.pop("_clip_sha256", None)
+    if not set(overlays) <= valid_scenes:
+        raise ValueError("화면 표기에는 대본에 있는 씬 번호만 사용할 수 있습니다.")
+    if has_clip_hashes:
+        if (not isinstance(clip_hashes, dict) or set(clip_hashes) != set(overlays)
+                or any(not isinstance(digest, str) or len(digest) != 64
+                       or any(char not in "0123456789abcdef" for char in digest)
+                       for digest in clip_hashes.values())):
+            raise ValueError("화면 표기의 클립 SHA-256은 모든 표기 씬에 필요합니다.")
+        for scene_number, expected in clip_hashes.items():
+            clip = clips_dir / f"scene_{scene_number}.mp4"
+            if not clip.is_file():
+                raise FileNotFoundError(f"Missing local clip: {clip}")
+            if hashlib.sha256(clip.read_bytes()).hexdigest() != expected:
+                raise ValueError(f"씬 {scene_number}의 클립이 화면 표기 검토본과 다릅니다: {clip}")
     for scene_number, cues in overlays.items():
         if not isinstance(cues, list):
             raise ValueError(f"씬 {scene_number} 화면 표기는 목록이어야 합니다.")
@@ -109,12 +126,12 @@ def main():
     parser.add_argument("--bgm-track", help="Exact documented MP3 filename in bgm/")
     parser.add_argument("--subtitle-style", choices=("soft", "card"), default="soft")
     parser.add_argument("--subtitle-color", help="Caption text color for the local background, e.g. #19384a")
-    parser.add_argument("--text-overlays", type=Path, help="JSON map of scene numbers to timed local text cues")
+    parser.add_argument("--text-overlays", type=Path, help="JSON map of scene numbers to timed local text cues; optional _clip_sha256 bindings")
     parser.add_argument("--subtitle-colors", type=Path,
                         help="JSON map of scene numbers to caption colors for mixed light/dark footage")
     args = parser.parse_args()
     script = ShortsScript.model_validate_json(args.script.read_text(encoding="utf-8"))
-    overlays = load_text_overlays(args.text_overlays, script) if args.text_overlays else None
+    overlays = load_text_overlays(args.text_overlays, script, args.clips_dir) if args.text_overlays else None
     colors = load_subtitle_colors(args.subtitle_colors, script) if args.subtitle_colors else None
     asyncio.run(render_local(script, args.clips_dir, args.audio_dir, args.bgm_volume,
                              args.bgm_track, args.subtitle_style, args.subtitle_color, overlays, colors))
