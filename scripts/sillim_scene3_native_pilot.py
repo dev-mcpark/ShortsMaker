@@ -19,7 +19,7 @@ DURATION = 6
 REQUEST_CAP_USD = 0.25
 FRAME = PROJECT_ROOT / "assets" / "sillim_scene3_cutaway_seed_v1.png"
 FRAME_SHA256 = "b5544accbd318e384f1b225a8d801b25d478c0b50b9f7a758b73f9380091f2ab"
-OUT = PROJECT_ROOT / "outputs" / "evaluation" / "sillim_scene3_native_20261015"
+OUT = PROJECT_ROOT / "outputs" / "evaluation" / "sillim_scene3_native_20261018"
 PROMPT = (
     "One continuous silent vertical shot of the supplied fictional physical miniature cutaway. "
     "Keep the open surface bus bay, the lower bus bay, and the bounded blue reservoir "
