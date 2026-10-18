@@ -717,6 +717,9 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("Silent background footage", prompt)
         self.assertNotIn("4K", prompt)
         self.assertNotIn("no people", prompt)
+        fallback = generator._retry_veo_call.call_args.args[3]
+        self.assertIn(scene.visual_description, fallback)
+        self.assertIn(scene.motion_instruction, fallback)
 
     def test_planner_visual_brief_requires_source_matched_setting(self):
         planner = object.__new__(ScriptPlanner)

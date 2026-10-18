@@ -412,16 +412,18 @@ class VideoGenerator:
 
         original_prompt = scene.visual_description.strip().rstrip(".")
         motion_desc = (getattr(scene, "motion_instruction", "") or "").strip().rstrip(".")
+        motion_clause = motion_desc + "." if motion_desc else "Steady camera."
 
         initial_prompt = (
             f"One continuous vertical shot. {original_prompt}. "
-            f"Motion: {motion_desc + '.' if motion_desc else 'Steady camera.'} "
+            f"Motion: {motion_clause} "
             "Plain unlettered surfaces and an uncluttered lower third for captions added in editing. "
             "Silent background footage."
         )
         fallback_prompt = (
             f"One simple vertical shot. {original_prompt}. "
-            "Steady camera, plain unlettered surfaces, uncluttered lower third."
+            f"Motion: {motion_clause} "
+            "Plain unlettered surfaces, uncluttered lower third."
         )
 
         self._retry_veo_call(

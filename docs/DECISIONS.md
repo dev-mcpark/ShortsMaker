@@ -351,3 +351,11 @@ The Seoul City release supports temporary storage in the B2 reservoir and attrib
 ## 2026-10-18 — Separate Sillim's two problems before revealing the shared-site answer
 
 The Seoul City release identifies insufficient bus-depot space and Dorimcheon-area flood risk as two motivations for the project, but it does not establish that a cramped yard and the stream adjoin at the new site. The earlier scene-2 native-shot gate demanded both pressures on the same parcel, which could invent a geographic relationship and reveal the scene-3 solution before the narration. Depict two clearly separate fictional miniature problems in scene 2; use scene 3's stacked uses to explain how one facility addresses them. Require muted raw playback to show a full yard and rain risk without labels, flooding, or implied real-site geography. This is a source-boundary correction and candidate visual brief, not approval for a new Veo request.
+
+## 2026-10-18 — Cut between separate Sillim problems instead of placing them together
+
+The owner could distinguish the bus-space and stream-risk problems in the first scene-2 miniature, but the shared tabletop still looked like two adjacent real places. A disclaimer cannot repair that visual claim. Retire the combined first frame as a Veo input: show one fictional depot, then cut to one independent generic rain-and-stream shot when the narration changes subject. Keep both shots free of location markings and measured outcomes. Scene 3 alone reveals the shared-site solution. Review this two-shot order with retained narration before paying for motion, then judge each generated shot without labels. This changes the scene-2 visual brief, not the approved narration or previous request record.
+
+## 2026-10-18 — Preserve a scene's motion proof in Veo safety retries
+
+The automatic fallback prompt previously omitted `motion_instruction` after a safety rejection. That could buy a second visually polished clip without the narrated action, despite cost preflight. Keep the same visual description and motion clause in both prompts, simplifying only the surrounding language. A retry may still fail if the motion itself is rejected; do not silently replace the action with generic camera movement. The default remains one attempt, and any higher attempt count still needs its full budget reserve.
