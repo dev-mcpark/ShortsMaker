@@ -363,3 +363,7 @@ The automatic fallback prompt previously omitted `motion_instruction` after a sa
 ## 2026-10-18 — Reject unsourced geography in automatic visual plans
 
 The Sillim scene-2 tabletop showed two independent problems clearly but implied that the bus yard and stream physically adjoin, which the cited source does not establish. The automatic writer must keep separate places visually separate or split the narration beat into scenes; the validator must judge spatial claims created by composition even when narration does not state them. Reuse `unsupported_visual` rather than adding a new result type. These prompt checks reduce an identified failure mode but cannot verify generated pixels, so the raw-shot and owner playback gates still apply.
+
+## 2026-10-18 — Bind free scratch narration to its script
+
+The unit-price paper audition used macOS Yuna without a provider call, but a sandboxed `say` run returned success while leaving unusable 4 KB files. A local scratch helper now decodes each temporary result before saving it and records scene text and file hashes in the same manifest shape the editor already verifies. A pending scene can resume; a changed script, altered completed audio, or untracked file stops the reuse path. This keeps zero-cost story auditions reproducible between agents without treating the Yuna voice as final narration or relaxing the paid TTS budget gate.
