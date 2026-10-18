@@ -576,6 +576,7 @@ class ScriptPlanner:
         - If the source does not establish how an event looked, use a clearly illustrative diagram or symbolic image. Mark future or hypothetical scenes as conceptual in the description.
         - Show one narrated idea per scene. Specify the subject, one action or state, its context, and a useful composition. Avoid invented signs, numbers, interface labels, logos, and extra people.
         - When narration explains a spatial or causal relationship, show its parts and their connection with shapes, placement, or change in the generated visual itself. A mood shot, labels naming the parts, or a diagram promised for later editing do not supply this proof. Put the visible proof before camera and style details.
+        - Do not invent a spatial relationship the source does not establish. Separate places or problems must not appear on one continuous site, map, or tabletop as if they adjoin. If one shot cannot show both without implying adjacency, split the beat into separate scenes.
         - Leave the lower third visually simple for captions. Exact words and data are added by the editor, not drawn by the image or video model.
         - When a photorealistic reconstruction would be mistaken for actual footage, describe a visibly stylized diagram instead. Actual source photos require separate editorial selection and rights review.
         """

@@ -764,6 +764,8 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("primary article's real location", prompt)
         self.assertIn("clearly illustrative diagram", prompt)
         self.assertIn("show its parts and their connection", prompt)
+        self.assertIn("must not appear on one continuous site, map, or tabletop", prompt)
+        self.assertIn("split the beat into separate scenes", prompt)
         self.assertIn("A mood shot, labels naming the parts", prompt)
         self.assertIn("a diagram promised for later editing do not supply this proof", prompt)
         self.assertIn("one coherent shot", prompt)
@@ -948,6 +950,8 @@ class ReviewRegressions(unittest.TestCase):
                               completion.await_args.kwargs["messages"][1]["content"])
         prompt = completion.await_args.kwargs["messages"][0]["content"]
         self.assertIn("parts and connection", prompt)
+        self.assertIn("can falsely imply adjacency", prompt)
+        self.assertIn("Reject that unverified relationship", prompt)
         self.assertIn("diagram to be added in editing", prompt)
         self.assertIn("visible before, change, and resulting state", prompt)
 

@@ -359,3 +359,7 @@ The owner could distinguish the bus-space and stream-risk problems in the first 
 ## 2026-10-18 — Preserve a scene's motion proof in Veo safety retries
 
 The automatic fallback prompt previously omitted `motion_instruction` after a safety rejection. That could buy a second visually polished clip without the narrated action, despite cost preflight. Keep the same visual description and motion clause in both prompts, simplifying only the surrounding language. A retry may still fail if the motion itself is rejected; do not silently replace the action with generic camera movement. The default remains one attempt, and any higher attempt count still needs its full budget reserve.
+
+## 2026-10-18 — Reject unsourced geography in automatic visual plans
+
+The Sillim scene-2 tabletop showed two independent problems clearly but implied that the bus yard and stream physically adjoin, which the cited source does not establish. The automatic writer must keep separate places visually separate or split the narration beat into scenes; the validator must judge spatial claims created by composition even when narration does not state them. Reuse `unsupported_visual` rather than adding a new result type. These prompt checks reduce an identified failure mode but cannot verify generated pixels, so the raw-shot and owner playback gates still apply.

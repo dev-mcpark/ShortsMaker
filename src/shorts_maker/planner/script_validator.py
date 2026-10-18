@@ -60,6 +60,11 @@ class ScriptValidator:
            terrain, participant count, equipment, roles, and timeline. Reject a
            mismatch, invented readable label, or unmarked future reconstruction
            with reason `unsupported_visual` and describe the offending scene.
+           Check spatial claims made by the visual even when narration does not
+           say them: separate places on one continuous site, map, or tabletop
+           can falsely imply adjacency. Reject that unverified relationship as
+           `unsupported_visual`; separate scenes or clearly distinct conceptual
+           panels can show independent problems without claiming co-location.
         """
 
         prompt = f"""
