@@ -1,0 +1,48 @@
+{
+  "title": "반찬 용량 20% 감소, 단가는 얼마나 오를까?",
+  "description": "한국소비자원의 2024년 1분기 상품 용량 변경 조사 중 한 절임류 사례를 바탕으로 한 미승인 이야기 초안입니다. 3,000원 봉지 계산은 가정이며, 실제 사례의 4,490원과 3,590원은 소비자 판매가격이 아니라 제조사 출고가격입니다. 자료만으로 소비자가 계산대에서 낸 가격의 변화를 알 수 없습니다. 화면은 브랜드 포장이나 원자료 이미지를 복제하지 않은 자체 제작 개념도입니다.",
+  "tags": ["생활경제", "단위가격", "장보기", "Shorts"],
+  "mood": "curious",
+  "style": "source-grounded everyday price explanation",
+  "music_direction": "처음엔 작은 가격 수수께끼처럼 가볍게 시작하고 계산 결과에서 리듬을 준 뒤 출고가와 판매가의 차이를 짚을 때 차분해진다. 고발·사기 폭로처럼 들리는 긴장 음악은 피하고 내레이션 아래에 낮게 둔다.",
+  "source_name": "한국소비자원 — 2024년 1분기 상품 용량 변경 모니터링 결과 (2024-06-13)",
+  "source_url": "https://www.kca.go.kr/home/sub.do?menukey=4002&mode=view&no=1003678922",
+  "generation_mode": "image",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "visual_mode": "image",
+      "duration_seconds": 6,
+      "visual_description": "Two original, generic, unbranded food-package silhouettes marked 150g and 120g. Reveal the smaller pack with the question; do not suggest an observed store price.",
+      "script_text": "150그램짜리 반찬이 120그램이 됐습니다. 20퍼센트 줄었죠. 그럼 단가는 얼마나 오를까요?"
+    },
+    {
+      "scene_number": 2,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Explicitly hypothetical price cards: both packages cost 3,000 won. Reveal 100g당 2,000원, then 2,500원, then +25%; all numbers typeset locally.",
+      "script_text": "봉지 가격이 똑같이 삼천 원이라면, 백 그램당 이천 원에서 이천오백 원. 20이 아니라 25퍼센트 오릅니다."
+    },
+    {
+      "scene_number": 3,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Replace the hypothetical cards with a separate 2024 source-case card. Show 150g to 120g, then manufacturer dispatch price 4,490 to 3,590 won. Prominently label 출고가격, not a supermarket price tag.",
+      "script_text": "그런데 2024년 조사 속 실제 제품은, 조사 중 출고가격을 사천사백구십 원에서 삼천오백구십 원으로 낮췄습니다."
+    },
+    {
+      "scene_number": 4,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Original two-column arithmetic: 4,490÷150×100≈2,993 and 3,590÷120×100≈2,992. Keep the 출고가격/100g label visible; no fictional receipt or shopper saving.",
+      "script_text": "백 그램당 출고가격은 약 이천구백구십삼 원에서 이천구백구십이 원. 출고 단계의 단가는 거의 같아졌죠."
+    },
+    {
+      "scene_number": 5,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Show the consumer retail-price box as unknown, then a generic shelf label beside package weight. End with 판매가격 ÷ 용량, not a claim about this product's checkout bill.",
+      "script_text": "하지만 이 자료만으론 우리가 실제로 낸 가격은 모릅니다. 장볼 땐 판매가격과 용량을 함께 확인해야 합니다."
+    }
+  ]
+}
