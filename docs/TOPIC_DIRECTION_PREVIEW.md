@@ -19,10 +19,12 @@ The story is a **completed design choice**, not a claim that flooding was preven
 1. **Question:** Why is a 35,000-ton rainwater space beneath a bus depot? Show only an original schematic exterior and a concealed underground layer.
 2. **Stakes:** The city describes both a bus-depot shortage and recurring flood risk around Dorimcheon. Show the two problems as separate diagrams, without importing disaster footage.
 3. **Turn:** The depot uses the surface and first basement level; the second basement level holds stormwater. Reveal the cross-section when narration names the underground facility.
-4. **Cause:** During heavy rain, the reservoir is designed to hold incoming water temporarily so the stream level rises less abruptly. Animate the inflow, then the delayed stream arrow; do not imply that the reservoir is the whole flood defense system.
+4. **Cause:** During heavy rain, the reservoir is designed to hold incoming water temporarily so the stream level rises less abruptly. Show inflow accumulating in a bounded basin. Attribute the stream-level effect to Seoul City in narration or editor text; do not depict an outlet or release timing that the cited source does not establish.
 5. **Payoff and limit:** One parcel serves daily transport and flood response. Attribute the approximately 10 cm water-level effect to Seoul's statement; do not present it as observed flood-damage reduction.
 
 **Paper verdict:** suitable for one $0 local story audition because the question, two competing land-use needs, hidden cross-section, and mechanism are distinct beats with an original-diagram path. The resulting unapproved five-scene text is [sillim_depot_review_draft.json](sillim_depot_review_draft.json); its scratch cut and technical evidence are in [STATUS.md](STATUS.md). The owner found the local story interesting enough for a music edit on 2026-10-09; audience interest and actual flood performance remain unknown. The story-only scratch cut uses deliberate silence; the later rights-recorded music comparison is in [STATUS.md](STATUS.md).
+
+The draft JSON is retained with the approved narration text and its original visual descriptions so the existing voice set stays reproducible. Its scene-2 panel and scene-4 flow descriptions are historical proposals. Use the [current separate-location and storage-only visual brief](SILLIM_VISUAL_ALIGNMENT_REVIEW.md) for any new shot; do not submit those old descriptions directly to a paid generator.
 
 ## Unit-price paper story gate — 2026-10-13
 

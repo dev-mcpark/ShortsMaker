@@ -1,6 +1,8 @@
 # Sillim narration-to-visual review
 
-Reviewed: 2026-10-14. This evaluates the approved five-scene narration, exact prompts in `scripts/sillim_veo_round.py`, returned shots, and privately uploaded 37.5-second cut. The overlay experiments below are historical; the owner's latest direction is the native-shot gate at the end. This is **not** a new generation order or approval to replace the narration. [STATUS.md](STATUS.md) owns the active gate; [SILLIM_VEO_CUT_PLAN.md](SILLIM_VEO_CUT_PLAN.md) owns the completed request and cost record.
+Started: 2026-10-14; latest review: 2026-10-20. This evaluates the approved five-scene narration, exact prompts in `scripts/sillim_veo_round.py`, returned shots, and privately uploaded 37.5-second cut. The overlay experiments below are historical; the owner's latest direction is the native-shot gate at the end. This is **not** a new generation order or approval to replace the narration. [STATUS.md](STATUS.md) owns the active gate; [SILLIM_VEO_CUT_PLAN.md](SILLIM_VEO_CUT_PLAN.md) owns the completed request and cost record.
+
+The retained [narration script](sillim_depot_review_draft.json) still contains older visual descriptions. Keep its approved spoken text and existing voice set, but use the revised separate-location scene-2 and storage-only scene-4 briefs below when preparing a new visual request. A paid request requires its own approval and exact prompt review.
 
 ## Finding
 
@@ -11,7 +13,7 @@ The script's five-step order is coherent and its concrete claims match the [Seou
 | Scene | Visual proof needed | Current result | Assessment and cheapest fix |
 | --- | --- | --- | --- |
 | 1 — question | Bus depot and a hint of hidden rainwater storage. | Bus enters an attractive fictional depot; 35,000 tonnes is a small editor label. | Retain. Let scene 3 pay off the hidden-space question; enlarge the capacity cue. |
-| 2 — two pressures | Both bus-depot space shortage **and** Dorimcheon flood risk lead to one site decision. | Prompt asks for a miniature block and approaching cloud; footage shows one rainy street. | A cloud is atmosphere, not a land-use conflict. Keep the Veo background and add two timed graphic panels converging on **one site**. |
+| 2 — two pressures | Bus-depot space shortage and Dorimcheon flood risk are separate motivations for one later decision. | Prompt asks for a miniature block and approaching cloud; footage shows one rainy street. | Historical panel idea retired: show the depot and stream as separate places, cutting at the narration pause. The correction and current gate are below. |
 | 3 — arrangement | Buses on ground and basement 1; rainwater reservoir on basement 2. | Prompt forbids a floor diagram; footage shows blank building sides; local text floats over it. | **Primary failure.** First prototype a large original three-band cutaway over the moving footage. Show two bus levels, then reveal the blue basin when named. Label it a conceptual section, not an exact site plan. |
 | 4 — mechanism | Rainwater is held temporarily, reducing the immediate rush toward the stream. | Footage shows water entering a basin; the later source recheck found that a separate outlet is not documented. | Review whether the existing pool visibly accumulates. The earlier smaller-outflow graphic proposal is retired; do not portray measured flow or disaster. |
 | 5 — payoff | Daily transport and rain storage share one site; roughly 10 cm is Seoul City's stated effect. | Bus leaves beside a blue block, but opaque ground hides the vertical relation; the effect is small text. | Reuse a compact cutaway, highlight both operating modes, and make `약 10cm · 서울시 설명` readable. Fabricated signage is lower priority after owner feedback. |
