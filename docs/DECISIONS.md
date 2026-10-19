@@ -383,3 +383,7 @@ The original scorecard tracked seven-day audience outcomes only for matched imag
 ## 2026-10-20 — Fail visibly when a repeating job cannot be registered
 
 An enabled schedule whose APScheduler job never registered could look like a working upload cadence. Surface backend and registration failures at scheduler startup, stop startup if a saved job cannot be registered, and disable a newly created or edited live schedule when its registration fails. Preserve the saved schedule for operator repair instead of silently claiming it will run. A deliberately disabled schedule must not register. This does not enable paid production or create a publishing schedule.
+
+## 2026-10-20 — Pause a repeating run that left a rendered video after failure
+
+A scheduled private upload or final quality check can fail after planning, narration, visuals, and editing have already produced a file. Repeating the entire pipeline at the next trigger would spend again and leave the recoverable video unreviewed. When a failed result includes a rendered video path, disable that schedule, remove its live job, and expose the path in the local log. The operator can inspect the retained file and decide whether to retry its upload or repair the video before re-enabling production. A failure before any video exists retains the existing provider-specific pause behavior; this rule does not infer actual billable cost from the file path.

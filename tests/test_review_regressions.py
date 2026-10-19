@@ -241,6 +241,26 @@ class ReviewRegressions(unittest.TestCase):
                 asyncio.run(manager._execute_pipeline(schedule))
             self.assertTrue(manager.get_schedule(schedule["id"])["enabled"])
 
+    def test_rendered_upload_failure_pauses_schedule_before_next_paid_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("Private upload", "09:00", auto_upload=True)
+            backend = Mock()
+            manager._scheduler = backend
+            manager._scheduler_running = True
+            failure = ProductionService()._failed_result("업로드 실패", video_path="/retained/video.mp4")
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, return_value=failure,
+            ) as pipeline:
+                asyncio.run(manager._execute_pipeline(schedule))
+            stored = manager.get_schedule(schedule["id"])
+            self.assertFalse(stored["enabled"])
+            self.assertEqual(stored["last_result"], "rendered_failed")
+            self.assertEqual(stored["run_count"], 1)
+            pipeline.assert_awaited_once()
+            backend.remove_job.assert_called_once_with(schedule["id"])
+
     def test_completed_veo_without_video_pauses_repeating_schedule(self):
         with tempfile.TemporaryDirectory() as directory:
             manager = ScheduleManager(str(Path(directory) / "schedules.json"))

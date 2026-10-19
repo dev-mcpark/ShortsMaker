@@ -390,6 +390,7 @@ class ScheduleManager:
             google_budget_exceeded = not result.success and _GOOGLE_BUDGET_EXCEEDED in (result.error or "")
             visual_cost_cap_exceeded = not result.success and _VISUAL_COST_CAP_EXCEEDED in (result.error or "")
             music_selection_required = not result.success and _BGM_SELECTION_REQUIRED in (result.error or "")
+            rendered_failed = not result.success and bool(result.video_path)
             # 공급자 제한 뒤의 다음 일정이 계획·내레이션 비용을 다시 쓰지 않도록 멈춘다.
             last_result = 'success' if result.success else 'failed'
             if billing_disabled:
@@ -406,6 +407,8 @@ class ScheduleManager:
                 last_result = 'visual_cost_cap_exceeded'
             elif music_selection_required:
                 last_result = 'music_selection_required'
+            elif rendered_failed:
+                last_result = 'rendered_failed'
             updates = {
                 'last_run': datetime.now().isoformat(),
                 'run_count': schedule.get('run_count', 0) + 1,
@@ -413,14 +416,14 @@ class ScheduleManager:
             }
             if (billing_disabled or music_missing or provider_limited or veo_unverified
                     or google_budget_exceeded or visual_cost_cap_exceeded
-                    or music_selection_required):
+                    or music_selection_required or rendered_failed):
                 updates['enabled'] = False
             self.update_schedule(schedule['id'], updates)
 
             if result.success:
                 self.logger.info(f"Scheduled pipeline completed: {result.video_path}")
             else:
-                self.logger.error(f"Scheduled pipeline failed: {result.error}")
+                self.logger.error(f"Scheduled pipeline failed: {result.error}; video_path={result.video_path}")
 
         except Exception as e:
             self.logger.error(f"Scheduled pipeline error: {e}")
