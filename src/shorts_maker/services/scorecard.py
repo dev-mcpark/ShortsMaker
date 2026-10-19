@@ -4,14 +4,18 @@ import argparse
 import csv
 import json
 import math
+import os
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 
 
+PUBLIC_FIELD = "public_release_confirmed"
 FIELDS = (
     "report_path", "video_path", "script_key", "production_mode", "quality_passed",
     "estimated_visual_output_cost_usd", "accepted", "billed_cost_usd", "views_7d",
     "average_view_duration_seconds_7d", "revenue_usd_7d", "review_note",
+    PUBLIC_FIELD,
 )
 
 
@@ -31,14 +35,33 @@ def init_reviews(outputs_dir: Path, review_file: Path) -> int:
     review_file.parent.mkdir(parents=True, exist_ok=True)
     exists = review_file.exists()
     known = set()
+    columns = list(FIELDS)
     if exists:
         with review_file.open(encoding="utf-8", newline="") as file:
             reader = csv.DictReader(file)
-            if not set(FIELDS).issubset(reader.fieldnames or []):
+            columns = reader.fieldnames or []
+            if not set(FIELDS[:-1]).issubset(columns):
                 raise ValueError("검토 CSV의 열이 누락되었습니다.")
-            known = {str(Path(row["report_path"]).resolve()) for row in reader}
+            rows = list(reader)
+            known = {str(Path(row["report_path"]).resolve()) for row in rows}
+        if PUBLIC_FIELD not in columns:
+            columns.append(PUBLIC_FIELD)
+            temporary = None
+            try:
+                with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="",
+                                                 dir=review_file.parent, delete=False) as file:
+                    temporary = Path(file.name)
+                    writer = csv.DictWriter(file, fieldnames=columns)
+                    writer.writeheader()
+                    writer.writerows(rows)
+                    file.flush()
+                    os.fsync(file.fileno())
+                os.replace(temporary, review_file)
+            finally:
+                if temporary:
+                    temporary.unlink(missing_ok=True)
     with review_file.open("a", encoding="utf-8", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=FIELDS)
+        writer = csv.DictWriter(file, fieldnames=columns)
         if not exists:
             writer.writeheader()
         for path in sorted(reports.keys() - known):
@@ -72,6 +95,10 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
             path = str(Path(row["report_path"]).resolve())
             if path not in reports or path in reviews:
                 raise ValueError(f"제작 기록이 없거나 중복된 검토 행: {path}")
+            release = (row.get(PUBLIC_FIELD) or "").strip().lower()
+            if release not in {"", "yes", "no"}:
+                raise ValueError(f"{PUBLIC_FIELD}는 yes 또는 no여야 합니다: {path}")
+            row[PUBLIC_FIELD] = release
             reviews[path] = row
 
     grouped = defaultdict(lambda: defaultdict(list))
@@ -109,7 +136,8 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
             metrics[mode] = tuple(_number(row, field) for field in (
                 "views_7d", "average_view_duration_seconds_7d", "revenue_usd_7d",
             ))
-        if any(not reports[modes[mode][0]].get("youtube_id") or
+        if any(not reports[modes[mode][0]].get("youtube_id")
+               or rows[mode][PUBLIC_FIELD] != "yes" or
                any(value is None for value in metrics[mode][:2]) for mode in totals):
             continue
         outcome_pairs += 1
@@ -140,8 +168,8 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
             editorial_complete += 1
             editorial_accepted += accepted
             editorial_cost += cost
-        # shortcut: upload IDs do not prove public release; require a visibility record when available.
-        if not accepted or not reports[path].get("youtube_id"):
+        if (not accepted or not reports[path].get("youtube_id")
+                or row[PUBLIC_FIELD] != "yes"):
             continue
         views = _number(row, "views_7d")
         duration = _number(row, "average_view_duration_seconds_7d")

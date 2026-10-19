@@ -37,6 +37,7 @@ class ScorecardTests(unittest.TestCase):
                     ("stars", "image"): 0.3, ("stars", "hybrid"): 0.6,
                 }[(key, mode)])
                 if key == "robot":
+                    row["public_release_confirmed"] = "yes"
                     row["views_7d"] = "100" if mode == "image" else "120"
                     row["average_view_duration_seconds_7d"] = "20" if mode == "image" else "22"
                     row["revenue_usd_7d"] = "0.01" if mode == "image" else "0.02"
@@ -82,7 +83,8 @@ class ScorecardTests(unittest.TestCase):
                 rows = list(csv.DictReader(file))
             for row in rows:
                 row.update(accepted="yes", billed_cost_usd="0.1", views_7d="100",
-                           average_view_duration_seconds_7d="20")
+                           average_view_duration_seconds_7d="20",
+                           public_release_confirmed="yes")
             with reviews.open("w", encoding="utf-8", newline="") as file:
                 writer = csv.DictWriter(file, fieldnames=FIELDS)
                 writer.writeheader()
@@ -130,7 +132,8 @@ class ScorecardTests(unittest.TestCase):
             outputs = Path(directory)
             reviews = outputs / "reviews.csv"
             for name, uploaded in (("billed", True), ("unbilled", True),
-                                   ("private_review", False), ("rejected", True)):
+                                   ("private_review", False), ("uploaded_private", True),
+                                   ("rejected", True)):
                 (outputs / f"{name}.production.json").write_text(json.dumps({
                     "schema_version": 1, "script_key": name,
                     "production_mode": "video", "paired_comparison_eligible": False,
@@ -144,6 +147,8 @@ class ScorecardTests(unittest.TestCase):
                 name = Path(row["report_path"]).name.split(".")[0]
                 row.update(accepted="no" if name == "rejected" else "yes",
                            views_7d="100", average_view_duration_seconds_7d="20")
+                if name in {"billed", "unbilled"}:
+                    row["public_release_confirmed"] = "yes"
                 if name == "billed":
                     row.update(billed_cost_usd="0.2", revenue_usd_7d="0.01")
                 if name == "unbilled":
@@ -160,6 +165,42 @@ class ScorecardTests(unittest.TestCase):
                 "average_view_duration_seconds": 25.0,
                 "complete_revenue_videos": 1, "revenue_usd": None,
             })
+
+    def test_init_adds_public_release_column_without_losing_existing_reviews(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outputs = Path(directory)
+            for name in ("existing", "new"):
+                (outputs / f"{name}.production.json").write_text(json.dumps({
+                    "schema_version": 1, "script_key": name, "production_mode": "video",
+                    "quality_passed": True,
+                }), encoding="utf-8")
+            reviews = outputs / "reviews.csv"
+            with reviews.open("w", encoding="utf-8", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=[*FIELDS[:-1], "custom_note"])
+                writer.writeheader()
+                writer.writerow({"report_path": str((outputs / "existing.production.json").resolve()),
+                                 "accepted": "no", "billed_cost_usd": "0.12",
+                                 "review_note": "keep", "custom_note": "also keep"})
+
+            self.assertEqual(init_reviews(outputs, reviews), 1)
+            with reviews.open(encoding="utf-8", newline="") as file:
+                rows = list(csv.DictReader(file))
+            self.assertEqual(len(rows), 2)
+            self.assertIn("public_release_confirmed", rows[0])
+            self.assertEqual(rows[0]["billed_cost_usd"], "0.12")
+            self.assertEqual(rows[0]["review_note"], "keep")
+            self.assertEqual(rows[0]["custom_note"], "also keep")
+            self.assertEqual(rows[1]["custom_note"], "")
+            self.assertEqual(init_reviews(outputs, reviews), 0)
+
+            rows[0]["public_release_confirmed"] = "maybe"
+            with reviews.open("w", encoding="utf-8", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=[*FIELDS[:-1], "custom_note",
+                                                           "public_release_confirmed"])
+                writer.writeheader()
+                writer.writerows(rows)
+            with self.assertRaisesRegex(ValueError, "public_release_confirmed"):
+                summarize(outputs, reviews)
 
 
 if __name__ == "__main__":

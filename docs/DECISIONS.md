@@ -387,3 +387,7 @@ An enabled schedule whose APScheduler job never registered could look like a wor
 ## 2026-10-20 — Pause a repeating run that left a rendered video after failure
 
 A scheduled private upload or final quality check can fail after planning, narration, visuals, and editing have already produced a file. Repeating the entire pipeline at the next trigger would spend again and leave the recoverable video unreviewed. When a failed result includes a rendered video path, disable that schedule, remove its live job, and expose the path in the local log. The operator can inspect the retained file and decide whether to retry its upload or repair the video before re-enabling production. A failure before any video exists retains the existing provider-specific pause behavior; this rule does not infer actual billable cost from the file path.
+
+## 2026-10-20 — Require confirmed public release for outcome summaries
+
+The upload API always creates private review copies. An upload ID plus manually entered seven-day metrics could therefore be misread as public audience evidence. Add an explicit `public_release_confirmed` field to the ignored review CSV and require `yes` for paired and editorial outcome summaries. Preserve existing review and cost entries when adding the field to an older CSV. The operator sets it only after the separate publication decision and a visibility check in YouTube; the current upload-only OAuth scope cannot verify visibility automatically. This gate does not infer seven-day completeness from a timestamp or approve publication.

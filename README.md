@@ -7,6 +7,7 @@ ShortsMaker aims to produce and upload source-grounded Korean Shorts continuousl
 Automatic uploads are private review copies; public publication remains a separate editorial decision.
 Automatic API uploads conservatively mark AI-generated visuals for YouTube's synthetic-media disclosure. The manual Publishing tab requires an explicit yes/no choice about realistic AI-generated or altered scenes; review that choice again before making a video public.
 Studio and scheduled API uploads are always **private**. The Studio Publishing tab plays the exact finished file selected for manual upload; watch it and check the metadata before uploading. Review the complete video, source claims, music rights, and AI disclosure choice in YouTube before making it public; the technical quality check does not make an editorial decision.
+The private scorecard counts seven-day audience results only after `public_release_confirmed=yes` is entered for a reviewed video; an upload ID alone is not a public-release record. See [the evaluation workflow](docs/QUALITY_EVALUATION.md).
 
 ---
 
