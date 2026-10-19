@@ -858,6 +858,15 @@ class ProductionService:
             return self._failed_result("승인된 대본과 새 소재 입력을 함께 사용할 수 없습니다.")
         if approved_script is None and (manual_clip_paths is not None or prepared_audio_paths is not None):
             return self._failed_result("재사용 클립과 음성에는 승인된 대본이 필요합니다.")
+        if approved_script is not None and auto_upload and (
+            not isinstance(upload_metadata, dict)
+            or not isinstance(upload_metadata.get("title"), str)
+            or not upload_metadata["title"].strip()
+            or not isinstance(upload_metadata.get("description"), str)
+            or not upload_metadata["description"].strip()
+            or not isinstance(upload_metadata.get("contains_synthetic_media"), bool)
+        ):
+            return self._failed_result("승인된 대본의 자동 업로드에는 검토한 제목·설명·AI 공개 선택이 필요합니다.")
 
         # Step 1: Script Generation, or a reviewed script supplied by the caller.
         script = approved_script

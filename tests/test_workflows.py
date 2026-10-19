@@ -303,6 +303,28 @@ class WorkflowTests(unittest.TestCase):
         )
         service.upload_to_youtube.assert_awaited_once_with("render.mp4", metadata)
 
+    def test_approved_script_upload_requires_explicit_reviewed_metadata_before_render(self):
+        complete = {"title": "Approved", "description": "Source credit", "contains_synthetic_media": True}
+        for metadata in (None, {}, {"description": "Source credit", "contains_synthetic_media": True},
+                         {"title": "Approved", "contains_synthetic_media": True},
+                         {"title": "Approved", "description": "Source credit"},
+                         {**complete, "title": "  "}, {**complete, "description": "  "},
+                         {**complete, "contains_synthetic_media": "yes"}):
+            with self.subTest(metadata=metadata):
+                service = ProductionService()
+                service.generate_script = AsyncMock()
+                service.produce_video = AsyncMock()
+                service.upload_to_youtube = AsyncMock()
+                result = asyncio.run(service.full_pipeline(
+                    approved_script=SimpleNamespace(title="Approved", description="old draft"),
+                    auto_upload=True, upload_metadata=metadata,
+                ))
+                self.assertFalse(result.success)
+                self.assertIn("검토한 제목·설명·AI 공개 선택", result.error)
+                service.generate_script.assert_not_awaited()
+                service.produce_video.assert_not_awaited()
+                service.upload_to_youtube.assert_not_awaited()
+
     def test_full_pipeline_rejects_conflicting_approved_inputs(self):
         service = ProductionService()
         service.generate_script = AsyncMock()

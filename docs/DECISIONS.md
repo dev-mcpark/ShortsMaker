@@ -367,3 +367,7 @@ The Sillim scene-2 tabletop showed two independent problems clearly but implied 
 ## 2026-10-18 — Bind free scratch narration to its script
 
 The unit-price paper audition used macOS Yuna without a provider call, but a sandboxed `say` run returned success while leaving unusable 4 KB files. A local scratch helper now decodes each temporary result before saving it and records scene text and file hashes in the same manifest shape the editor already verifies. A pending scene can resume; a changed script, altered completed audio, or untracked file stops the reuse path. This keeps zero-cost story auditions reproducible between agents without treating the Yuna voice as final narration or relaxing the paid TTS budget gate.
+
+## 2026-10-19 — Require reviewed metadata for approved-script uploads
+
+The October 13 approved-script path relied on its caller to supply reviewed upload metadata because the retained Sillim draft's description still says it is unapproved. `full_pipeline` previously fell back to that stale script description when the caller omitted `upload_metadata`. For `approved_script` with `auto_upload=True`, require an explicit nonblank title and description plus a boolean AI disclosure choice before rendering; a missing field now fails before any potential paid work. Ordinary automatic script uploads keep their existing metadata defaults and private visibility. This checks that a choice was made, not whether the words, credits, or disclosure are editorially correct; review the final video and metadata before publication.
