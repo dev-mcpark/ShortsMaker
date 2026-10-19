@@ -33,6 +33,7 @@ class _FeedEntryProxy:
 
 class ScriptPlanner:
     MIN_SCENES = 6
+    MIN_ARTICLE_WORDS = 100
 
     def __init__(self, generation_mode: str = "image"):
         self.logger = get_logger(__name__)
@@ -344,7 +345,7 @@ class ScriptPlanner:
                 self.content_extractor.fetch_enhanced_article, direct_url
             )
 
-            if not article_content or article_content.word_count < 100:
+            if not article_content or article_content.word_count < self.MIN_ARTICLE_WORDS:
                 error_msg = "추출된 본문 내용이 너무 적거나 URL에서 내용을 가져올 수 없습니다. 다른 URL을 시도해주세요."
                 self.logger.error(f"❌ {error_msg}")
                 raise ValueError(error_msg)
@@ -419,30 +420,30 @@ class ScriptPlanner:
             article_content = await asyncio.to_thread(
                 self.content_extractor.fetch_enhanced_article, selection['url']
             )
-            if article_content:
-                self.logger.info(f"✅ Successfully extracted {article_content.word_count} words.")
+            if not article_content or article_content.word_count < self.MIN_ARTICLE_WORDS:
+                self.logger.warning("RSS article text missing or too short; skipping this candidate before script writing")
+                candidates = [c for c in candidates if c['url'] != selection['url']]
+                continue
+            self.logger.info(f"✅ Successfully extracted {article_content.word_count} words.")
 
-                self.logger.info("🔍 Analyzing content depth...")
-                analysis = await self.content_analyzer.analyze_content(article_content)
+            self.logger.info("🔍 Analyzing content depth...")
+            analysis = await self.content_analyzer.analyze_content(article_content)
 
-                enriched_info = []
-                if analysis:
-                    self.logger.info("🌐 Searching for supplementary info...")
-                    enriched_info = await self.content_enricher.enrich_content(
-                        topic=article_content.title,
-                        core_message=analysis.core_message,
-                        visual_keywords=analysis.visual_keywords
-                    )
+            enriched_info = []
+            if analysis:
+                self.logger.info("🌐 Searching for supplementary info...")
+                enriched_info = await self.content_enricher.enrich_content(
+                    topic=article_content.title,
+                    core_message=analysis.core_message,
+                    visual_keywords=analysis.visual_keywords
+                )
 
-                selection['content'] = article_content.main_text[:8000]
-                selection['quotes'] = article_content.quotes
-                selection['headings'] = article_content.headings
-                selection['captions'] = article_content.captions
-                selection['analysis'] = analysis
-                selection['enriched_info'] = enriched_info
-            else:
-                self.logger.warning("⚠️ Failed to extract enhanced content. Using summary.")
-                selection['analysis'] = None
+            selection['content'] = article_content.main_text[:8000]
+            selection['quotes'] = article_content.quotes
+            selection['headings'] = article_content.headings
+            selection['captions'] = article_content.captions
+            selection['analysis'] = analysis
+            selection['enriched_info'] = enriched_info
 
             # 3. Write & Validate
             script = await self._write_script(selection)
