@@ -17,7 +17,7 @@ def render_publishing_tab(state: 'AppState') -> None:
     """YouTube Publishing 탭 렌더링"""
 
     with ui.column().classes('w-full max-w-2xl mx-auto mt-10'):
-        with card_with_header('YouTube Upload', 'cloud_upload', 'danger'):
+        with card_with_header('YouTube 비공개 업로드', 'cloud_upload', 'danger'):
             with ui.element('div').classes('w-full p-6'):
                 # 입력 필드들
                 title_input = ui.input('Video Title').props('outlined dark').classes('w-full mb-4')
@@ -100,8 +100,13 @@ def render_publishing_tab(state: 'AppState') -> None:
                         backward=lambda p: p if p else '영상 없음 — Pipeline 또는 Generation 탭에서 먼저 생성하세요'
                     )
 
+                preview = ui.video(state.final_video_path or '').classes('w-full max-w-[270px] max-h-[480px] mb-4 bg-black')
+                preview.bind_source_from(state, 'final_video_path', backward=lambda p: p or '')
+                preview.bind_visibility_from(state, 'final_video_path', backward=bool)
+                ui.label('완성본을 확인한 뒤 업로드하세요. YouTube에는 비공개로 저장됩니다.').classes('text-sm text-gray-300 mb-4')
+
                 upload_btn = ui.button(
-                    'Upload to YouTube',
+                    'YouTube에 비공개 업로드',
                     on_click=upload_video
                 ).classes('w-full').props('color=red unelevated size=lg icon=cloud_upload')
                 upload_btn.bind_enabled_from(state, 'final_video_path', backward=lambda p: bool(p) and not state.youtube_upload_in_progress)
