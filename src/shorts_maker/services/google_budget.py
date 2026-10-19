@@ -146,6 +146,11 @@ def budget_status() -> dict:
             by_model = dict(db.execute(
                 "SELECT model, SUM(reserved_krw) FROM requests WHERE period = ? GROUP BY model", (period,),
             ).fetchall())
+            by_status = {status: {"requests": count, "reserved_krw": reserved}
+                         for status, count, reserved in db.execute(
+                             "SELECT status, COUNT(*), SUM(reserved_krw) FROM requests "
+                             "WHERE period = ? GROUP BY status", (period,),
+                         )}
     except (OSError, sqlite3.Error) as error:
         raise RuntimeError("GOOGLE_BUDGET_EXCEEDED: 비용 장부에 접근할 수 없습니다. --init으로 최초 생성해야 합니다.") from error
     used = settings.google_budget_opening_krw + local
@@ -154,6 +159,7 @@ def budget_status() -> dict:
             "opening_krw": settings.google_budget_opening_krw,
             "local_reserved_krw": local,
             "reserved_by_model_krw": by_model,
+            "requests_by_status": by_status,
             "remaining_krw": max(0, settings.google_monthly_budget_krw - used),
             "usd_krw_reserve_rate": settings.google_usd_krw_rate}
 

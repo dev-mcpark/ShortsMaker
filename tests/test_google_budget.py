@@ -77,6 +77,9 @@ class GoogleBudgetTests(unittest.TestCase):
         self.assertEqual(budget_status()["reserved_by_model_krw"], {settings.image_model_id: 68})
         self.assertTrue(mark_google_result(request_id, "failed_or_unknown"))
         self.assertEqual(budget_status()["local_reserved_krw"], 68)
+        self.assertEqual(budget_status()["requests_by_status"], {
+            "failed_or_unknown": {"requests": 1, "reserved_krw": 68},
+        })
         with self.assertRaisesRegex(RuntimeError, "GOOGLE_BUDGET_EXCEEDED"):
             reserve_google_output("video", "veo-3.1-lite-generate-001", 8)
         self.assertEqual(budget_status()["remaining_krw"], 432)
