@@ -1,4 +1,4 @@
-"""Place the verified Sillim explanation diagrams over retained Veo shots.
+"""Recreate the historical Sillim inset comparison over retained Veo shots.
 
 This makes silent local scene clips for a private edit comparison. It never
 calls a model or uploads a video. The old five-scene Veo round remains closed.
@@ -23,7 +23,7 @@ CARD_SIZES = {2: (360, 196), 3: (360, 268), 4: (350, 210)}
 REVEALS = {
     2: ((0.2, 1.0), (2.7, 4.0)),
     3: ((0.2, 1.0), (2.8, 4.0)),
-    4: ((0.2, 1.0), (1.5, 2.5), (3.6, 5.0)),
+    4: ((0.2, 1.0), (1.5, 2.5)),
 }
 
 
@@ -64,11 +64,6 @@ def proof_card(scene: int, storyboard_time: float) -> Image.Image:
         if storyboard_time >= 2.5:
             draw.rounded_rectangle((53, 116, 298, 141), radius=6, fill=(112, 183, 212, 240))
         label(draw, (175, 94), "일시 저장", 21, INK, "ma")
-        if storyboard_time >= 5:
-            draw.line((127, 169, 275, 169), fill=TEAL, width=4)
-            draw.polygon(((275, 160), (290, 169), (275, 178)), fill=TEAL)
-            label(draw, (26, 166), "늦은 유입", 20, TEAL)
-            label(draw, (175, 185), "하천 유입 완화 목표", 18, MUTED, "ma")
     return artwork
 
 

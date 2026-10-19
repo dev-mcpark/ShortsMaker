@@ -42,6 +42,11 @@ class SillimDepotStoryboardTests(unittest.TestCase):
                 bottom = frame(scene, 6, 8).crop((0, 700, 540, 900))
                 self.assertIsNone(ImageChops.difference(bottom, blank).getbbox())
 
+    def test_scene_four_does_not_draw_an_unsupported_outlet(self):
+        before = frame(4, 3.9, 8).crop((110, 525, 455, 572))
+        after = frame(4, 4.1, 8).crop((110, 525, 455, 572))
+        self.assertIsNone(ImageChops.difference(before, after).getbbox())
+
 
 if __name__ == "__main__":
     unittest.main()

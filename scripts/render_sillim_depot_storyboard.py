@@ -84,8 +84,6 @@ def frame(scene, t, duration):
             d.rounded_rectangle((95, 492 - int(130 * fill), 445, 492), radius=9, fill=BLUE)
         label(d, (270, 425), "일시 저장", 28, INK, "ma")
         if t >= 4.0:
-            d.line((120, 554, 420, 554), fill=TEAL, width=8)
-            d.polygon((420, 539, 445, 554, 420, 569), fill=TEAL)
             label(d, (270, 584), "하천 수위 급등 완화 목표", 23, TEAL, "ma")
     elif scene == 5:
         label(d, (270, 115), "한 공간의 두 역할", 37, anchor="ma")

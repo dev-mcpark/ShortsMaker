@@ -18,6 +18,10 @@ class SillimExplanatoryCompositeTests(unittest.TestCase):
                 self.assertLess(CARD_POSITION[1] + first.height, 700)
                 self.assertIsNotNone(ImageChops.difference(first, revealed).getbbox())
 
+    def test_scene_four_stops_at_supported_temporary_storage(self):
+        self.assertEqual(len(REVEALS[4]), 2)
+        self.assertIsNone(ImageChops.difference(proof_card(4, 2.5), proof_card(4, 5)).getbbox())
+
 
 if __name__ == "__main__":
     unittest.main()
