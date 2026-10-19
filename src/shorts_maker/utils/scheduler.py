@@ -13,6 +13,7 @@ from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 from shorts_maker.utils.logger import get_logger
+from shorts_maker.utils.source_manager import SourceManager
 
 
 _PROVIDER_LIMIT = re.compile(r"(?<!\d)429(?!\d)|RESOURCE_EXHAUSTED", re.IGNORECASE)
@@ -157,7 +158,7 @@ class ScheduleManager:
         Returns:
             생성된 스케줄 딕셔너리
         """
-        self._validate_schedule(name, time, frequency, mode)
+        self._validate_schedule(name, time, frequency, mode, direct_url)
         schedule = {
             'id': str(uuid.uuid4()),
             'name': name,
@@ -205,7 +206,8 @@ class ScheduleManager:
         for i, schedule in enumerate(schedules):
             if schedule['id'] == schedule_id:
                 updated = {**schedule, **updates}
-                self._validate_schedule(updated['name'], updated['time'], updated['frequency'], updated['mode'])
+                self._validate_schedule(updated['name'], updated['time'], updated['frequency'],
+                                        updated['mode'], updated.get('direct_url'))
                 schedule = updated
                 schedules[i] = schedule
                 self.save_schedules(schedules)
@@ -228,7 +230,8 @@ class ScheduleManager:
         return None
 
     @staticmethod
-    def _validate_schedule(name: str, time: str, frequency: str, mode: str):
+    def _validate_schedule(name: str, time: str, frequency: str, mode: str,
+                           direct_url: Optional[str] = None):
         if not isinstance(name, str) or not name.strip():
             raise ValueError("일정 이름이 필요합니다.")
         if not isinstance(time, str) or not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', time):
@@ -238,6 +241,8 @@ class ScheduleManager:
             raise ValueError("지원하지 않는 반복 주기입니다.")
         if mode not in {'hybrid', 'image', 'video'}:
             raise ValueError("지원하지 않는 생성 모드입니다.")
+        if direct_url is not None and not SourceManager.is_allowed_url(direct_url):
+            raise ValueError("공개된 http 또는 https 기사 URL이 필요합니다.")
 
     def delete_schedule(self, schedule_id: str) -> bool:
         """
@@ -353,9 +358,25 @@ class ScheduleManager:
         from shorts_maker.utils.bgm_manager import BGMManager
         from shorts_maker.utils.config import settings
 
+        schedule = self.get_schedule(schedule['id'])
+        if schedule is None or not schedule.get('enabled', True):
+            return
         self.logger.info(f"=== Executing scheduled pipeline: {schedule['name']} ===")
 
         try:
+            # A fixed article URL is one story; use topic discovery for a repeating source.
+            if (schedule.get('direct_url')
+                    and (schedule.get('last_rendered_url') == schedule['direct_url']
+                         or (not schedule.get('last_rendered_url')
+                             and schedule.get('last_result') == 'success'))):
+                self.update_schedule(schedule['id'], {
+                    'last_run': datetime.now().isoformat(),
+                    'run_count': schedule.get('run_count', 0) + 1,
+                    'last_result': 'duplicate_url',
+                    'last_rendered_url': schedule['direct_url'],
+                    'enabled': False,
+                })
+                return
             if not settings.paid_production_enabled:
                 self.update_schedule(schedule['id'], {
                     'last_run': datetime.now().isoformat(),
@@ -417,6 +438,9 @@ class ScheduleManager:
             if (billing_disabled or music_missing or provider_limited or veo_unverified
                     or google_budget_exceeded or visual_cost_cap_exceeded
                     or music_selection_required or rendered_failed):
+                updates['enabled'] = False
+            if schedule.get('direct_url') and (result.success or result.video_path):
+                updates['last_rendered_url'] = schedule['direct_url']
                 updates['enabled'] = False
             self.update_schedule(schedule['id'], updates)
 

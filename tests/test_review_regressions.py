@@ -188,7 +188,15 @@ class ReviewRegressions(unittest.TestCase):
             manager = ScheduleManager(str(path))
             with self.assertRaises(ValueError):
                 manager.create_schedule("Broken", "25:99")
+            with self.assertRaises(ValueError):
+                manager.create_schedule("Blank direct URL", "09:00", direct_url="")
             self.assertFalse(path.exists())
+            schedule = manager.create_schedule("Valid", "09:00",
+                                               direct_url="https://example.com/article")
+            with self.assertRaises(ValueError):
+                manager.update_schedule(schedule["id"], {"direct_url": "http://localhost/article"})
+            self.assertEqual(manager.get_schedule(schedule["id"])["direct_url"],
+                             "https://example.com/article")
 
     def test_billing_disabled_pauses_repeating_schedule(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -244,7 +252,9 @@ class ReviewRegressions(unittest.TestCase):
     def test_rendered_upload_failure_pauses_schedule_before_next_paid_run(self):
         with tempfile.TemporaryDirectory() as directory:
             manager = ScheduleManager(str(Path(directory) / "schedules.json"))
-            schedule = manager.create_schedule("Private upload", "09:00", auto_upload=True)
+            url = "https://example.com/article"
+            schedule = manager.create_schedule("Private upload", "09:00", auto_upload=True,
+                                               direct_url=url)
             backend = Mock()
             manager._scheduler = backend
             manager._scheduler_running = True
@@ -257,9 +267,83 @@ class ReviewRegressions(unittest.TestCase):
             stored = manager.get_schedule(schedule["id"])
             self.assertFalse(stored["enabled"])
             self.assertEqual(stored["last_result"], "rendered_failed")
+            self.assertEqual(stored["last_rendered_url"], url)
             self.assertEqual(stored["run_count"], 1)
             pipeline.assert_awaited_once()
             backend.remove_job.assert_called_once_with(schedule["id"])
+            manager.update_schedule(schedule["id"], {"enabled": True})
+            with patch("shorts_maker.services.production_service.ProductionService.full_pipeline",
+                       new_callable=AsyncMock) as repeat:
+                asyncio.run(manager._execute_pipeline(stored))
+            repeat.assert_not_awaited()
+            self.assertEqual(manager.get_schedule(schedule["id"])["last_result"],
+                             "duplicate_url")
+
+    def test_direct_url_schedule_finishes_once_and_new_url_can_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            first_url = "https://example.com/one"
+            second_url = "https://example.com/two"
+            schedule = manager.create_schedule("Article", "09:00", direct_url=first_url)
+            manager._scheduler = Mock()
+            manager._scheduler_running = True
+            result = SimpleNamespace(success=True, video_path="/retained/video.mp4", error=None)
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True) as music, patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, return_value=result,
+            ) as pipeline:
+                asyncio.run(manager._execute_pipeline(schedule))
+                stored = manager.get_schedule(schedule["id"])
+                self.assertFalse(stored["enabled"])
+                self.assertEqual(stored["last_result"], "success")
+                self.assertEqual(stored["last_rendered_url"], first_url)
+                manager.update_schedule(schedule["id"], {"enabled": True})
+                asyncio.run(manager._execute_pipeline(stored))
+                self.assertEqual(pipeline.await_count, 1)
+                self.assertEqual(music.call_count, 1)
+                self.assertEqual(manager.get_schedule(schedule["id"])["last_result"],
+                                 "duplicate_url")
+
+                manager.update_schedule(schedule["id"], {"direct_url": second_url, "enabled": True})
+                asyncio.run(manager._execute_pipeline(manager.get_schedule(schedule["id"])))
+                self.assertEqual(pipeline.await_count, 2)
+                self.assertEqual(manager.get_schedule(schedule["id"])["last_rendered_url"], second_url)
+                self.assertFalse(manager.get_schedule(schedule["id"])["enabled"])
+
+    def test_old_direct_url_success_is_not_repeated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("Old article", "09:00",
+                                               direct_url="https://example.com/old")
+            manager.update_schedule(schedule["id"], {"last_result": "success", "run_count": 1})
+            with patch("shorts_maker.services.production_service.ProductionService.full_pipeline",
+                       new_callable=AsyncMock) as pipeline:
+                asyncio.run(manager._execute_pipeline(schedule))
+            pipeline.assert_not_awaited()
+            stored = manager.get_schedule(schedule["id"])
+            self.assertFalse(stored["enabled"])
+            self.assertEqual(stored["last_result"], "duplicate_url")
+            self.assertEqual(stored["last_rendered_url"], "https://example.com/old")
+            manager.update_schedule(schedule["id"], {"enabled": True})
+            with patch("shorts_maker.services.production_service.ProductionService.full_pipeline",
+                       new_callable=AsyncMock) as repeat:
+                asyncio.run(manager._execute_pipeline(stored))
+            repeat.assert_not_awaited()
+            self.assertFalse(manager.get_schedule(schedule["id"])["enabled"])
+
+    def test_stale_disabled_job_does_not_start_paid_work(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            stale = manager.create_schedule("Stopped", "09:00")
+            manager.update_schedule(stale["id"], {"enabled": False})
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track") as music, patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock,
+            ) as pipeline:
+                asyncio.run(manager._execute_pipeline(stale))
+            music.assert_not_called()
+            pipeline.assert_not_awaited()
+            self.assertEqual(manager.get_schedule(stale["id"])["run_count"], 0)
 
     def test_completed_veo_without_video_pauses_repeating_schedule(self):
         with tempfile.TemporaryDirectory() as directory:

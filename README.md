@@ -42,6 +42,7 @@ The scheduler uses the same `ProductionService` without a GUI session. Browser s
 held in memory and is lost on a server restart. API settings are process-wide, so run
 separate server instances when different users need different credentials.
 Studio reports a scheduler start error if its job backend is unavailable or a saved job cannot be registered. If a newly created or edited job cannot be registered while the scheduler is running, that schedule is saved as disabled with `registration_failed`; correct the problem before re-enabling it. A schedule created disabled stays unregistered. The Active Schedules badge and green indicator count jobs with an actual next run; a merely enabled saved configuration is shown as waiting when the scheduler is stopped.
+Use RSS topic discovery for repeating episodes. A schedule with one direct article URL pauses after its first rendered video, including when private upload fails; re-enabling it with the same URL stops as `duplicate_url` before paid work. Change the URL for a new story or review and reuse the retained video. Empty, local, and non-HTTP article URLs are rejected when saving the schedule.
 
 An article enters topic history only after its script passes validation. Studio progress
 tracks completed editing work and finishes after an optional upload. Stop requests wait

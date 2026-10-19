@@ -138,6 +138,10 @@ def render_scheduling_tab(state: 'AppState') -> None:
                         placeholder='https://...'
                     ).props('outlined dense dark').classes('w-full mb-3')
                     url_input.bind_visibility_from(source_mode, 'value', value='Direct URL')
+                    url_hint = ui.label(
+                        'One article URL makes one episode. After rendering, this schedule pauses; use RSS for recurring topics.'
+                    ).classes('text-xs text-gray-400 mb-3')
+                    url_hint.bind_visibility_from(source_mode, 'value', value='Direct URL')
 
                     ui.separator().classes('bg-slate-600 my-4')
 
