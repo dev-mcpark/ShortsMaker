@@ -126,19 +126,34 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
                        if report.get("paired_comparison_eligible") is False]
     editorial_complete = editorial_accepted = 0
     editorial_cost = 0.0
+    editorial_outcome_count = editorial_revenue_count = 0
+    editorial_views = editorial_watch_seconds = editorial_revenue = 0.0
     for path in editorial_paths:
         row = reviews.get(path)
         if row is None or row["accepted"].strip().lower() not in {"yes", "no"}:
             continue
-        cost = _number(row, "billed_cost_usd")
-        if cost is None:
-            continue
         accepted = row["accepted"].strip().lower() == "yes"
         if accepted and not reports[path].get("quality_passed"):
             raise ValueError("품질 검사를 통과하지 못한 영상을 채택할 수 없습니다.")
-        editorial_complete += 1
-        editorial_accepted += accepted
-        editorial_cost += cost
+        cost = _number(row, "billed_cost_usd")
+        if cost is not None:
+            editorial_complete += 1
+            editorial_accepted += accepted
+            editorial_cost += cost
+        # shortcut: upload IDs do not prove public release; require a visibility record when available.
+        if not accepted or not reports[path].get("youtube_id"):
+            continue
+        views = _number(row, "views_7d")
+        duration = _number(row, "average_view_duration_seconds_7d")
+        if views is None or duration is None:
+            continue
+        editorial_outcome_count += 1
+        editorial_views += views
+        editorial_watch_seconds += views * duration
+        revenue = _number(row, "revenue_usd_7d")
+        if revenue is not None:
+            editorial_revenue_count += 1
+            editorial_revenue += revenue
 
     return {
         "rendered_reports": len(reports),
@@ -165,6 +180,16 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
                 editorial_cost / editorial_accepted, 4,
             ) if editorial_accepted else None,
         },
+        "editorial_outcomes_7d": {
+            "complete_videos": editorial_outcome_count,
+            "views": int(editorial_views),
+            "average_view_duration_seconds": round(
+                editorial_watch_seconds / editorial_views, 2,
+            ) if editorial_views else None,
+            "complete_revenue_videos": editorial_revenue_count,
+            "revenue_usd": round(editorial_revenue, 4)
+            if editorial_revenue_count == editorial_outcome_count else None,
+        } if editorial_outcome_count else None,
         "complete_7d_outcome_pairs": outcome_pairs,
         "complete_7d_revenue_pairs": revenue_pairs,
         "outcomes_7d": {

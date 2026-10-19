@@ -123,6 +123,43 @@ class ScorecardTests(unittest.TestCase):
                 "accepted_rate": 0.5, "billed_cost_usd": 0.06,
                 "billed_cost_per_accepted_usd": 0.06,
             })
+            self.assertIsNone(summary["editorial_outcomes_7d"])
+
+    def test_editorial_outcomes_include_published_accepted_cuts_before_bill(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outputs = Path(directory)
+            reviews = outputs / "reviews.csv"
+            for name, uploaded in (("billed", True), ("unbilled", True),
+                                   ("private_review", False), ("rejected", True)):
+                (outputs / f"{name}.production.json").write_text(json.dumps({
+                    "schema_version": 1, "script_key": name,
+                    "production_mode": "video", "paired_comparison_eligible": False,
+                    "quality_passed": True,
+                    "youtube_id": name if uploaded else None,
+                }), encoding="utf-8")
+            init_reviews(outputs, reviews)
+            with reviews.open(encoding="utf-8", newline="") as file:
+                rows = list(csv.DictReader(file))
+            for row in rows:
+                name = Path(row["report_path"]).name.split(".")[0]
+                row.update(accepted="no" if name == "rejected" else "yes",
+                           views_7d="100", average_view_duration_seconds_7d="20")
+                if name == "billed":
+                    row.update(billed_cost_usd="0.2", revenue_usd_7d="0.01")
+                if name == "unbilled":
+                    row["average_view_duration_seconds_7d"] = "30"
+            with reviews.open("w", encoding="utf-8", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=FIELDS)
+                writer.writeheader()
+                writer.writerows(rows)
+
+            summary = summarize(outputs, reviews)
+            self.assertEqual(summary["editorial_cuts"]["complete_cost_reviews"], 1)
+            self.assertEqual(summary["editorial_outcomes_7d"], {
+                "complete_videos": 2, "views": 200,
+                "average_view_duration_seconds": 25.0,
+                "complete_revenue_videos": 1, "revenue_usd": None,
+            })
 
 
 if __name__ == "__main__":
