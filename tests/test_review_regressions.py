@@ -120,6 +120,53 @@ class ReviewRegressions(unittest.TestCase):
 
         asyncio.run(exercise())
 
+    def test_scheduler_start_reports_missing_backend(self):
+        manager = ScheduleManager("unused-schedules.json")
+        with patch.object(manager, "_ensure_scheduler", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "APScheduler"):
+                manager.start_scheduler()
+        self.assertFalse(manager._scheduler_running)
+
+    def test_failed_job_registration_stops_startup_and_disables_new_schedule(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            existing = manager.create_schedule("Existing", "09:00")
+            backend = Mock()
+            backend.add_job.side_effect = RuntimeError("cron unavailable")
+            with patch.object(manager, "_ensure_scheduler", return_value=backend):
+                manager._scheduler = backend
+                with self.assertRaisesRegex(RuntimeError, "cron unavailable"):
+                    manager.start_scheduler()
+            self.assertFalse(manager._scheduler_running)
+            backend.shutdown.assert_called_once()
+            self.assertTrue(manager.get_schedule(existing["id"])["enabled"])
+
+            manager._scheduler = backend
+            manager._scheduler_running = True
+            with self.assertRaisesRegex(RuntimeError, "cron unavailable"):
+                manager.create_schedule("New", "10:00")
+            created = next(item for item in manager.load_schedules() if item["name"] == "New")
+            self.assertFalse(created["enabled"])
+            self.assertEqual(created["last_result"], "registration_failed")
+
+    def test_disabled_schedule_is_not_registered_and_failed_update_is_disabled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            backend = Mock()
+            manager._scheduler = backend
+            manager._scheduler_running = True
+            disabled = manager.create_schedule("Disabled", "09:00", enabled=False)
+            backend.add_job.assert_not_called()
+            self.assertFalse(manager.get_schedule(disabled["id"])["enabled"])
+
+            active = manager.create_schedule("Active", "10:00")
+            backend.add_job.side_effect = RuntimeError("cron unavailable")
+            with self.assertRaisesRegex(RuntimeError, "cron unavailable"):
+                manager.update_schedule(active["id"], {"time": "11:00"})
+            stored = manager.get_schedule(active["id"])
+            self.assertFalse(stored["enabled"])
+            self.assertEqual(stored["last_result"], "registration_failed")
+
     def test_schedule_save_failure_is_reported(self):
         with tempfile.TemporaryDirectory() as directory:
             manager = ScheduleManager(directory)

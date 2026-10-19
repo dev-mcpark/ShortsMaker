@@ -57,7 +57,9 @@ class ScheduleManager:
     def start_scheduler(self):
         """스케줄러 시작"""
         scheduler = self._ensure_scheduler()
-        if scheduler and not self._scheduler_running:
+        if scheduler is None:
+            raise RuntimeError("APScheduler를 사용할 수 없습니다.")
+        if not self._scheduler_running:
             scheduler.start()
             self._scheduler_running = True
             self.logger.info("Scheduler started")
@@ -177,8 +179,13 @@ class ScheduleManager:
         self.save_schedules(schedules)
 
         # 스케줄러에 등록
-        if self._scheduler_running:
-            self._register_job(schedule)
+        if self._scheduler_running and enabled:
+            try:
+                self._register_job(schedule)
+            except Exception:
+                self.update_schedule(schedule['id'], {'enabled': False,
+                                                      'last_result': 'registration_failed'})
+                raise
 
         self.logger.info(f"Created schedule: {name} at {time}")
         return schedule
@@ -207,7 +214,12 @@ class ScheduleManager:
                 if self._scheduler_running:
                     self._unregister_job(schedule_id)
                     if schedule.get('enabled', True):
-                        self._register_job(schedule)
+                        try:
+                            self._register_job(schedule)
+                        except Exception:
+                            self.update_schedule(schedule_id, {'enabled': False,
+                                                               'last_result': 'registration_failed'})
+                            raise
 
                 self.logger.info(f"Updated schedule: {schedule_id}")
                 return schedule
@@ -322,6 +334,7 @@ class ScheduleManager:
 
         except Exception as e:
             self.logger.error(f"Failed to register job {schedule['id']}: {e}")
+            raise
 
     def _unregister_job(self, schedule_id: str):
         """APScheduler에서 작업 제거"""

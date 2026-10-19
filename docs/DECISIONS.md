@@ -379,3 +379,7 @@ The owner wants ShortsMaker to support ongoing video uploads, in addition to imp
 ## 2026-10-20 — Summarize accepted editorial outcomes before bills arrive
 
 The original scorecard tracked seven-day audience outcomes only for matched image/hybrid experiments. The production path now being reviewed uses manual Veo clips and is deliberately excluded from those pairs, so its published results would disappear from the summary. Add a separate editorial outcome aggregate for accepted, quality-passed cuts with an upload ID and complete views/duration observations. Keep cost review independent so a delayed provider bill does not hide observed retention; leave revenue blank when any included video lacks it. An upload ID does not establish public release, so the private CSV operator must enter metrics only after verifying visibility and the common seven-day window. This does not grant analytics scopes or publish a video.
+
+## 2026-10-20 — Fail visibly when a repeating job cannot be registered
+
+An enabled schedule whose APScheduler job never registered could look like a working upload cadence. Surface backend and registration failures at scheduler startup, stop startup if a saved job cannot be registered, and disable a newly created or edited live schedule when its registration fails. Preserve the saved schedule for operator repair instead of silently claiming it will run. A deliberately disabled schedule must not register. This does not enable paid production or create a publishing schedule.

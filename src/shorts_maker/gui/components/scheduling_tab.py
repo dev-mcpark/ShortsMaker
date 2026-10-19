@@ -56,7 +56,13 @@ def render_scheduling_tab(state: 'AppState') -> None:
                         logger.debug(f"Status update skipped: {e}")
 
                 def start_scheduler():
-                    schedule_manager.start_scheduler()
+                    try:
+                        schedule_manager.start_scheduler()
+                    except Exception as error:
+                        logger.error(f"Scheduler start failed: {error}")
+                        update_status()
+                        safe_notify(f'❌ Scheduler start failed: {error}', type='negative')
+                        return
                     update_status()
                     safe_notify('✅ Scheduler started', type='positive')
                     safe_refresh(schedule_list)
@@ -65,6 +71,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                     schedule_manager.stop_scheduler()
                     update_status()
                     safe_notify('⏹️ Scheduler stopped', type='warning')
+                    safe_refresh(schedule_list)
 
                 start_btn.on_click(start_scheduler)
                 stop_btn.on_click(stop_scheduler)
@@ -214,8 +221,9 @@ def render_scheduling_tab(state: 'AppState') -> None:
                 @ui.refreshable
                 def schedule_list():
                     schedules = schedule_manager.load_schedules()
+                    next_runs = {item['id']: item['next_run'] for item in schedule_manager.get_next_run_times()}
                     try:
-                        schedule_count_badge.text = str(len(schedules))
+                        schedule_count_badge.text = str(sum(run is not None for run in next_runs.values()))
                     except RuntimeError:
                         pass
 
@@ -227,16 +235,15 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                 ui.label('Create your first schedule to automate video production').classes('text-xs text-gray-600')
                         return
 
-                    next_runs = {item['id']: item['next_run'] for item in schedule_manager.get_next_run_times()}
-
                     with ui.scroll_area().classes('h-[40vh]'):
                         with ui.element('div').classes('p-4 space-y-3'):
                             for schedule in schedules:
                                 enabled = schedule.get('enabled', True)
                                 next_run = next_runs.get(schedule['id'])
+                                registered = enabled and next_run is not None
 
                                 card_class = 'w-full p-4 rounded-xl border transition-all duration-300 '
-                                if enabled:
+                                if registered:
                                     card_class += 'bg-gradient-to-r from-slate-700 to-slate-700/50 border-teal-500/30 hover:border-teal-500/60'
                                 else:
                                     card_class += 'bg-slate-800/50 border-slate-700'
@@ -246,7 +253,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                         with ui.column().classes('flex-grow gap-2'):
                                             with ui.row().classes('items-center gap-3'):
                                                 indicator_class = 'w-3 h-3 rounded-full '
-                                                indicator_class += 'bg-green-500 animate-pulse' if enabled else 'bg-gray-600'
+                                                indicator_class += 'bg-green-500 animate-pulse' if registered else 'bg-gray-600'
                                                 ui.element('div').classes(indicator_class)
 
                                                 ui.label(schedule['name']).classes('font-bold text-white text-lg')
@@ -267,16 +274,21 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                     ui.icon('date_range', size='xs').classes('text-gray-400')
                                                     ui.label(schedule.get('frequency', 'Daily')).classes('text-sm text-gray-400')
 
-                                            if next_run and enabled:
+                                            if registered:
                                                 with ui.element('div').classes('mt-2 p-2 bg-teal-900/30 rounded-lg border border-teal-500/20'):
                                                     with ui.row().classes('items-center gap-2'):
                                                         ui.icon('alarm', size='xs').classes('text-teal-400')
                                                         ui.label('Next run:').classes('text-xs text-teal-400')
                                                         ui.label(next_run[:16].replace('T', ' ')).classes('text-sm text-teal-300 font-medium')
+                                            elif enabled:
+                                                ui.label('Scheduler stopped or job not registered').classes('text-xs text-amber-300')
 
                                         with ui.column().classes('gap-2'):
                                             def toggle_schedule(sid=schedule['id']):
-                                                schedule_manager.toggle_schedule(sid)
+                                                try:
+                                                    schedule_manager.toggle_schedule(sid)
+                                                except Exception as error:
+                                                    safe_notify(f'일정 변경 실패: {error}', type='negative')
                                                 safe_refresh(schedule_list)
                                                 safe_refresh(history_list)
 
