@@ -3,7 +3,7 @@
 Development map and agent handoff: [docs/README.md](docs/README.md), [docs/STATUS.md](docs/STATUS.md), and [docs/DECISIONS.md](docs/DECISIONS.md). Codex and Claude Code share [AGENTS.md](AGENTS.md) as the project instruction entry.
 
 AI-powered YouTube Shorts automation pipeline using **Google Veo 3.1** and **Gemini image generation**.
-ShortsMaker researches, writes scripts, generates visuals, and can upload content to YouTube. Review source claims and the finished video before scaling publication.
+ShortsMaker aims to produce and upload source-grounded Korean Shorts continuously within a controlled budget, improving quality and audience results toward eventual YouTube revenue. It researches, writes scripts, generates visuals, and can upload content to YouTube. Review source claims and the finished video before scaling publication.
 Automatic uploads are private review copies; public publication remains a separate editorial decision.
 Automatic API uploads conservatively mark AI-generated visuals for YouTube's synthetic-media disclosure. The manual Publishing tab requires an explicit yes/no choice about realistic AI-generated or altered scenes; review that choice again before making a video public.
 Studio and scheduled API uploads are always **private**. The Studio Publishing tab plays the exact finished file selected for manual upload; watch it and check the metadata before uploading. Review the complete video, source claims, music rights, and AI disclosure choice in YouTube before making it public; the technical quality check does not make an editorial decision.

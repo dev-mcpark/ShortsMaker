@@ -1,6 +1,6 @@
 # Shared project instructions
 
-ShortsMaker's goal is repeatable, source-grounded Korean Shorts with controlled production cost and measurable quality. Optimize for useful videos and eventual YouTube revenue, not upload volume alone.
+ShortsMaker's goal is to sustain repeatable production and upload of source-grounded Korean Shorts within a controlled budget, with measurable quality and eventual YouTube revenue. Optimize for videos worth publishing, not upload volume alone. Automatic uploads are private review copies; public release remains an editorial decision.
 
 Before editing, read [docs/README.md](docs/README.md) for the code map and [docs/STATUS.md](docs/STATUS.md) for the active milestone. Read task-relevant entries in [docs/DECISIONS.md](docs/DECISIONS.md). Verify these documents against current code and tests; record any drift you find.
 
