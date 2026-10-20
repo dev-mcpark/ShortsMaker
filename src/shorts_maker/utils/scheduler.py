@@ -21,6 +21,7 @@ _VEO_RESULT_UNVERIFIED = "VEO_RESULT_UNVERIFIED"
 _GOOGLE_BUDGET_EXCEEDED = "GOOGLE_BUDGET_EXCEEDED"
 _VISUAL_COST_CAP_EXCEEDED = "VISUAL_COST_CAP_EXCEEDED"
 _BGM_SELECTION_REQUIRED = "BGM_SELECTION_REQUIRED"
+_ARTICLE_ANALYSIS_UNVERIFIED = "ARTICLE_ANALYSIS_UNVERIFIED"
 
 
 class ScheduleManager:
@@ -411,6 +412,7 @@ class ScheduleManager:
             google_budget_exceeded = not result.success and _GOOGLE_BUDGET_EXCEEDED in (result.error or "")
             visual_cost_cap_exceeded = not result.success and _VISUAL_COST_CAP_EXCEEDED in (result.error or "")
             music_selection_required = not result.success and _BGM_SELECTION_REQUIRED in (result.error or "")
+            analysis_unverified = not result.success and _ARTICLE_ANALYSIS_UNVERIFIED in (result.error or "")
             rendered_failed = not result.success and bool(result.video_path)
             # 공급자 제한 뒤의 다음 일정이 계획·내레이션 비용을 다시 쓰지 않도록 멈춘다.
             last_result = 'success' if result.success else 'failed'
@@ -428,6 +430,8 @@ class ScheduleManager:
                 last_result = 'visual_cost_cap_exceeded'
             elif music_selection_required:
                 last_result = 'music_selection_required'
+            elif analysis_unverified:
+                last_result = 'analysis_failed'
             elif rendered_failed:
                 last_result = 'rendered_failed'
             updates = {
@@ -437,7 +441,7 @@ class ScheduleManager:
             }
             if (billing_disabled or music_missing or provider_limited or veo_unverified
                     or google_budget_exceeded or visual_cost_cap_exceeded
-                    or music_selection_required or rendered_failed):
+                    or music_selection_required or analysis_unverified or rendered_failed):
                 updates['enabled'] = False
             if schedule.get('direct_url') and (result.success or result.video_path):
                 updates['last_rendered_url'] = schedule['direct_url']
@@ -469,6 +473,9 @@ class ScheduleManager:
                                run_count=schedule.get('run_count', 0) + 1)
             elif _BGM_SELECTION_REQUIRED in str(e):
                 updates.update(enabled=False, last_result='music_selection_required',
+                               run_count=schedule.get('run_count', 0) + 1)
+            elif _ARTICLE_ANALYSIS_UNVERIFIED in str(e):
+                updates.update(enabled=False, last_result='analysis_failed',
                                run_count=schedule.get('run_count', 0) + 1)
             self.update_schedule(schedule['id'], updates)
 

@@ -626,11 +626,10 @@ class WorkflowTests(unittest.TestCase):
         planner._write_script = AsyncMock()
 
         for verdict, evidence in ((False, ""), (True, "An observed result not found in the article."),
-                                  (True, "scheduled"), (None, "")):
+                                  (True, "scheduled")):
             with self.subTest(verdict=verdict, evidence=evidence), patch.object(settings, "max_topic_retries", 1):
-                planner.content_analyzer.analyze_content.return_value = (
-                    SimpleNamespace(story_fit=verdict, story_fit_evidence=evidence)
-                    if verdict is not None else None)
+                planner.content_analyzer.analyze_content.return_value = SimpleNamespace(
+                    story_fit=verdict, story_fit_evidence=evidence)
                 self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
         planner.content_enricher.enrich_content.assert_not_awaited()
         planner._write_script.assert_not_awaited()
@@ -653,7 +652,8 @@ class WorkflowTests(unittest.TestCase):
         planner._write_script = AsyncMock()
 
         with patch.object(settings, "max_topic_retries", 2):
-            self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+            with self.assertRaisesRegex(RuntimeError, "ARTICLE_ANALYSIS_UNVERIFIED"):
+                asyncio.run(planner.plan_content())
         planner._score_topics.assert_awaited_once()
         planner._write_script.assert_not_awaited()
 

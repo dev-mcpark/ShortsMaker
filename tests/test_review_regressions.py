@@ -249,6 +249,27 @@ class ReviewRegressions(unittest.TestCase):
                 asyncio.run(manager._execute_pipeline(schedule))
             self.assertTrue(manager.get_schedule(schedule["id"])["enabled"])
 
+    def test_unverified_article_analysis_pauses_repeating_schedule(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            failure = ProductionService()._failed_result(
+                "ARTICLE_ANALYSIS_UNVERIFIED: 기사 분석 결과를 확인할 수 없습니다.")
+            for outcome in (failure, RuntimeError(failure.error)):
+                schedule = manager.create_schedule("RSS", "09:00")
+                with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                    "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                    new_callable=AsyncMock,
+                ) as pipeline:
+                    if isinstance(outcome, Exception):
+                        pipeline.side_effect = outcome
+                    else:
+                        pipeline.return_value = outcome
+                    asyncio.run(manager._execute_pipeline(schedule))
+                stored = manager.get_schedule(schedule["id"])
+                self.assertFalse(stored["enabled"])
+                self.assertEqual(stored["last_result"], "analysis_failed")
+                self.assertEqual(stored["run_count"], 1)
+
     def test_rendered_upload_failure_pauses_schedule_before_next_paid_run(self):
         with tempfile.TemporaryDirectory() as directory:
             manager = ScheduleManager(str(Path(directory) / "schedules.json"))
@@ -432,6 +453,10 @@ class ReviewRegressions(unittest.TestCase):
         result = asyncio.run(service.full_pipeline())
         self.assertFalse(result.success)
         self.assertEqual(result.error, "RESOURCE_EXHAUSTED: 공급자 제한으로 스크립트 생성 중단")
+        service._planner.plan_content = AsyncMock(side_effect=RuntimeError(
+            "ARTICLE_ANALYSIS_UNVERIFIED: 기사 분석 결과를 확인할 수 없습니다."))
+        result = asyncio.run(service.full_pipeline())
+        self.assertIn("ARTICLE_ANALYSIS_UNVERIFIED", result.error)
         service._planner.plan_content = AsyncMock(return_value=(None, None))
         result = asyncio.run(service.full_pipeline())
         self.assertEqual(result.error, "스크립트 생성 실패")

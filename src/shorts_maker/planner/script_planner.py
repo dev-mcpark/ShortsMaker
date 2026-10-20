@@ -432,8 +432,7 @@ class ScriptPlanner:
             self.logger.info("🔍 Analyzing content depth...")
             analysis = await self.content_analyzer.analyze_content(article_content)
             if not analysis:
-                self.logger.warning("RSS article analysis unavailable; stopping before another paid selection")
-                return None, None
+                raise RuntimeError("ARTICLE_ANALYSIS_UNVERIFIED: 기사 분석 결과를 확인할 수 없습니다.")
 
             evidence = ' '.join(analysis.story_fit_evidence.split())
             source_text = ' '.join(article_content.main_text.split())
