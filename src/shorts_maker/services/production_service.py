@@ -461,7 +461,8 @@ class ProductionService:
 
         except Exception as e:
             self._progress.error = ("RESOURCE_EXHAUSTED: 공급자 제한으로 스크립트 생성 중단"
-                                    if getattr(e, "status_code", None) == 429 else str(e))
+                                    if getattr(e, "status_code", None) == 429
+                                    else f"PLANNING_UNVERIFIED: {e}")
             self.logger.error(f"스크립트 생성 오류: {self._progress.error}")
             self._update_progress(ProductionPhase.FAILED, 0, f"오류: {self._progress.error}")
             return None, None
@@ -901,9 +902,7 @@ class ProductionService:
                 reason = "RESOURCE_EXHAUSTED: 공급자 제한으로 스크립트 생성 중단"
             elif self._progress.error and "BGM_SELECTION_REQUIRED" in self._progress.error:
                 reason = self._progress.error
-            elif self._progress.error and any(marker in self._progress.error for marker in (
-                "ARTICLE_ANALYSIS_UNVERIFIED", "TOPIC_SCORING_UNVERIFIED"
-            )):
+            elif self._progress.error and "PLANNING_UNVERIFIED" in self._progress.error:
                 reason = self._progress.error
             else:
                 reason = "스크립트 생성 실패"

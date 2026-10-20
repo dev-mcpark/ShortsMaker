@@ -484,6 +484,8 @@ class ScriptPlanner:
             self.logger.warning("Script rejected: no source material to verify claims against")
             return None
         validation = await self.validator.validate_script(script, source_text=source_text)
+        if validation.reason == "validation_error":
+            raise RuntimeError("각본 검증 응답을 확인할 수 없습니다.")
 
         # Simple Retry Loop for the SAME topic if validation fails (Optional optimization)
         # For now, if invalid, we return None to trigger topic switch in RSS mode.

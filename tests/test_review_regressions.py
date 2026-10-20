@@ -253,7 +253,8 @@ class ReviewRegressions(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             manager = ScheduleManager(str(Path(directory) / "schedules.json"))
             for marker, expected in (("ARTICLE_ANALYSIS_UNVERIFIED", "analysis_failed"),
-                                     ("TOPIC_SCORING_UNVERIFIED", "scoring_failed")):
+                                     ("TOPIC_SCORING_UNVERIFIED", "scoring_failed"),
+                                     ("PLANNING_UNVERIFIED", "planning_failed")):
                 failure = ProductionService()._failed_result(f"{marker}: planning failed")
                 for outcome in (failure, RuntimeError(failure.error)):
                     with self.subTest(marker=marker, thrown=isinstance(outcome, Exception)):
@@ -463,6 +464,9 @@ class ReviewRegressions(unittest.TestCase):
             "TOPIC_SCORING_UNVERIFIED: 토픽 점수화 결과를 확인할 수 없습니다."))
         result = asyncio.run(service.full_pipeline())
         self.assertIn("TOPIC_SCORING_UNVERIFIED", result.error)
+        service._planner.plan_content = AsyncMock(side_effect=ValueError("invalid script response"))
+        result = asyncio.run(service.full_pipeline())
+        self.assertIn("PLANNING_UNVERIFIED: invalid script response", result.error)
         service._planner.plan_content = AsyncMock(return_value=(None, None))
         result = asyncio.run(service.full_pipeline())
         self.assertEqual(result.error, "스크립트 생성 실패")
@@ -1182,7 +1186,8 @@ class ReviewRegressions(unittest.TestCase):
         )
         planner = object.__new__(ScriptPlanner)
         planner.logger = Mock()
-        planner.validator = SimpleNamespace(validate_script=AsyncMock(return_value=SimpleNamespace(is_valid=True)))
+        planner.validator = SimpleNamespace(validate_script=AsyncMock(return_value=SimpleNamespace(
+            is_valid=True, reason="approved")))
         with tempfile.TemporaryDirectory() as directory:
             planner.script_output_dir = directory
             self.assertIsNone(asyncio.run(planner._validate_and_save(script, {"content": "  "})))
@@ -1193,6 +1198,10 @@ class ReviewRegressions(unittest.TestCase):
         planner.validator.validate_script.assert_awaited_once_with(
             script, source_text="The factory expanded.",
         )
+        planner.validator.validate_script.return_value = SimpleNamespace(
+            is_valid=False, reason="validation_error")
+        with self.assertRaisesRegex(RuntimeError, "검증 응답을 확인할 수 없습니다"):
+            asyncio.run(planner._validate_and_save(script, {"content": "The factory expanded."}))
 
     def test_subtitle_failure_is_not_silently_accepted(self):
         editor = object.__new__(VideoEditor)

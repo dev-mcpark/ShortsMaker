@@ -58,6 +58,8 @@ the next trigger does not repeat a paid analysis. A valid negative story-fit ver
 just rejects that candidate within the bounded topic search.
 An unavailable or malformed topic-scoring response similarly pauses the schedule as
 `scoring_failed`; a valid response that selects no candidate simply ends that run.
+Other planning exceptions, including a failed script-validation request, pause as
+`planning_failed`; an actual editorial rejection can still try another source.
 A short RSS summary alone does not trigger paid script writing. A direct URL supplied by the user follows the same
 article-length boundary but remains a manual topic choice.
 RSS discovery removes duplicate and disallowed article URLs before scoring. The paid
