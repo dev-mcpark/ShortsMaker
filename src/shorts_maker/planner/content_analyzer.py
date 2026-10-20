@@ -49,7 +49,7 @@ class ContentAnalyzer:
         4. Provide necessary **Context/Background**.
         5. Extract specific **Numbers or Data points**.
         6. Highlight **Expert Insights**.
-        7. Describe only source-stated implications under **Future Impact**; do not predict unsupported outcomes.
+        7. Describe only source-stated implications under **Future Impact**; do not predict unsupported outcomes. If a completed project has only expected benefits, keep those benefits attributed and prospective in every field, including Story Structure impact.
         8. Suggest **Visual Keywords** for AI video generation.
         9. Organize the content into a 4-step **Story Structure**: dilemma, actual decision revealed early, mechanism, source-supported payoff. If the article has no real turn, say so instead of manufacturing one.
         10. Set **story_fit** true only if this article itself supports a concrete viewer question, a verified choice or explanatory mechanism, and a source-supported payoff that footage could explain. A future service launch, event guide, or promised benefit alone is not an observed result. If the source only announces plans or lacks that relationship, set false. For a true verdict, copy one exact, substantive sentence from the Main Content into **story_fit_evidence**; otherwise use an empty string. Never invent evidence.

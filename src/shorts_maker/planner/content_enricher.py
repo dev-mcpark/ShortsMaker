@@ -77,9 +77,13 @@ class ContentEnricher:
         response = await self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.3
+            temperature=0.3,
+            max_completion_tokens=128,
         )
-        return response.choices[0].message.content.strip().strip('"')
+        choice = response.choices[0]
+        if getattr(choice, "finish_reason", None) == "length":
+            raise ValueError("Search query reached its output-token limit")
+        return choice.message.content.strip().strip('"')
 
     async def _search_web_brave(self, query: str) -> List[Dict]:
         """Brave Search API를 사용한 웹 검색 (API 키 필요)"""
@@ -126,8 +130,9 @@ class ContentEnricher:
         """검색 결과 스니펫을 바탕으로 씬 보강용 포인트 추출"""
         
         results_text = ""
-        for i, res in enumerate(results):
-            results_text += f"[{i+1}] {res['title']}: {res['description']}\n"
+        for i, res in enumerate(results[:5]):
+            results_text += (f"[{i+1}] {str(res.get('title') or '')[:160]}: "
+                             f"{str(res.get('description') or '')[:500]}\n")
             
         prompt = f"""
         Extract 3-5 high-value insights from these search results about '{query}' to enrich a YouTube Shorts script.
@@ -148,10 +153,14 @@ class ContentEnricher:
             response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                max_completion_tokens=1000,
             )
-            
-            data = json.loads(response.choices[0].message.content)
+
+            choice = response.choices[0]
+            if getattr(choice, "finish_reason", None) == "length":
+                return []
+            data = json.loads(choice.message.content)
             # JSON 구조가 유동적일 수 있으므로 안전하게 추출
             if isinstance(data, dict):
                 for val in data.values():

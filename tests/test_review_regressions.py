@@ -492,6 +492,7 @@ class ReviewRegressions(unittest.TestCase):
         self.assertFalse(analysis.story_fit)
         prompt = create.await_args.kwargs["messages"][0]["content"]
         self.assertIn("future service launch", prompt)
+        self.assertIn("completed project has only expected benefits", prompt)
         self.assertIn("exact, substantive sentence", prompt)
         self.assertIn("story_fit_evidence", prompt)
         self.assertEqual(create.await_args.kwargs["max_completion_tokens"], 1500)
@@ -550,6 +551,34 @@ class ReviewRegressions(unittest.TestCase):
         script = SimpleNamespace(title="Topic", model_dump_json=lambda **_: "{}")
         with self.assertRaises(RateLimitError):
             asyncio.run(validator.validate_script(script, source_text="Primary source"))
+
+    def test_optional_enrichment_bounds_provider_responses_and_search_text(self):
+        enricher = object.__new__(ContentEnricher)
+        enricher.logger = Mock()
+        choice = SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content='"depot flood"'))
+        create = AsyncMock(return_value=SimpleNamespace(choices=[choice]))
+        enricher.client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=create)))
+
+        self.assertEqual(asyncio.run(enricher._generate_search_query(
+            "Depot", "Rainwater storage", [])), "depot flood")
+        self.assertEqual(create.await_args.kwargs["max_completion_tokens"], 128)
+        choice.finish_reason = "length"
+        with self.assertRaisesRegex(ValueError, "output-token limit"):
+            asyncio.run(enricher._generate_search_query("Depot", "Rainwater storage", []))
+
+        choice.finish_reason = "stop"
+        choice.message.content = '{"points": ["source lead"]}'
+        result = [{"title": "T" * 1000, "description": "D" * 2000}]
+        self.assertEqual(asyncio.run(enricher._summarize_search_results(
+            "depot flood", result)), ["source lead"])
+        request = create.await_args.kwargs
+        self.assertEqual(request["max_completion_tokens"], 1000)
+        self.assertNotIn("T" * 161, request["messages"][0]["content"])
+        self.assertNotIn("D" * 501, request["messages"][0]["content"])
+        choice.finish_reason = "length"
+        self.assertEqual(asyncio.run(enricher._summarize_search_results(
+            "depot flood", result)), [])
 
     def test_schedule_pauses_before_paid_planning_when_music_is_missing(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -974,8 +1003,9 @@ class ReviewRegressions(unittest.TestCase):
             "analysis": SimpleNamespace(
                 core_message="Mars landing", hook="Mars landing", secret_mechanism="unverified",
                 context_background="unverified", numbers_data=["unverified estimate"], expert_insights=[],
-                future_impact="unverified", visual_keywords=[],
-                story_structure={"opening": "Mars", "mystery": "Mars", "secret": "Mars", "impact": "Mars"},
+                future_impact="UNSUPPORTED_FLOOD_RESULT", visual_keywords=[],
+                story_structure={"opening": "Mars", "mystery": "Mars", "secret": "Mars",
+                                 "impact": "UNSUPPORTED_FLOOD_RESULT"},
             ),
             "enriched_info": ["Unverified search claim"],
         }))
@@ -995,7 +1025,9 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("keep its before and resulting state visible", prompt)
         self.assertIn("source-supported dilemma, decision, and result", prompt)
         self.assertIn("Separate measured results from model projections", prompt)
+        self.assertIn("completed facility proves its construction", prompt)
         self.assertIn("STORY IDEAS FROM AN EARLIER MODEL PASS (NOT EVIDENCE)", prompt)
+        self.assertNotIn("UNSUPPORTED_FLOOD_RESULT", prompt)
         self.assertIn("Include factual claims only when the primary source text above supports them", prompt)
         self.assertIn("Use these snippets as leads only", prompt)
         self.assertIn("Three robots were tested in Virginia.", prompt)
@@ -1003,6 +1035,15 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("Reveal what actually happened", prompt)
         self.assertNotIn("4k resolution", prompt.lower())
         self.assertNotIn("15%", prompt)
+        self.assertEqual(completion.await_args.kwargs["max_completion_tokens"], 4000)
+
+        completion.return_value.choices[0].finish_reason = "length"
+        with self.assertRaisesRegex(ValueError, "output-token limit"):
+            asyncio.run(planner._write_script({
+                "category": "Tech", "title": "ASTRA field test",
+                "content": "Three robots were tested in Virginia.",
+            }))
+        completion.return_value.choices[0].finish_reason = "stop"
 
         legacy = script.copy()
         legacy.pop("music_direction")
@@ -1087,6 +1128,20 @@ class ReviewRegressions(unittest.TestCase):
         response.choices[0].message.content = '{"is_valid": true, "score": 90, "reason": "advertising_content"}'
         script.scenes[0].duration_seconds = 5
         self.assertFalse(asyncio.run(validator.validate_script(script, source_text="Test source.")).is_valid)
+        self.assertEqual(validator.client.chat.completions.create.await_args.kwargs[
+            "max_completion_tokens"], 1500)
+
+        response.choices[0].message.content = '{"is_valid": true, "score": 90}'
+        response.choices[0].finish_reason = "length"
+        self.assertEqual(asyncio.run(validator.validate_script(
+            script, source_text="Test source.")).reason, "validation_error")
+        response.choices[0].finish_reason = "stop"
+        response.choices[0].message.content = '{"is_valid": "true", "score": 90}'
+        self.assertEqual(asyncio.run(validator.validate_script(
+            script, source_text="Test source.")).reason, "validation_error")
+        response.choices[0].message.content = '{"is_valid": true, "score": 90}'
+        self.assertTrue(asyncio.run(validator.validate_script(
+            script, source_text="Test source.")).is_valid)
 
     def test_empty_source_stops_script_and_validation_requests(self):
         planner = object.__new__(ScriptPlanner)
@@ -1132,6 +1187,7 @@ class ReviewRegressions(unittest.TestCase):
         request = completion.await_args.kwargs["messages"]
         self.assertIn("Source grounding", request[0]["content"])
         self.assertIn("Distinguish measured results from simulations", request[0]["content"])
+        self.assertIn("completed facility alone does not prove", request[0]["content"])
         self.assertIn("The factory expanded.", request[1]["content"])
         self.assertIn("30% increase", request[1]["content"])
 

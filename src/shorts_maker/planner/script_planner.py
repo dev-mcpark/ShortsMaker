@@ -551,13 +551,11 @@ class ScriptPlanner:
             - **Background Context:** {analysis.context_background}
             - **Key Data Points:** {', '.join(analysis.numbers_data)}
             - **Expert Perspective:** {', '.join(analysis.expert_insights)}
-            - **Future Outlook:** {analysis.future_impact}
 
             ### SUGGESTED STORY STRUCTURE:
             1. **Opening:** {analysis.story_structure.get('opening')}
             2. **Mystery:** {analysis.story_structure.get('mystery')}
             3. **Secret:** {analysis.story_structure.get('secret')}
-            4. **Impact:** {analysis.story_structure.get('impact')}
 
             ### VISUAL THEMES: {', '.join(analysis.visual_keywords)}
 
@@ -638,7 +636,7 @@ class ScriptPlanner:
         - **Anti-Cliché Rule:** Do NOT start with "Did you know?" or generic intros. Dive straight into the specific fact or problem.
         - **Depth:** Explain one source-supported mechanism or relationship. Give numbers only when the source provides them.
         - **Evidence tense:** Keep a device's capability or assigned role separate from an action observed in the test. Do not turn "can collect samples" into "collected samples" without source evidence.
-        - **Evidence type:** Separate measured results from model projections and proposed uses. Do not present a simulated benefit as an observed field outcome.
+        - **Evidence type:** Separate measured results from model projections and proposed uses. Do not present a simulated benefit as an observed field outcome. A completed facility proves its construction, not that its intended flood, traffic, or economic benefits have already occurred; preserve source attribution and future tense for those benefits.
         - **Length:** Aim for roughly 200-260 Korean narration characters; the TTS duration check is authoritative.
         - **TIMING:** The total spoken duration MUST be under **50 seconds**. This is a HARD LIMIT.
         - **Story spine:** Choose one source-supported dilemma, decision, and result. Each scene must change what the viewer understands; do not list facts or robot roles in article order.
@@ -687,9 +685,13 @@ class ScriptPlanner:
         response = await self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
+            max_completion_tokens=4000,
         )
-        data = json.loads(response.choices[0].message.content)
+        choice = response.choices[0]
+        if getattr(choice, "finish_reason", None) == "length":
+            raise ValueError("Script response reached its output-token limit")
+        data = json.loads(choice.message.content)
         if data.get('mood') not in self.allowed_moods:
             raise ValueError("BGM_SELECTION_REQUIRED: 생성된 각본의 분위기가 지원 목록에 없습니다. BGM 선택을 검토하세요.")
         # Ensure generation_mode is consistent

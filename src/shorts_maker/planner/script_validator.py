@@ -1,13 +1,13 @@
 import json
 from openai import AsyncOpenAI, RateLimitError
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 
 class ValidationResult(BaseModel):
-    is_valid: bool
+    is_valid: bool = Field(strict=True)
     reason: str = ""
     feedback: str = ""
     score: int = 0
@@ -54,6 +54,9 @@ class ScriptValidator:
            device can do or was meant to do.
            Distinguish measured results from simulations, model projections, and
            proposed uses. Reject a modeled benefit stated as an observed field result.
+           A completed facility alone does not prove its expected flood, traffic,
+           or economic benefits occurred; require measured evidence for a realized
+           outcome and attribution for a stated goal or estimate.
            Do not use outside knowledge as evidence. Visuals may be illustrative,
            but must not present invented footage as a real event. Compare visual
            descriptions and motion instructions with the source's location,
@@ -123,9 +126,13 @@ class ScriptValidator:
                         "source_excerpt": source_excerpt,
                     }, ensure_ascii=False)},
                 ],
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                max_completion_tokens=1500,
             )
-            result_data = json.loads(response.choices[0].message.content)
+            choice = response.choices[0]
+            if getattr(choice, "finish_reason", None) == "length":
+                raise ValueError("Script validation response reached its output-token limit")
+            result_data = json.loads(choice.message.content)
 
             # 광고성 콘텐츠 여부 플래그 설정
             is_ad = result_data.get("reason", "").lower() in ["advertising_content", "promotional_tone", "promotional_content"]
