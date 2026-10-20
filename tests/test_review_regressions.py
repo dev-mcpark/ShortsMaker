@@ -459,12 +459,18 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("future service launch", prompt)
         self.assertIn("exact, substantive sentence", prompt)
         self.assertIn("story_fit_evidence", prompt)
+        self.assertEqual(create.await_args.kwargs["max_completion_tokens"], 1500)
 
+        valid_content = create.return_value.choices[0].message.content
         create.return_value.choices[0].message.content = json.dumps({
             "core_message": "A planned service", "hook": "Why the plan?",
             "secret_mechanism": "No observed mechanism", "context_background": "Notice",
             "future_impact": "Unknown", "story_fit": "true", "story_fit_evidence": "",
         })
+        self.assertIsNone(asyncio.run(analyzer.analyze_content(article)))
+
+        create.return_value.choices[0].message.content = valid_content
+        create.return_value.choices[0].finish_reason = "length"
         self.assertIsNone(asyncio.run(analyzer.analyze_content(article)))
 
     def test_openai_limit_stops_optional_planning_stages(self):

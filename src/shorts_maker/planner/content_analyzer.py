@@ -83,10 +83,15 @@ class ContentAnalyzer:
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
-                temperature=0.3
+                temperature=0.3,
+                max_completion_tokens=1500,
             )
             
-            analysis_data = json.loads(response.choices[0].message.content)
+            choice = response.choices[0]
+            if getattr(choice, "finish_reason", None) == "length":
+                self.logger.warning("Article analysis was truncated at the output-token limit")
+                return None
+            analysis_data = json.loads(choice.message.content)
             analysis = ContentAnalysis(**analysis_data)
             
             self.logger.info("✅ Content analysis complete.")
