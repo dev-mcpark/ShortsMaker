@@ -300,9 +300,13 @@ class ScriptPlanner:
             response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                max_completion_tokens=2000,
             )
-            content = response.choices[0].message.content
+            choice = response.choices[0]
+            if getattr(choice, "finish_reason", None) == "length":
+                raise ValueError("토픽 점수 응답이 출력 상한에서 잘렸습니다")
+            content = choice.message.content
             data = json.loads(content)
             scores_list = data.get('candidates') if isinstance(data, dict) else None
             if not isinstance(scores_list, list) or len(scores_list) != len(candidates):
@@ -328,7 +332,7 @@ class ScriptPlanner:
             raise
         except Exception as e:
             self.logger.warning(f"토픽 점수화 실패, 이번 제작을 중단: {e}")
-            return []
+            raise RuntimeError("TOPIC_SCORING_UNVERIFIED: 토픽 점수화 결과를 확인할 수 없습니다.") from e
 
     async def plan_content(
         self,

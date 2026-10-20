@@ -61,6 +61,7 @@ class WorkflowTests(unittest.TestCase):
         ]))
 
         self.assertTrue(result[0].selected)
+        self.assertEqual(create.await_args.kwargs["max_completion_tokens"], 2000)
         prompt = create.await_args.kwargs["messages"][0]["content"]
         self.assertIn("Concrete stakes", prompt)
         self.assertIn("Source-backed turn", prompt)
@@ -100,7 +101,13 @@ class WorkflowTests(unittest.TestCase):
             with self.subTest(response=response):
                 create.return_value = SimpleNamespace(choices=[SimpleNamespace(
                     message=SimpleNamespace(content=json.dumps(response)))])
-                self.assertEqual(asyncio.run(planner._score_topics(candidates)), [])
+                with self.assertRaisesRegex(RuntimeError, "TOPIC_SCORING_UNVERIFIED"):
+                    asyncio.run(planner._score_topics(candidates))
+
+        create.return_value = SimpleNamespace(choices=[SimpleNamespace(
+            finish_reason="length", message=SimpleNamespace(content=json.dumps({"candidates": valid})))])
+        with self.assertRaisesRegex(RuntimeError, "TOPIC_SCORING_UNVERIFIED"):
+            asyncio.run(planner._score_topics(candidates))
 
         create.return_value = SimpleNamespace(choices=[SimpleNamespace(
             message=SimpleNamespace(content=json.dumps({"candidates": valid})))])
@@ -151,9 +158,10 @@ class WorkflowTests(unittest.TestCase):
                 SimpleNamespace(message=SimpleNamespace(content="not JSON"))
             ])))))
 
-        self.assertEqual(asyncio.run(planner._score_topics([
-            {"title": "Unclear topic", "category": "Tech", "url": "https://example.com"}
-        ])), [])
+        with self.assertRaisesRegex(RuntimeError, "TOPIC_SCORING_UNVERIFIED"):
+            asyncio.run(planner._score_topics([
+                {"title": "Unclear topic", "category": "Tech", "url": "https://example.com"}
+            ]))
 
     def test_direct_generator_checks_batch_and_retry_reserve_before_generation(self):
         generator = object.__new__(VideoGenerator)

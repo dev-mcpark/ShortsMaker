@@ -901,7 +901,9 @@ class ProductionService:
                 reason = "RESOURCE_EXHAUSTED: 공급자 제한으로 스크립트 생성 중단"
             elif self._progress.error and "BGM_SELECTION_REQUIRED" in self._progress.error:
                 reason = self._progress.error
-            elif self._progress.error and "ARTICLE_ANALYSIS_UNVERIFIED" in self._progress.error:
+            elif self._progress.error and any(marker in self._progress.error for marker in (
+                "ARTICLE_ANALYSIS_UNVERIFIED", "TOPIC_SCORING_UNVERIFIED"
+            )):
                 reason = self._progress.error
             else:
                 reason = "스크립트 생성 실패"

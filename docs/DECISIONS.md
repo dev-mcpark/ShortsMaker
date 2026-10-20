@@ -419,3 +419,7 @@ The live shortlist test showed that a long article can still be a future service
 ## 2026-10-20 — Cap article-analysis output before paid calibration
 
 The existing GPT-4o article analysis had no output-token limit, so a malformed or verbose answer could spend beyond a small calibration round. Set `max_completion_tokens=1500` on its single Chat Completions request; a length-truncated or invalid JSON result still fails closed in RSS mode. This bounds output tokens, not input tokens or the provider's dollar bill. For each live calibration, inspect the exact extracted article and prompt size, verify current model pricing, and reserve a conservative per-request amount before submission. Keep source bodies and any provider response in ignored `outputs/`, not Git.
+
+## 2026-10-20 — Pause recurring work after invalid topic scoring
+
+The RSS scorer already validates one result per candidate but returned an empty list when the paid request failed or its JSON was malformed. That was indistinguishable from a legitimate decision to select no article, so a repeating schedule remained enabled and could pay to retry at its next trigger. Raise a distinct `TOPIC_SCORING_UNVERIFIED` error, preserve it through `ProductionService`, and pause the schedule as `scoring_failed`. Keep a valid all-unselected response as an ordinary no-story run. Cap scorer output at 2,000 tokens and reject a length-truncated response even if its JSON happens to parse; this is not a dollar cap and does not limit input tokens or actual provider billing.
