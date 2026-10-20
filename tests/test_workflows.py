@@ -65,11 +65,14 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("Concrete stakes", prompt)
         self.assertIn("Source-backed turn", prompt)
         self.assertIn("Visual proof", prompt)
+        self.assertIn("Event guides, discounts, openings, and promotional visits", prompt)
+        self.assertIn("Do not turn an intended economic benefit into a measured outcome", prompt)
         self.assertIn("A niche mechanism alone", prompt)
         self.assertIn("차고지 아래 저류조가 폭우 때 물을 모읍니다.", prompt)
         self.assertNotIn("<p>", prompt)
         self.assertNotIn("END", prompt)
         self.assertIn("do not treat a feed teaser as proof", prompt)
+        self.assertNotIn('"score": 9', prompt)
 
     def test_topic_scoring_rejects_ambiguous_or_malformed_selection(self):
         planner = object.__new__(ScriptPlanner)

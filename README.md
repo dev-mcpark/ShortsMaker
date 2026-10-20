@@ -54,10 +54,13 @@ follows the same article-length boundary.
 RSS discovery removes duplicate and disallowed article URLs before scoring. The paid
 topic scorer receives each title and a short plain-text RSS excerpt, and considers
 viewer stakes, source-checkable payoff, and whether the key relationship can be shown
-in the footage. It may decline the pool; incomplete, duplicate, or multiply selected
+in the footage. It asks to rate event guides and promotions conservatively unless a
+source-backed problem, decision, and observed outcome make an explanatory story.
+It may decline the pool; incomplete, duplicate, or multiply selected
 score responses also stop planning before article analysis or visual spending. Feed
 excerpts are leads only: selected claims still require extracted article text and
-editorial review. A longer scoring prompt can modestly increase OpenAI token use.
+editorial review. A high model score is not editorial approval. A longer scoring prompt
+can modestly increase OpenAI token use.
 New source files include Seoul City's official housing, transport, and economy RSS feeds;
 this workspace's ignored `rss_sources.json` includes them too. Existing customized source
 files are preserved, so add those feeds in Studio's Sources tab if you want them there.
