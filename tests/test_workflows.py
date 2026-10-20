@@ -527,10 +527,14 @@ class WorkflowTests(unittest.TestCase):
         planner._score_topics = AsyncMock(return_value=[
             TopicCandidate(item=candidate, score=8, reason="test", selected=True)
         ])
-        article = SimpleNamespace(word_count=120, title="Topic", main_text="Source text",
+        evidence = "The source describes the choice and its concrete mechanism."
+        article = SimpleNamespace(word_count=120, title="Topic", main_text=evidence,
                                   quotes=[], headings=[], captions=[])
         planner.content_extractor = SimpleNamespace(fetch_enhanced_article=Mock(return_value=article))
-        planner.content_analyzer = SimpleNamespace(analyze_content=AsyncMock(return_value=None))
+        planner.content_analyzer = SimpleNamespace(analyze_content=AsyncMock(return_value=
+            SimpleNamespace(story_fit=True, story_fit_evidence=evidence,
+                            core_message="Choice", visual_keywords=[])))
+        planner.content_enricher = SimpleNamespace(enrich_content=AsyncMock(return_value=[]))
         planner._save_history = Mock()
         planner._write_script = AsyncMock(return_value=object())
         planner._validate_and_save = AsyncMock(return_value=None)
@@ -547,10 +551,14 @@ class WorkflowTests(unittest.TestCase):
         planner._score_topics = AsyncMock(return_value=[
             TopicCandidate(item=candidate, score=8, reason="test", selected=True)
         ])
-        article = SimpleNamespace(word_count=120, title="Topic", main_text="Source text",
+        evidence = "The source describes the choice and its concrete mechanism."
+        article = SimpleNamespace(word_count=120, title="Topic", main_text=evidence,
                                   quotes=[], headings=[], captions=[])
         planner.content_extractor = SimpleNamespace(fetch_enhanced_article=Mock(return_value=article))
-        planner.content_analyzer = SimpleNamespace(analyze_content=AsyncMock(return_value=None))
+        planner.content_analyzer = SimpleNamespace(analyze_content=AsyncMock(return_value=
+            SimpleNamespace(story_fit=True, story_fit_evidence=evidence,
+                            core_message="Choice", visual_keywords=[])))
+        planner.content_enricher = SimpleNamespace(enrich_content=AsyncMock(return_value=[]))
         planner._write_script = AsyncMock(return_value=object())
         validated = object()
         planner._validate_and_save = AsyncMock(return_value=validated)
@@ -574,12 +582,16 @@ class WorkflowTests(unittest.TestCase):
             TopicCandidate(item=remaining[0], score=8, reason="test", selected=True)
         ])
         short = SimpleNamespace(word_count=99)
-        usable = SimpleNamespace(word_count=100, title="Usable", main_text="Source text",
+        evidence = "The source describes the choice and its concrete mechanism."
+        usable = SimpleNamespace(word_count=100, title="Usable", main_text=evidence,
                                  quotes=[], headings=[], captions=[])
         planner.content_extractor = SimpleNamespace(
             fetch_enhanced_article=Mock(side_effect=[None, short, usable])
         )
-        planner.content_analyzer = SimpleNamespace(analyze_content=AsyncMock(return_value=None))
+        planner.content_analyzer = SimpleNamespace(analyze_content=AsyncMock(return_value=
+            SimpleNamespace(story_fit=True, story_fit_evidence=evidence,
+                            core_message="Choice", visual_keywords=[])))
+        planner.content_enricher = SimpleNamespace(enrich_content=AsyncMock(return_value=[]))
         script = object()
         planner._write_script = AsyncMock(return_value=script)
         planner._validate_and_save = AsyncMock(return_value=script)
@@ -594,6 +606,56 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(planner._write_script.await_args.args[0]["url"],
                          "https://example.com/usable")
         planner._save_history.assert_called_once_with("usable", "https://example.com/usable")
+
+    def test_rss_rejects_announcement_or_unmatched_evidence_before_enrichment(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        candidate = {"title": "Launch announcement", "category": "City_Life",
+                     "url": "https://example.com/launch"}
+        planner._fetch_rss_feeds = Mock(return_value=[candidate])
+        planner._validate_url = Mock(return_value=True)
+        planner._score_topics = AsyncMock(return_value=[
+            TopicCandidate(item=candidate, score=8, reason="promising lead", selected=True)
+        ])
+        article = SimpleNamespace(word_count=120, title="Launch announcement",
+                                  main_text="The new service is scheduled to start next week.",
+                                  quotes=[], headings=[], captions=[])
+        planner.content_extractor = SimpleNamespace(fetch_enhanced_article=Mock(return_value=article))
+        planner.content_analyzer = SimpleNamespace(analyze_content=AsyncMock())
+        planner.content_enricher = SimpleNamespace(enrich_content=AsyncMock())
+        planner._write_script = AsyncMock()
+
+        for verdict, evidence in ((False, ""), (True, "An observed result not found in the article."),
+                                  (True, "scheduled"), (None, "")):
+            with self.subTest(verdict=verdict, evidence=evidence), patch.object(settings, "max_topic_retries", 1):
+                planner.content_analyzer.analyze_content.return_value = (
+                    SimpleNamespace(story_fit=verdict, story_fit_evidence=evidence)
+                    if verdict is not None else None)
+                self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+        planner.content_enricher.enrich_content.assert_not_awaited()
+        planner._write_script.assert_not_awaited()
+
+    def test_rss_analysis_failure_stops_before_another_paid_selection(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        candidates = [
+            {"title": name, "category": "City_Life", "url": f"https://example.com/{name}"}
+            for name in ("first", "second")
+        ]
+        planner._fetch_rss_feeds = Mock(return_value=candidates)
+        planner._validate_url = Mock(return_value=True)
+        planner._score_topics = AsyncMock(return_value=[
+            TopicCandidate(item=candidates[0], score=8, reason="lead", selected=True)
+        ])
+        planner.content_extractor = SimpleNamespace(fetch_enhanced_article=Mock(return_value=
+            SimpleNamespace(word_count=120, title="First", main_text="Article body")))
+        planner.content_analyzer = SimpleNamespace(analyze_content=AsyncMock(return_value=None))
+        planner._write_script = AsyncMock()
+
+        with patch.object(settings, "max_topic_retries", 2):
+            self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+        planner._score_topics.assert_awaited_once()
+        planner._write_script.assert_not_awaited()
 
     def test_empty_feed_does_not_invent_a_topic(self):
         planner = object.__new__(ScriptPlanner)

@@ -48,9 +48,13 @@ An article enters topic history only after its script passes validation. Studio 
 tracks completed editing work and finishes after an optional upload. Stop requests wait
 for the current external API call to return before the run is released.
 RSS planning may end without a script when every candidate is declined, topic scoring
-fails, or selected articles cannot yield at least 100 words of body text. A short RSS
-summary alone does not trigger paid script writing. A direct URL supplied by the user
-follows the same article-length boundary.
+fails, selected articles cannot yield at least 100 words of body text, or the existing
+article analysis cannot support an explanatory story with a substantive sentence copied
+from that body. For RSS, the existing analysis call is asked to distinguish a verified
+choice or mechanism from a future announcement; the app stops before enrichment and
+script writing if the answer is missing, negative, or unsupported by the article text.
+A short RSS summary alone does not trigger paid script writing. A direct URL supplied by the user follows the same
+article-length boundary but remains a manual topic choice.
 RSS discovery removes duplicate and disallowed article URLs before scoring. The paid
 topic scorer receives each title and a short plain-text RSS excerpt, and considers
 viewer stakes, source-checkable payoff, and whether the key relationship can be shown

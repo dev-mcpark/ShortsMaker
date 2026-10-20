@@ -436,6 +436,37 @@ class ReviewRegressions(unittest.TestCase):
         result = asyncio.run(service.full_pipeline())
         self.assertEqual(result.error, "스크립트 생성 실패")
 
+    def test_article_analysis_requests_source_backed_story_fit(self):
+        analyzer = object.__new__(ContentAnalyzer)
+        analyzer.logger = Mock()
+        analyzer.model = "gpt-4o"
+        create = AsyncMock(return_value=SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content=json.dumps({
+                "core_message": "A planned service", "hook": "Why the plan?",
+                "secret_mechanism": "No observed mechanism", "context_background": "Notice",
+                "future_impact": "Unknown", "story_fit": False, "story_fit_evidence": "",
+            })))
+        ]))
+        analyzer.client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=create)))
+        article = SimpleNamespace(title="Launch", main_text="Service starts next week.",
+                                  quotes=[], headings=[], captions=[])
+
+        analysis = asyncio.run(analyzer.analyze_content(article))
+
+        self.assertFalse(analysis.story_fit)
+        prompt = create.await_args.kwargs["messages"][0]["content"]
+        self.assertIn("future service launch", prompt)
+        self.assertIn("exact, substantive sentence", prompt)
+        self.assertIn("story_fit_evidence", prompt)
+
+        create.return_value.choices[0].message.content = json.dumps({
+            "core_message": "A planned service", "hook": "Why the plan?",
+            "secret_mechanism": "No observed mechanism", "context_background": "Notice",
+            "future_impact": "Unknown", "story_fit": "true", "story_fit_evidence": "",
+        })
+        self.assertIsNone(asyncio.run(analyzer.analyze_content(article)))
+
     def test_openai_limit_stops_optional_planning_stages(self):
         limited = RateLimitError("quota", response=httpx.Response(
             429, request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions")

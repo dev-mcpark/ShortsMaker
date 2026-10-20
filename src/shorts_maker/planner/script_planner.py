@@ -431,15 +431,25 @@ class ScriptPlanner:
 
             self.logger.info("🔍 Analyzing content depth...")
             analysis = await self.content_analyzer.analyze_content(article_content)
+            if not analysis:
+                self.logger.warning("RSS article analysis unavailable; stopping before another paid selection")
+                return None, None
+
+            evidence = ' '.join(analysis.story_fit_evidence.split())
+            source_text = ' '.join(article_content.main_text.split())
+            if (analysis.story_fit is not True or len(evidence) < 20
+                    or evidence not in source_text):
+                self.logger.info("RSS article lacks a source-backed explanatory turn; skipping before enrichment and writing")
+                candidates = [c for c in candidates if c['url'] != selection['url']]
+                continue
 
             enriched_info = []
-            if analysis:
-                self.logger.info("🌐 Searching for supplementary info...")
-                enriched_info = await self.content_enricher.enrich_content(
-                    topic=article_content.title,
-                    core_message=analysis.core_message,
-                    visual_keywords=analysis.visual_keywords
-                )
+            self.logger.info("🌐 Searching for supplementary info...")
+            enriched_info = await self.content_enricher.enrich_content(
+                topic=article_content.title,
+                core_message=analysis.core_message,
+                visual_keywords=analysis.visual_keywords
+            )
 
             selection['content'] = article_content.main_text[:8000]
             selection['quotes'] = article_content.quotes

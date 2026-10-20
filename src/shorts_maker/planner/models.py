@@ -90,6 +90,8 @@ class ContentAnalysis(BaseModel):
     expert_insights: List[str] = [] # 전문가의 견해나 인용구 강조점
     future_impact: str         # 미래에 미칠 영향이나 결론
     visual_keywords: List[str] = [] # 시각적 묘사를 위한 키워드 (오브젝트, 환경 등)
+    story_fit: bool = Field(strict=True)  # RSS 자동 제작용 본문 적합성
+    story_fit_evidence: str  # 본문에서 그대로 가져온 근거 문장
 
     # 쇼츠 기획을 위한 세부 구성 (필수 4단계)
     story_structure: Dict[str, str] = {
