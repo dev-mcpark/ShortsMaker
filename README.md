@@ -216,6 +216,7 @@ For a local Google monthly guard, set all four `GOOGLE_MONTHLY_BUDGET_KRW`, `GOO
 If a scheduled run receives provider `429` or `RESOURCE_EXHAUSTED`, that schedule pauses instead of buying planning and narration again at its next time. Check provider usage and the failed run before manually re-enabling it; the error alone does not distinguish quota from temporary capacity.
 The same schedule pause applies when a submitted Veo operation finishes or times out without a verified video file. Reconcile its request record and provider bill before re-enabling the schedule; an explicit in-run server-error retry allowance still uses its reserved attempts.
 If editing produces a video but the run then fails a final check or private upload, the repeating schedule pauses as `rendered_failed`. Inspect the retained MP4 and the scheduler log before manually re-enabling it; another full run would plan and buy a new video.
+Other failed results and unexpected exceptions also pause the repeating schedule, because the run may already have spent on planning or media. Inspect the local log and retained assets before re-enabling it. A normal `스크립트 생성 실패` result with no suitable source leaves RSS discovery enabled for the next source window; it can still incur new planning costs then.
 An OpenAI rate limit during topic scoring, article analysis, enrichment summarization, or script validation also stops the current planning round instead of trying another paid topic or model call.
 
 ---

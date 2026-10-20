@@ -418,6 +418,8 @@ class ScheduleManager:
             scoring_unverified = not result.success and _TOPIC_SCORING_UNVERIFIED in (result.error or "")
             planning_unverified = not result.success and _PLANNING_UNVERIFIED in (result.error or "")
             rendered_failed = not result.success and bool(result.video_path)
+            # Only an ordinary no-story result waits for the next source window.
+            non_story_failure = not result.success and result.error != "스크립트 생성 실패"
             # 공급자 제한 뒤의 다음 일정이 계획·내레이션 비용을 다시 쓰지 않도록 멈춘다.
             last_result = 'success' if result.success else 'failed'
             if billing_disabled:
@@ -450,7 +452,7 @@ class ScheduleManager:
             if (billing_disabled or music_missing or provider_limited or veo_unverified
                     or google_budget_exceeded or visual_cost_cap_exceeded
                     or music_selection_required or analysis_unverified or scoring_unverified
-                    or planning_unverified or rendered_failed):
+                    or planning_unverified or rendered_failed or non_story_failure):
                 updates['enabled'] = False
             if schedule.get('direct_url') and (result.success or result.video_path):
                 updates['last_rendered_url'] = schedule['direct_url']
@@ -466,32 +468,26 @@ class ScheduleManager:
             self.logger.error(f"Scheduled pipeline error: {e}")
             updates = {
                 'last_run': datetime.now().isoformat(),
-                'last_result': f'error: {str(e)}'
+                'run_count': schedule.get('run_count', 0) + 1,
+                'last_result': 'error_paused',
+                'enabled': False,
             }
             if _PROVIDER_LIMIT.search(str(e)):
-                updates.update(enabled=False, last_result='provider_limit',
-                               run_count=schedule.get('run_count', 0) + 1)
+                updates['last_result'] = 'provider_limit'
             elif _VEO_RESULT_UNVERIFIED in str(e):
-                updates.update(enabled=False, last_result='veo_result_unverified',
-                               run_count=schedule.get('run_count', 0) + 1)
+                updates['last_result'] = 'veo_result_unverified'
             elif _GOOGLE_BUDGET_EXCEEDED in str(e):
-                updates.update(enabled=False, last_result='google_budget_exceeded',
-                               run_count=schedule.get('run_count', 0) + 1)
+                updates['last_result'] = 'google_budget_exceeded'
             elif _VISUAL_COST_CAP_EXCEEDED in str(e):
-                updates.update(enabled=False, last_result='visual_cost_cap_exceeded',
-                               run_count=schedule.get('run_count', 0) + 1)
+                updates['last_result'] = 'visual_cost_cap_exceeded'
             elif _BGM_SELECTION_REQUIRED in str(e):
-                updates.update(enabled=False, last_result='music_selection_required',
-                               run_count=schedule.get('run_count', 0) + 1)
+                updates['last_result'] = 'music_selection_required'
             elif _ARTICLE_ANALYSIS_UNVERIFIED in str(e):
-                updates.update(enabled=False, last_result='analysis_failed',
-                               run_count=schedule.get('run_count', 0) + 1)
+                updates['last_result'] = 'analysis_failed'
             elif _TOPIC_SCORING_UNVERIFIED in str(e):
-                updates.update(enabled=False, last_result='scoring_failed',
-                               run_count=schedule.get('run_count', 0) + 1)
+                updates['last_result'] = 'scoring_failed'
             elif _PLANNING_UNVERIFIED in str(e):
-                updates.update(enabled=False, last_result='planning_failed',
-                               run_count=schedule.get('run_count', 0) + 1)
+                updates['last_result'] = 'planning_failed'
             self.update_schedule(schedule['id'], updates)
 
     def get_next_run_times(self) -> List[Dict[str, Any]]:

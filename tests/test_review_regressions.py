@@ -247,7 +247,46 @@ class ReviewRegressions(unittest.TestCase):
                 new_callable=AsyncMock, return_value=failure,
             ):
                 asyncio.run(manager._execute_pipeline(schedule))
-            self.assertTrue(manager.get_schedule(schedule["id"])["enabled"])
+            stored = manager.get_schedule(schedule["id"])
+            self.assertFalse(stored["enabled"])
+            self.assertEqual(stored["last_result"], "failed")
+
+    def test_unclassified_schedule_failures_pause_without_repeating_paid_work(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            manager._scheduler = Mock()
+            manager._scheduler_running = True
+            for outcome, expected in (
+                (ProductionService()._failed_result("local edit failed"), "failed"),
+                (RuntimeError("unexpected failure after request"), "error_paused"),
+            ):
+                with self.subTest(expected=expected):
+                    schedule = manager.create_schedule("RSS", "09:00")
+                    with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                        "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                        new_callable=AsyncMock,
+                    ) as pipeline:
+                        if isinstance(outcome, Exception):
+                            pipeline.side_effect = outcome
+                        else:
+                            pipeline.return_value = outcome
+                        asyncio.run(manager._execute_pipeline(schedule))
+                        asyncio.run(manager._execute_pipeline(schedule))
+                        pipeline.assert_awaited_once()
+                    stored = manager.get_schedule(schedule["id"])
+                    self.assertFalse(stored["enabled"])
+                    self.assertEqual(stored["last_result"], expected)
+                    self.assertEqual(stored["run_count"], 1)
+                    manager._scheduler.remove_job.assert_any_call(schedule["id"])
+
+            no_story = manager.create_schedule("No story", "10:00")
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock,
+                return_value=ProductionService()._failed_result("스크립트 생성 실패"),
+            ):
+                asyncio.run(manager._execute_pipeline(no_story))
+            self.assertTrue(manager.get_schedule(no_story["id"])["enabled"])
 
     def test_unverified_planning_result_pauses_repeating_schedule(self):
         with tempfile.TemporaryDirectory() as directory:
