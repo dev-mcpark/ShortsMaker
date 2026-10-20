@@ -37,7 +37,7 @@ For a reviewed story with retained assets, `ProductionService.full_pipeline` als
 
 | Change | Start here | Verify with |
 | --- | --- | --- |
-| Topic sourcing and script facts | `src/shorts_maker/planner/script_planner.py`, `content_extractor.py`, `script_validator.py` | `tests/test_content_extraction.py`, `tests/test_review_regressions.py` |
+| Topic sourcing and script facts | `src/shorts_maker/utils/source_manager.py`, `planner/script_planner.py`, `content_extractor.py`, `script_validator.py`; the ignored `rss_sources.json` holds the local feed selection | `tests/test_content_extraction.py`, `tests/test_review_regressions.py`, `tests/test_workflows.py` |
 | Source-grounded visual briefs, Veo prompt wrapper, optional first-frame input, and private per-request attempt records | `src/shorts_maker/planner/script_planner.py`, `script_validator.py`, `generator/video_generator.py` | `tests/test_review_regressions.py`, `tests/test_production_gates.py` |
 | Visual model, duration, or output cost | `src/shorts_maker/services/visual_cost.py`, `generator/video_generator.py`, `utils/config.py` | `tests/test_production_gates.py`, `tests/test_review_regressions.py` |
 | Optional monthly Google visual budget, local reservations, and status | `src/shorts_maker/services/google_budget.py`, `generator/video_generator.py`, `utils/character_video_generator.py`, `utils/config.py`, `utils/scheduler.py` | `tests/test_google_budget.py`, `tests/test_production_gates.py`, `tests/test_review_regressions.py` |

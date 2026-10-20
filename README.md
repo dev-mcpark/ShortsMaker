@@ -51,6 +51,9 @@ RSS planning may end without a script when every candidate is declined, topic sc
 fails, or selected articles cannot yield at least 100 words of body text. A short RSS
 summary alone does not trigger paid script writing. A direct URL supplied by the user
 follows the same article-length boundary.
+New source files include Seoul City's official housing, transport, and economy RSS feeds;
+this workspace's ignored `rss_sources.json` includes them too. Existing customized source
+files are preserved, so add those feeds in Studio's Sources tab if you want them there.
 Planning rejects scripts without source text and asks the editorial validator to reject
 claims or visual scenes that conflict with the supplied excerpt. Generated visual briefs
 favor one source-grounded moment and illustrative diagrams when a realistic reconstruction

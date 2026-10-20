@@ -166,6 +166,8 @@ class ScriptPlanner:
         self.logger.info(f"📡 Fetching feeds from {len(selected_sources)} sources...")
         for category, url in selected_sources:
             try:
+                if sum(post['category'] == category for post in posts) >= 5:
+                    continue
                 if not self._validate_url(url):
                     continue
                 # 캐시 확인

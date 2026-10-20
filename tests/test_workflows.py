@@ -562,6 +562,26 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
         planner._score_topics.assert_not_awaited()
 
+    def test_rss_category_limit_skips_extra_feed_before_fetch(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.rss_sources = {"City_Life": ["https://example.com/one", "https://example.com/two"]}
+        planner._load_url_history = Mock(return_value=[])
+        planner._validate_url = Mock(return_value=True)
+        planner._is_recent = Mock(return_value=True)
+        entries = [
+            {"title": f"Story {i}", "link": f"https://example.com/story-{i}",
+             "summary": "Source summary " * 20, "published_parsed": None}
+            for i in range(5)
+        ]
+        planner.rss_cache = SimpleNamespace(get=Mock(return_value=entries), set=Mock())
+
+        with patch("shorts_maker.planner.script_planner.random.shuffle"):
+            posts = planner._fetch_rss_feeds()
+
+        self.assertEqual(len(posts), 5)
+        planner.rss_cache.get.assert_called_once_with("https://example.com/one")
+
     def test_private_rss_article_is_not_downloaded(self):
         planner = object.__new__(ScriptPlanner)
         planner.logger = Mock()

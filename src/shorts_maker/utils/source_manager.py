@@ -26,7 +26,12 @@ DEFAULT_SOURCES = {
     ],
     "Finance_Economy": [
         "https://www.cnbc.com/id/10000664/device/rss/rss.html",
-        "https://rss.hankyung.com/feed/market.xml"
+        "https://rss.hankyung.com/feed/market.xml",
+        "https://mediahub.seoul.go.kr/news/rss/04"
+    ],
+    "City_Life": [
+        "https://mediahub.seoul.go.kr/news/rss/03",
+        "https://mediahub.seoul.go.kr/news/rss/01"
     ],
     "Life_Tips": [
         "https://lifehacker.com/rss",
