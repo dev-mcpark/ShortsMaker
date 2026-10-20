@@ -1,0 +1,48 @@
+{
+  "title": "낚싯대 회사가 남산 전기버스를 만든 이유",
+  "description": "서울시의 2026년 전문가 칼럼과 2010년 개발 발표를 교차 확인한 미승인 이야기 초안입니다. 칼럼은 낚싯대·헬멧에서 복합소재와 전기버스로 이어진 회사의 이력을 설명합니다: https://mediahub.seoul.go.kr/archives/2019101 . 서울시 발표의 25% 수치는 차량 전체가 아닌 차체 무게이며, 주행거리 연장은 서울시 설명입니다: https://mediahub.seoul.go.kr/archives/165130 . 남산 노선 투입은 당시 현장 기사로 확인합니다: https://mediahub.seoul.go.kr/archives/166241 . 화면은 자체 제작 개념도이며 실제 차량이나 제조 공정의 재현이 아닙니다.",
+  "tags": ["복합소재", "전기버스", "남산", "기술사"],
+  "mood": "curious",
+  "style": "source-grounded historical materials story",
+  "music_direction": "호기심을 유지하는 가벼운 리듬. 낚싯대와 버스의 연결이 드러날 때만 변화시키며, 임시 이야기 검토본은 음악 없이 듣는다.",
+  "source_name": "서울시 전문가 칼럼 (2026)·전기버스 개발 발표 (2010)",
+  "source_url": "https://mediahub.seoul.go.kr/archives/2019101",
+  "generation_mode": "image",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "visual_mode": "image",
+      "duration_seconds": 5,
+      "visual_description": "Separate illustrative fishing rod and Namsan electric bus, with no literal transformation between objects.",
+      "script_text": "낚싯대 만들던 회사가 남산 전기버스를 만들었다고요? 대체 무슨 관계일까요?"
+    },
+    {
+      "scene_number": 2,
+      "visual_mode": "image",
+      "duration_seconds": 6,
+      "visual_description": "An illustrative 2010 battery pack beside a separate vehicle body shell; imply the historic weight challenge without invented specifications.",
+      "script_text": "2010년 전기버스는 배터리 무게가 부담이었습니다. 차체라도 가볍게 만들 방법이 필요했죠."
+    },
+    {
+      "scene_number": 3,
+      "visual_mode": "image",
+      "duration_seconds": 6,
+      "visual_description": "Illustrative fiber strands forming a separate body panel. Do not depict the rod and bus as using an identical fiber recipe.",
+      "script_text": "낚싯대와 헬멧을 만들던 한국화이바는 복합소재 기술을 버스 차체에 활용했습니다."
+    },
+    {
+      "scene_number": 4,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Compare two generic body shells, one steel and one carbon composite. Locally typeset and attribute the 25% body-weight figure; do not show total vehicle weight.",
+      "script_text": "서울시는 철판 대신 탄소복합소재를 써서, 차체 무게를 25퍼센트 줄였다고 발표했습니다."
+    },
+    {
+      "scene_number": 5,
+      "visual_mode": "image",
+      "duration_seconds": 8,
+      "visual_description": "Illustrative electric bus following a simple uphill route to Namsan. Label the range effect as Seoul City's explanation, not measured fleet-wide savings.",
+      "script_text": "가벼워진 차체는 한 번 충전해 달리는 거리를 늘리는 데 도움이 됐다는 설명입니다. 그 버스는 남산 노선에 투입됐죠."
+    }
+  ]
+}
