@@ -23,7 +23,7 @@ NiceGUI / scheduler
   -> AppState / ProductionService
   -> paid-production gate before new planning, narration, or visuals
   -> minimum automatic visual-cost and local monthly-room preflight before full-run planning
-  -> ScriptPlanner: RSS or URL -> extraction -> analysis -> script -> source-grounded validation
+  -> ScriptPlanner: RSS discovery -> bounded title/excerpt scoring -> article extraction -> analysis -> script -> source-grounded validation (or direct URL from extraction)
   -> visual cost preflight -> narration duration check
   -> VideoGenerator: per-scene Veo or Gemini, with visual cache
   -> VideoEditor: narration, subtitles, music, render

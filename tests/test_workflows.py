@@ -2,6 +2,7 @@
 
 import asyncio
 import importlib
+import json
 import tempfile
 import tomllib
 import unittest
@@ -55,15 +56,53 @@ class WorkflowTests(unittest.TestCase):
             completions=SimpleNamespace(create=create)))
 
         result = asyncio.run(planner._score_topics([
-            {"title": "Article title", "category": "Tech", "url": "https://example.com"}
+            {"title": "Article title", "category": "Tech", "url": "https://example.com",
+             "content": "<p>차고지 아래 저류조가 폭우 때 물을 모읍니다.</p>" + "x" * 250 + "END"}
         ]))
 
         self.assertTrue(result[0].selected)
         prompt = create.await_args.kwargs["messages"][0]["content"]
         self.assertIn("Concrete stakes", prompt)
         self.assertIn("Source-backed turn", prompt)
+        self.assertIn("Visual proof", prompt)
         self.assertIn("A niche mechanism alone", prompt)
-        self.assertIn("Judge only what the candidate title supports", prompt)
+        self.assertIn("차고지 아래 저류조가 폭우 때 물을 모읍니다.", prompt)
+        self.assertNotIn("<p>", prompt)
+        self.assertNotIn("END", prompt)
+        self.assertIn("do not treat a feed teaser as proof", prompt)
+
+    def test_topic_scoring_rejects_ambiguous_or_malformed_selection(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.history_file = "/nonexistent/shorts-maker-history.json"
+        create = AsyncMock()
+        planner.client = SimpleNamespace(chat=SimpleNamespace(
+            completions=SimpleNamespace(create=create)))
+        candidates = [
+            {"title": f"Story {i}", "category": "City_Life", "url": f"https://example.com/{i}"}
+            for i in range(2)
+        ]
+        valid = [
+            {"index": i, "score": 7, "reason": "본문 검증 필요", "selected": i == 0}
+            for i in range(2)
+        ]
+        bad_responses = [
+            {"candidates": [valid[0]]},
+            {"candidates": [valid[0], valid[0]]},
+            {"candidates": [dict(valid[0], selected=True), dict(valid[1], selected=True)]},
+            {"candidates": [dict(valid[0], selected="false"), valid[1]]},
+            {"candidates": [dict(valid[0], score=11), valid[1]]},
+        ]
+        for response in bad_responses:
+            with self.subTest(response=response):
+                create.return_value = SimpleNamespace(choices=[SimpleNamespace(
+                    message=SimpleNamespace(content=json.dumps(response)))])
+                self.assertEqual(asyncio.run(planner._score_topics(candidates)), [])
+
+        create.return_value = SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content=json.dumps({"candidates": valid})))])
+        result = asyncio.run(planner._score_topics(candidates))
+        self.assertEqual([candidate.selected for candidate in result], [True, False])
 
     def test_topic_scoring_can_decline_the_whole_pool(self):
         planner = object.__new__(ScriptPlanner)
@@ -581,6 +620,25 @@ class WorkflowTests(unittest.TestCase):
 
         self.assertEqual(len(posts), 5)
         planner.rss_cache.get.assert_called_once_with("https://example.com/one")
+
+    def test_rss_discovery_deduplicates_and_rejects_disallowed_article_urls(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.rss_sources = {
+            "City_Life": ["https://example.com/city"],
+            "Finance_Economy": ["https://example.com/economy"],
+        }
+        planner._load_url_history = Mock(return_value=[])
+        planner._is_recent = Mock(return_value=True)
+        shared = {"title": "Shared", "link": "https://example.com/shared",
+                  "summary": "Source summary " * 20, "published_parsed": None}
+        blocked = dict(shared, title="Blocked", link="http://127.0.0.1/private")
+        planner.rss_cache = SimpleNamespace(get=Mock(return_value=[shared, blocked]), set=Mock())
+
+        with patch("shorts_maker.planner.script_planner.random.shuffle"):
+            posts = planner._fetch_rss_feeds()
+
+        self.assertEqual([post["url"] for post in posts], ["https://example.com/shared"])
 
     def test_private_rss_article_is_not_downloaded(self):
         planner = object.__new__(ScriptPlanner)
