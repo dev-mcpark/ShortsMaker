@@ -3,11 +3,13 @@ import os
 import json
 import random
 import re
+import tempfile
 import feedparser
 import httpx
 from bs4 import BeautifulSoup
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 import time
 from urllib.parse import urljoin
 from openai import AsyncOpenAI, RateLimitError
@@ -97,21 +99,34 @@ class ScriptPlanner:
         if os.path.exists(self.url_history_file):
             try:
                 with open(self.url_history_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, IOError) as e:
-                self.logger.warning(f"URL 히스토리 로드 실패: {e}")
-                return []
+                    urls = json.load(f)
+            except (json.JSONDecodeError, UnicodeError, OSError) as e:
+                raise ValueError(f"URL 히스토리를 읽을 수 없습니다: {self.url_history_file}") from e
+            if not isinstance(urls, list) or any(not isinstance(url, str) for url in urls):
+                raise ValueError(f"URL 히스토리 형식이 잘못되었습니다: {self.url_history_file}")
+            return urls
         return []
 
-    def _save_history(self, title: str, url: str):
-        # Save URL history (simple list for dedup)
-        url_history = self._load_url_history()
-        url_history.append(url)
+    def _remember_rss_urls(self, urls: List[str]):
+        history = list(dict.fromkeys([*self._load_url_history(), *urls]))[-500:]
+        path = Path(self.url_history_file)
+        temporary = None
         try:
-            with open(self.url_history_file, 'w', encoding='utf-8') as f:
-                json.dump(url_history[-100:], f, indent=2, ensure_ascii=False)
-        except IOError as e:
-            self.logger.warning(f"URL 히스토리 저장 실패: {e}")
+            with tempfile.NamedTemporaryFile(
+                mode='w', encoding='utf-8', dir=path.parent,
+                prefix=f'.{path.name}.', delete=False,
+            ) as file:
+                temporary = Path(file.name)
+                json.dump(history, file, indent=2, ensure_ascii=False)
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(temporary, path)
+        finally:
+            if temporary:
+                temporary.unlink(missing_ok=True)
+
+    def _save_history(self, title: str, url: str):
+        self._remember_rss_urls([url])
 
         # Save Topic history (detailed for variety check)
         topic_history = []
@@ -414,6 +429,7 @@ class ScriptPlanner:
             selected_candidate = next((c for c in scored if c.selected), None)
             if not selected_candidate:
                 self.logger.warning(f"Attempt {attempt+1}: 선택 가능한 후보 없음. 종료.")
+                self._remember_rss_urls([candidate.item['url'] for candidate in scored])
                 break
 
             selection = selected_candidate.item
@@ -429,6 +445,7 @@ class ScriptPlanner:
             )
             if not article_content or article_content.word_count < self.MIN_ARTICLE_WORDS:
                 self.logger.warning("RSS article text missing or too short; skipping this candidate before script writing")
+                self._remember_rss_urls([selection['url']])
                 candidates = [c for c in candidates if c['url'] != selection['url']]
                 continue
             self.logger.info(f"✅ Successfully extracted {article_content.word_count} words.")
@@ -443,6 +460,7 @@ class ScriptPlanner:
             if (analysis.story_fit is not True or len(evidence) < 20
                     or evidence not in source_text):
                 self.logger.info("RSS article lacks a source-backed explanatory turn; skipping before enrichment and writing")
+                self._remember_rss_urls([selection['url']])
                 candidates = [c for c in candidates if c['url'] != selection['url']]
                 continue
 
@@ -472,6 +490,7 @@ class ScriptPlanner:
 
             # Validation failed → remove candidate and retry
             self.logger.info("🔄 Discarding this topic and selecting a NEW one...")
+            self._remember_rss_urls([selection['url']])
             candidates = [c for c in candidates if c['url'] != selection['url']]
 
         self.logger.error("Failed to generate a valid script after retries.")

@@ -143,11 +143,53 @@ class WorkflowTests(unittest.TestCase):
         ])
         planner.content_extractor = SimpleNamespace(fetch_enhanced_article=Mock())
         planner._write_script = AsyncMock()
+        planner._remember_rss_urls = Mock()
 
         self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
         planner._score_topics.assert_awaited_once()
         planner.content_extractor.fetch_enhanced_article.assert_not_called()
         planner._write_script.assert_not_awaited()
+        planner._remember_rss_urls.assert_called_once_with([candidate["url"]])
+
+    def test_declined_rss_lead_is_not_scored_again_on_next_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "url_history.json"
+            planner = object.__new__(ScriptPlanner)
+            planner.logger = Mock()
+            planner.url_history_file = str(path)
+            planner.rss_sources = {"City_Life": ["https://example.com/feed"]}
+            planner.rss_cache = SimpleNamespace(get=Mock(return_value=[{
+                "title": "Unclear story", "link": "https://example.com/story",
+                "summary": "Source summary " * 20, "published_parsed": None,
+            }]), set=Mock())
+            planner._validate_url = Mock(return_value=True)
+            planner._is_recent = Mock(return_value=True)
+            planner.content_extractor = SimpleNamespace(fetch_enhanced_article=Mock())
+            planner._score_topics = AsyncMock(side_effect=lambda candidates: [
+                TopicCandidate(item=item, score=4, reason="no source-backed turn", selected=False)
+                for item in candidates
+            ])
+
+            with patch("shorts_maker.planner.script_planner.random.shuffle"):
+                planner._score_topics.side_effect = RuntimeError("TOPIC_SCORING_UNVERIFIED")
+                with self.assertRaisesRegex(RuntimeError, "TOPIC_SCORING_UNVERIFIED"):
+                    asyncio.run(planner.plan_content())
+                self.assertFalse(path.exists())
+                planner._score_topics.side_effect = lambda candidates: [
+                    TopicCandidate(item=item, score=4, reason="no source-backed turn", selected=False)
+                    for item in candidates
+                ]
+                self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+                self.assertEqual(json.loads(path.read_text(encoding="utf-8")),
+                                 ["https://example.com/story"])
+                self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+            self.assertEqual(planner._score_topics.await_count, 2)
+            planner.content_extractor.fetch_enhanced_article.assert_not_called()
+
+            path.write_text("{broken", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "URL 히스토리"):
+                planner._fetch_rss_feeds()
+            self.assertEqual(path.read_text(encoding="utf-8"), "{broken")
 
     def test_bad_topic_score_response_does_not_randomly_select(self):
         planner = object.__new__(ScriptPlanner)
@@ -544,11 +586,13 @@ class WorkflowTests(unittest.TestCase):
                             core_message="Choice", visual_keywords=[])))
         planner.content_enricher = SimpleNamespace(enrich_content=AsyncMock(return_value=[]))
         planner._save_history = Mock()
+        planner._remember_rss_urls = Mock()
         planner._write_script = AsyncMock(return_value=object())
         planner._validate_and_save = AsyncMock(return_value=None)
 
         self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
         planner._save_history.assert_not_called()
+        planner._remember_rss_urls.assert_called_once_with([candidate["url"]])
 
     def test_valid_script_is_recorded_after_validation(self):
         planner = object.__new__(ScriptPlanner)
@@ -604,6 +648,7 @@ class WorkflowTests(unittest.TestCase):
         planner._write_script = AsyncMock(return_value=script)
         planner._validate_and_save = AsyncMock(return_value=script)
         planner._save_history = Mock()
+        planner._remember_rss_urls = Mock()
 
         with patch.object(settings, "max_topic_retries", 3):
             result, _ = asyncio.run(planner.plan_content())
@@ -614,6 +659,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(planner._write_script.await_args.args[0]["url"],
                          "https://example.com/usable")
         planner._save_history.assert_called_once_with("usable", "https://example.com/usable")
+        self.assertEqual([call.args[0] for call in planner._remember_rss_urls.call_args_list],
+                         [["https://example.com/missing"], ["https://example.com/short"]])
 
     def test_rss_rejects_announcement_or_unmatched_evidence_before_enrichment(self):
         planner = object.__new__(ScriptPlanner)
@@ -632,6 +679,7 @@ class WorkflowTests(unittest.TestCase):
         planner.content_analyzer = SimpleNamespace(analyze_content=AsyncMock())
         planner.content_enricher = SimpleNamespace(enrich_content=AsyncMock())
         planner._write_script = AsyncMock()
+        planner._remember_rss_urls = Mock()
 
         for verdict, evidence in ((False, ""), (True, "An observed result not found in the article."),
                                   (True, "scheduled")):
@@ -641,6 +689,7 @@ class WorkflowTests(unittest.TestCase):
                 self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
         planner.content_enricher.enrich_content.assert_not_awaited()
         planner._write_script.assert_not_awaited()
+        self.assertEqual(planner._remember_rss_urls.call_count, 3)
 
     def test_rss_analysis_failure_stops_before_another_paid_selection(self):
         planner = object.__new__(ScriptPlanner)
