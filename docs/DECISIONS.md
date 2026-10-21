@@ -475,3 +475,7 @@ The RSS recency check previously treated missing and invalid dates as recent, ad
 ## 2026-10-21 — Keep free RSS previews reproducible within a day
 
 The bounded free preview and paid discovery used independent random shuffles, so looking at the preview did not identify the later scorer's actual five leads per category, even when feeds had not changed. Order sources and feed entries by a stable digest of local date and URLs; preserve the five-lead cap, cross-category mix, and daily rotation without a new model call or configuration. Sort a copy of cached entries so one preview cannot alter the next selection. New feed content, changed URL history, source failures, or the next day can still change the shortlist. This fixes preview parity, not ranking quality or feed-source coverage in a single run.
+
+## 2026-10-21 — Make the free story-listening gate reproducible
+
+The Jamsu Bridge story audition needed an ad hoc command to join five verified scratch scenes and write a review page. Extend the existing macOS Yuna CLI to produce a local combined audio file and escaped HTML page after its script-bound scene checks, without touching the production voice path or making a provider call. Rebuild the derived review on rerun while retaining verified scene files, and replace completed outputs only after FFmpeg succeeds. This gives later agents a one-command way to test an unapproved story's spoken arc before buying music, visuals, or final narration. A listen can reject a weak topic; it cannot establish source truth, visual clarity, or audience retention.

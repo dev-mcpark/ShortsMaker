@@ -69,6 +69,50 @@ class ScratchNarrationTests(unittest.TestCase):
                     scratch.prepare(script, output)
                 self.assertEqual(run.call_count, 2)
 
+    def test_story_review_reuses_audio_and_escapes_draft_content(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = root / "script.json"
+            output = root / "outputs" / "scratch"
+            output.mkdir(parents=True)
+            self.script(script)
+            draft = json.loads(script.read_text(encoding="utf-8"))
+            draft.update(title="<script>Draft</script>", description="<b>Unapproved</b>",
+                         source_name="<Source>", source_url="javascript:alert(1)")
+            draft["scenes"][0]["visual_description"] = "<img src=x>"
+            script.write_text(json.dumps(draft, ensure_ascii=False), encoding="utf-8")
+            audio = output / "scene_1.aiff"
+            audio.write_bytes(b"retained audio")
+
+            class FakeAudio:
+                duration = 3.0
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *_):
+                    pass
+
+            def concatenate(command, check):
+                Path(command[-1]).write_bytes(b"combined audio")
+
+            with (patch.object(scratch.settings, "output_dir", root / "outputs"),
+                  patch.object(scratch, "AudioFileClip", return_value=FakeAudio()),
+                  patch.object(scratch.subprocess, "run", side_effect=concatenate) as run):
+                page_path = scratch.render_story_review(script, [str(audio)], output)
+                page = page_path.read_text(encoding="utf-8")
+                self.assertIn("&lt;script&gt;Draft&lt;/script&gt;", page)
+                self.assertIn("&lt;img src=x&gt;", page)
+                self.assertNotIn("javascript:", page)
+                self.assertIn("story_audio.m4a", page)
+                self.assertEqual((output / "story_audio.m4a").read_bytes(), b"combined audio")
+                run.assert_called_once()
+                with patch.object(scratch.subprocess, "run", side_effect=OSError("ffmpeg failed")):
+                    with self.assertRaisesRegex(OSError, "ffmpeg failed"):
+                        scratch.render_story_review(script, [str(audio)], output)
+                self.assertEqual((output / "story_audio.m4a").read_bytes(), b"combined audio")
+                self.assertEqual(page_path.read_text(encoding="utf-8"), page)
+
 
 if __name__ == "__main__":
     unittest.main()
