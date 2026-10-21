@@ -1,7 +1,7 @@
 import asyncio
 import os
 import json
-import random
+import hashlib
 import re
 import tempfile
 import feedparser
@@ -170,6 +170,7 @@ class ScriptPlanner:
             limit_per_category: 유료 평가 후보 상한; None은 무료 편집 검토용 전체 최근 항목
         """
         posts = []
+        day = datetime.now().date().isoformat()
         url_history = self._load_url_history()
         seen_urls = set(url_history)
         cache_hits = 0
@@ -182,8 +183,10 @@ class ScriptPlanner:
             for url in urls:
                 selected_sources.append((category, url))
 
-        # Shuffle to mix categories during fetch
-        random.shuffle(selected_sources)
+        # Keep the same daily sample for preview and production with unchanged feeds.
+        selected_sources.sort(key=lambda item: hashlib.sha256(
+            f"{day}:{item[0]}:{item[1]}".encode(errors='replace')
+        ).digest())
 
         if not selected_sources:
             raise RuntimeError("RSS_SOURCE_UNVERIFIED: 등록된 RSS 피드가 없습니다.")
@@ -241,8 +244,9 @@ class ScriptPlanner:
 
                 successful_feeds += 1
 
-                # Shuffle entries to avoid only picking the latest "Breaking News"
-                random.shuffle(feed_entries)
+                feed_entries = sorted(feed_entries, key=lambda entry: hashlib.sha256(
+                    f"{day}:{url}:{entry['link']}".encode(errors='replace')
+                ).digest())
 
                 for entry in feed_entries:
                     if entry['link'] in seen_urls or not self._validate_url(entry['link']):

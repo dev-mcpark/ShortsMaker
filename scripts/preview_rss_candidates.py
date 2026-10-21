@@ -37,8 +37,9 @@ def render_html(candidates: list[dict], categories: list[str], all_recent: bool 
             "</style></head><body><h1>RSS 소재 미리보기</h1><p>" +
             escape(", ".join(categories)) + " · " + datetime.now().strftime("%Y-%m-%d %H:%M") +
             " 수집 · 후보 " + str(len(cards)) + "건. " +
-            ("읽힌 피드에서 수집 규칙을 통과한 최근 후보 전체입니다. 자동 유료 평가는 카테고리별 최대 5건만 무작위로 뽑습니다. "
+            ("읽힌 피드에서 수집 규칙을 통과한 최근 후보 전체입니다. 자동 유료 평가는 매일 바뀌는 순서에서 카테고리별 최대 5건만 고릅니다. "
              if all_recent else "실제 자동 유료 평가의 카테고리별 최대 5건 후보입니다. ") +
+            "같은 날 피드 내용과 검토 이력이 같으면 후보 순서도 같습니다. " +
             "비용이 드는 모델 평가·본문 검증은 실행하지 않았습니다. "
             "일부 피드는 실패했을 수 있으니 수집 로그를 확인하세요. 제목과 RSS 요약은 단서일 뿐입니다. 흥미로운 후보를 골라도 원문과 시점·주장을 확인하세요.</p>" +
             content + "</body></html>")

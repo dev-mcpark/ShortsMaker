@@ -186,19 +186,18 @@ class WorkflowTests(unittest.TestCase):
                 for item in candidates
             ])
 
-            with patch("shorts_maker.planner.script_planner.random.shuffle"):
-                planner._score_topics.side_effect = RuntimeError("TOPIC_SCORING_UNVERIFIED")
-                with self.assertRaisesRegex(RuntimeError, "TOPIC_SCORING_UNVERIFIED"):
-                    asyncio.run(planner.plan_content())
-                self.assertFalse(path.exists())
-                planner._score_topics.side_effect = lambda candidates: [
-                    TopicCandidate(item=item, score=4, reason="no source-backed turn", selected=False)
-                    for item in candidates
-                ]
-                self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
-                self.assertEqual(json.loads(path.read_text(encoding="utf-8")),
-                                 ["https://example.com/story"])
-                self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+            planner._score_topics.side_effect = RuntimeError("TOPIC_SCORING_UNVERIFIED")
+            with self.assertRaisesRegex(RuntimeError, "TOPIC_SCORING_UNVERIFIED"):
+                asyncio.run(planner.plan_content())
+            self.assertFalse(path.exists())
+            planner._score_topics.side_effect = lambda candidates: [
+                TopicCandidate(item=item, score=4, reason="no source-backed turn", selected=False)
+                for item in candidates
+            ]
+            self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")),
+                             ["https://example.com/story"])
+            self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
             self.assertEqual(planner._score_topics.await_count, 2)
             planner.content_extractor.fetch_enhanced_article.assert_not_called()
 
@@ -753,11 +752,42 @@ class WorkflowTests(unittest.TestCase):
         ]
         planner.rss_cache = SimpleNamespace(get=Mock(return_value=entries), set=Mock())
 
-        with patch("shorts_maker.planner.script_planner.random.shuffle"):
-            posts = planner._fetch_rss_feeds()
+        posts = planner._fetch_rss_feeds()
 
         self.assertEqual(len(posts), 5)
-        planner.rss_cache.get.assert_called_once_with("https://example.com/one")
+        self.assertEqual(planner.rss_cache.get.call_count, 1)
+        self.assertIn(planner.rss_cache.get.call_args.args[0], planner.rss_sources["City_Life"])
+
+    def test_rss_daily_sample_matches_category_preview_without_mutating_cache(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.rss_sources = {
+            "City_Life": ["https://example.com/city-one", "https://example.com/city-two"],
+            "Finance_Economy": ["https://example.com/economy"],
+        }
+        planner._load_url_history = Mock(return_value=[])
+        planner._validate_url = Mock(return_value=True)
+        planner._is_recent = Mock(return_value=True)
+        feeds = {
+            url: [
+                {"title": f"Story {i}", "link": f"{url}/story-{i}",
+                 "summary": "Source summary " * 20, "published_parsed": None}
+                for i in range(8)
+            ]
+            for urls in planner.rss_sources.values() for url in urls
+        }
+        original_order = {url: [item["link"] for item in entries] for url, entries in feeds.items()}
+        planner.rss_cache = SimpleNamespace(get=Mock(side_effect=feeds.__getitem__), set=Mock())
+
+        full = planner._fetch_rss_feeds()
+        self.assertEqual(full, planner._fetch_rss_feeds())
+        planner.rss_sources = {"City_Life": planner.rss_sources["City_Life"]}
+        city_preview = planner._fetch_rss_feeds()
+
+        self.assertEqual([item for item in full if item["category"] == "City_Life"], city_preview)
+        self.assertEqual(original_order, {
+            url: [item["link"] for item in entries] for url, entries in feeds.items()
+        })
 
     def test_rss_free_inventory_reads_past_paid_category_limit(self):
         planner = object.__new__(ScriptPlanner)
@@ -773,8 +803,7 @@ class WorkflowTests(unittest.TestCase):
             for i in range(5)
         ]), set=Mock())
 
-        with patch("shorts_maker.planner.script_planner.random.shuffle"):
-            posts = planner._fetch_rss_feeds(limit_per_category=None)
+        posts = planner._fetch_rss_feeds(limit_per_category=None)
 
         self.assertEqual(len(posts), 10)
         self.assertEqual(planner.rss_cache.get.call_count, 2)
@@ -794,8 +823,7 @@ class WorkflowTests(unittest.TestCase):
         blocked = dict(shared, title="Blocked", link="http://127.0.0.1/private")
         planner.rss_cache = SimpleNamespace(get=Mock(return_value=[shared, blocked]), set=Mock())
 
-        with patch("shorts_maker.planner.script_planner.random.shuffle"):
-            posts = planner._fetch_rss_feeds()
+        posts = planner._fetch_rss_feeds()
 
         self.assertEqual([post["url"] for post in posts], ["https://example.com/shared"])
 

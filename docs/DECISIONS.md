@@ -471,3 +471,7 @@ The editorial validator accepted `is_valid=true` with an unrecognized negative r
 ## 2026-10-21 — Require a dated RSS lead before automatic scoring
 
 The RSS recency check previously treated missing and invalid dates as recent, admitted future dates, and converted feedparser's UTC tuple through the local timezone. Require a valid publication date no more than 14 days old in UTC before either preview or paid scoring. This can hide useful articles from feeds that omit `pubDate`; the manual direct-URL path remains available after source review. A live feed refresh should measure the candidate-count change when network access returns. Do not spend on an undated lead merely because its feed presents it near the top.
+
+## 2026-10-21 — Keep free RSS previews reproducible within a day
+
+The bounded free preview and paid discovery used independent random shuffles, so looking at the preview did not identify the later scorer's actual five leads per category, even when feeds had not changed. Order sources and feed entries by a stable digest of local date and URLs; preserve the five-lead cap, cross-category mix, and daily rotation without a new model call or configuration. Sort a copy of cached entries so one preview cannot alter the next selection. New feed content, changed URL history, source failures, or the next day can still change the shortlist. This fixes preview parity, not ranking quality or feed-source coverage in a single run.
