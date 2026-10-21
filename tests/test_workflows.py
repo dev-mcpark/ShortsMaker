@@ -758,6 +758,26 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(planner.rss_cache.get.call_count, 1)
         self.assertIn(planner.rss_cache.get.call_args.args[0], planner.rss_sources["City_Life"])
 
+    def test_rss_length_gate_uses_visible_summary_text(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.rss_sources = {"City_Life": ["https://example.com/feed"]}
+        planner._load_url_history = Mock(return_value=[])
+        planner._validate_url = Mock(return_value=True)
+        planner._is_recent = Mock(return_value=True)
+        entries = [
+            {"title": "Markup-only lead", "link": "https://example.com/short",
+             "summary": '<p data-noise="' + 'x' * 250 + '">Tiny lead</p>'},
+            {"title": "Readable lead", "link": "https://example.com/readable",
+             "summary": "<p>" + "Source details " * 20 + "</p>"},
+        ]
+        planner.rss_cache = SimpleNamespace(get=Mock(return_value=entries), set=Mock())
+
+        posts = planner._fetch_rss_feeds()
+
+        self.assertEqual([post["url"] for post in posts], ["https://example.com/readable"])
+        self.assertEqual(posts[0]["content"], ("Source details " * 20).strip())
+
     def test_rss_daily_sample_matches_category_preview_without_mutating_cache(self):
         planner = object.__new__(ScriptPlanner)
         planner.logger = Mock()

@@ -256,6 +256,7 @@ class ScriptPlanner:
                         continue
 
                     content = entry.get('summary') or entry.get('description') or entry.get('title', '')
+                    content = ' '.join(BeautifulSoup(content, 'html.parser').get_text(' ', strip=True).split())
 
                     # Filter out short/empty content to ensure quality
                     if len(content) < 200:
