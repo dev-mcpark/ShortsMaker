@@ -738,25 +738,28 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
         planner._score_topics.assert_not_awaited()
 
-    def test_rss_category_limit_skips_extra_feed_before_fetch(self):
+    def test_rss_category_limit_balances_sources_without_more_paid_candidates(self):
         planner = object.__new__(ScriptPlanner)
         planner.logger = Mock()
         planner.rss_sources = {"City_Life": ["https://example.com/one", "https://example.com/two"]}
         planner._load_url_history = Mock(return_value=[])
         planner._validate_url = Mock(return_value=True)
         planner._is_recent = Mock(return_value=True)
-        entries = [
-            {"title": f"Story {i}", "link": f"https://example.com/story-{i}",
+        feeds = {url: [
+            {"title": f"Story {i}", "link": f"{url}/story-{i}",
              "summary": "Source summary " * 20, "published_parsed": None}
             for i in range(5)
-        ]
-        planner.rss_cache = SimpleNamespace(get=Mock(return_value=entries), set=Mock())
+        ] for url in planner.rss_sources["City_Life"]}
+        planner.rss_cache = SimpleNamespace(get=Mock(side_effect=feeds.__getitem__), set=Mock())
 
         posts = planner._fetch_rss_feeds()
 
         self.assertEqual(len(posts), 5)
-        self.assertEqual(planner.rss_cache.get.call_count, 1)
-        self.assertIn(planner.rss_cache.get.call_args.args[0], planner.rss_sources["City_Life"])
+        self.assertEqual(planner.rss_cache.get.call_count, 2)
+        self.assertEqual(sorted(sum(post["url"].startswith(url) for post in posts)
+                                for url in feeds), [2, 3])
+        with self.assertRaises(ValueError):
+            planner._fetch_rss_feeds(limit_per_category=0)
 
     def test_rss_length_gate_uses_visible_summary_text(self):
         planner = object.__new__(ScriptPlanner)

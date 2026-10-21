@@ -180,10 +180,13 @@ class ScriptPlanner:
             use_cache: True면 캐시 사용 (기본값)
             limit_per_category: 유료 평가 후보 상한; None은 무료 편집 검토용 전체 최근 항목
         """
+        if limit_per_category is not None and limit_per_category < 1:
+            raise ValueError("limit_per_category must be positive")
         posts = []
         day = datetime.now().date().isoformat()
         url_history = self._load_url_history()
         seen_urls = set(url_history)
+        source_groups = {}
         cache_hits = 0
         cache_misses = 0
         successful_feeds = 0
@@ -205,8 +208,6 @@ class ScriptPlanner:
         self.logger.info(f"📡 Fetching feeds from {len(selected_sources)} sources...")
         for category, url in selected_sources:
             try:
-                if limit_per_category is not None and sum(post['category'] == category for post in posts) >= limit_per_category:
-                    continue
                 if not self._validate_url(url):
                     continue
                 # 캐시 확인
@@ -259,8 +260,11 @@ class ScriptPlanner:
                     f"{day}:{url}:{entry['link']}".encode(errors='replace')
                 ).digest())
 
+                feed_posts = []
+                feed_seen = set()
                 for entry in feed_entries:
-                    if entry['link'] in seen_urls or not self._validate_url(entry['link']):
+                    if (entry['link'] in seen_urls or entry['link'] in feed_seen
+                            or not self._validate_url(entry['link'])):
                         continue
 
                     if not self._is_recent(_FeedEntryProxy(entry.get('published_parsed'))):
@@ -273,7 +277,7 @@ class ScriptPlanner:
                     if len(content) < 200:
                         continue
 
-                    posts.append({
+                    feed_posts.append({
                         'category': category,
                         'source': source_name,
                         'title': entry['title'],
@@ -281,9 +285,13 @@ class ScriptPlanner:
                         'published': entry.get('published', ''),
                         'url': entry['link']
                     })
-                    seen_urls.add(entry['link'])
-                    if limit_per_category is not None and len([p for p in posts if p['category'] == category]) >= limit_per_category:
-                        break
+                    feed_seen.add(entry['link'])
+
+                if limit_per_category is None:
+                    posts.extend(feed_posts)
+                    seen_urls.update(post['url'] for post in feed_posts)
+                else:
+                    source_groups.setdefault(category, []).append(feed_posts)
 
             except Exception as e:
                 self.logger.warning(f"Failed to fetch {url}: {e}")
@@ -291,6 +299,21 @@ class ScriptPlanner:
 
         if not successful_feeds:
             raise RuntimeError("RSS_SOURCE_UNVERIFIED: 사용 가능한 RSS 피드를 읽지 못했습니다.")
+        if limit_per_category is not None:
+            for groups in source_groups.values():
+                selected = 0
+                for position in range(max((len(group) for group in groups), default=0)):
+                    for group in groups:
+                        if position >= len(group) or group[position]['url'] in seen_urls:
+                            continue
+                        post = group[position]
+                        posts.append(post)
+                        seen_urls.add(post['url'])
+                        selected += 1
+                        if selected == limit_per_category:
+                            break
+                    if selected == limit_per_category:
+                        break
         self.logger.info(f"✅ Found {len(posts)} recent candidates (캐시: {cache_hits}히트/{cache_misses}미스)")
         return posts
 
