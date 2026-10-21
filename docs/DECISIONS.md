@@ -499,3 +499,7 @@ The previous 200-character visible RSS excerpt gate excluded the St. Louis Fed's
 ## 2026-10-22 — Preserve the publisher name through RSS cache hits
 
 The first fetch read the feed title but stored only article fields; a cache hit labeled the same source `Cached Source`, and that label could be injected into an automatic script as its source name. Store the title with each cached entry and reuse it on later discovery calls. For older in-memory entries without a title, use the feed URL as an accurate fallback. A first-fetch/cache-hit regression checks equal titles without a second HTTP request. The cache remains in memory and its existing TTL is unchanged.
+
+## 2026-10-22 — Retire failed and misattributed default RSS feeds
+
+A live read of all default public feeds found five that returned HTTP 403/404 in this environment and a URL labeled TechCrunch that served an unrelated Blogspot feed. A subsequent actual discovery run found a hostname-mismatched TLS certificate on the KED Global feed; its `www` address returned an empty RSS feed. Remove these seven from new defaults, the tracked example, and this workspace's ignored source file. Switch the working Verge and MarketWatch URLs from HTTP to verified HTTPS. Do not silently delete URLs from other users' customized source files or bypass certificate checks. This reduces failed public requests and prevents the known wrong publisher from entering topic selection, but does not prove the remaining leads are interesting, extractable, or safe to publish.

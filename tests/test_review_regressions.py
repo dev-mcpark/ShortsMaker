@@ -27,7 +27,7 @@ from shorts_maker.utils.character_overlay import CharacterOverlay
 from shorts_maker.utils.character_video_generator import CharacterVideoGenerator
 from shorts_maker.utils.config import PROJECT_ROOT, _find_project_root, settings
 from shorts_maker.utils.scheduler import ScheduleManager
-from shorts_maker.utils.source_manager import SourceManager
+from shorts_maker.utils.source_manager import DEFAULT_SOURCES, SourceManager
 from shorts_maker.utils.veo_prompt_exporter import VeoPromptExporter
 
 
@@ -68,6 +68,12 @@ class ReviewRegressions(unittest.TestCase):
             manager.remove_category("Tech")
 
             self.assertEqual(manager.load_sources(), {})
+
+    def test_default_rss_example_excludes_misattributed_feed(self):
+        example = json.loads((PROJECT_ROOT / "rss_sources.json.example").read_text(encoding="utf-8"))
+        self.assertEqual(example, DEFAULT_SOURCES)
+        self.assertNotIn("https://feeds.feedburner.com/TechCrunch/", example["Tech_IT"])
+        self.assertNotIn("https://kedglobal.com/newsRss", example["Tech_IT"])
 
     def test_corrupt_sources_are_not_overwritten(self):
         with tempfile.TemporaryDirectory() as directory:
