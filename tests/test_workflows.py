@@ -21,6 +21,7 @@ from shorts_maker.planner.script_planner import ScriptPlanner
 from shorts_maker.services.production_service import ProductionPhase, ProductionResult, ProductionService
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.logger import get_logger
+from shorts_maker.utils.rss_cache import RSSCache
 from shorts_maker.utils.veo_prompt_exporter import VeoPromptExporter
 
 
@@ -771,6 +772,10 @@ class WorkflowTests(unittest.TestCase):
         entries = [
             {"title": "Markup-only lead", "link": "https://example.com/short",
              "summary": '<p data-noise="' + 'x' * 250 + '">Tiny lead</p>'},
+            {"title": "Too little context", "link": "https://example.com/too-short",
+             "summary": "Source details " * 9},
+            {"title": "Economy lead", "link": "https://example.com/economy",
+             "summary": "Source details " * 11},
             {"title": "Readable lead", "link": "https://example.com/readable",
              "summary": "<p>" + "Source details " * 20 + "</p>"},
         ]
@@ -778,8 +783,36 @@ class WorkflowTests(unittest.TestCase):
 
         posts = planner._fetch_rss_feeds()
 
-        self.assertEqual([post["url"] for post in posts], ["https://example.com/readable"])
-        self.assertEqual(posts[0]["content"], ("Source details " * 20).strip())
+        self.assertEqual({post["url"] for post in posts},
+                         {"https://example.com/economy", "https://example.com/readable"})
+        self.assertEqual(next(post["content"] for post in posts if post["url"].endswith("/economy")),
+                         ("Source details " * 11).strip())
+
+    def test_cached_rss_retains_publisher_name_for_script_source(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.rss_sources = {"Finance_Economy": ["https://example.com/feed"]}
+        planner._load_url_history = Mock(return_value=[])
+        planner._validate_url = Mock(return_value=True)
+        planner._is_recent = Mock(return_value=True)
+        planner.rss_cache = RSSCache()
+        response = SimpleNamespace(
+            is_redirect=False, raise_for_status=Mock(),
+            content=(
+                '<rss version="2.0"><channel><title>Official Economy</title><item>'
+                '<title>Economic change</title><link>https://example.com/story</link>'
+                '<description>' + 'Source details ' * 11 + '</description>'
+                '</item></channel></rss>'
+            ).encode(),
+        )
+
+        with patch('shorts_maker.planner.script_planner.httpx.get', return_value=response) as get:
+            first = planner._fetch_rss_feeds()
+            cached = planner._fetch_rss_feeds()
+
+        self.assertEqual(first, cached)
+        self.assertEqual(first[0]['source'], 'Official Economy')
+        get.assert_called_once()
 
     def test_rss_daily_sample_matches_category_preview_without_mutating_cache(self):
         planner = object.__new__(ScriptPlanner)

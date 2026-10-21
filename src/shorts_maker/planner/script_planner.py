@@ -216,7 +216,7 @@ class ScriptPlanner:
                 if cached_entries is not None:
                     cache_hits += 1
                     feed_entries = cached_entries
-                    source_name = "Cached Source"
+                    source_name = (feed_entries[0].get('source') or url) if feed_entries else url
                 else:
                     cache_misses += 1
                     feed_url = url
@@ -237,6 +237,7 @@ class ScriptPlanner:
                         break
                     else:
                         raise ValueError("RSS 리다이렉트가 너무 많습니다.")
+                    source_name = feed.feed.get('title') or url
                     feed_entries = [
                         {
                             'title': e.title,
@@ -244,12 +245,11 @@ class ScriptPlanner:
                             'summary': getattr(e, 'summary', ''),
                             'description': getattr(e, 'description', ''),
                             'published': getattr(e, 'published', ''),
-                            'published_parsed': getattr(e, 'published_parsed', None)
+                            'published_parsed': getattr(e, 'published_parsed', None),
+                            'source': source_name,
                         }
                         for e in feed.entries
                     ]
-                    source_name = feed.feed.get('title', 'Unknown Source')
-
                     # 캐시에 저장
                     if use_cache:
                         self.rss_cache.set(url, feed_entries)
@@ -274,7 +274,7 @@ class ScriptPlanner:
                     content = ' '.join(BeautifulSoup(content, 'html.parser').get_text(' ', strip=True).split())
 
                     # Filter out short/empty content to ensure quality
-                    if len(content) < 200:
+                    if len(content) < 150:
                         continue
 
                     feed_posts.append({
