@@ -74,6 +74,8 @@ class ReviewRegressions(unittest.TestCase):
         self.assertEqual(example, DEFAULT_SOURCES)
         self.assertNotIn("https://feeds.feedburner.com/TechCrunch/", example["Tech_IT"])
         self.assertNotIn("https://kedglobal.com/newsRss", example["Tech_IT"])
+        self.assertNotIn("https://mediahub.seoul.go.kr/news/rss/04", example["Finance_Economy"])
+        self.assertIn("https://mediahub.seoul.go.kr/news/rss/04", example["City_Life"])
 
     def test_corrupt_sources_are_not_overwritten(self):
         with tempfile.TemporaryDirectory() as directory:

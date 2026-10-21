@@ -11,12 +11,12 @@
         "https://www.investing.com/rss/news.rss"
     ],
     "Finance_Economy": [
-        "https://mediahub.seoul.go.kr/news/rss/04",
         "https://www.stlouisfed.org/rss/page%20resources/publications/blog-entries"
     ],
     "City_Life": [
         "https://mediahub.seoul.go.kr/news/rss/03",
-        "https://mediahub.seoul.go.kr/news/rss/01"
+        "https://mediahub.seoul.go.kr/news/rss/01",
+        "https://mediahub.seoul.go.kr/news/rss/04"
     ],
     "Life_Tips": [
         "https://lifehacker.com/rss",
