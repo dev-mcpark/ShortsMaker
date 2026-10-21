@@ -47,7 +47,8 @@ Before paying for RSS topic scoring, run `.venv/bin/python scripts/preview_rss_c
 For a source-checked draft, run `.venv/bin/python scripts/prepare_scratch_narration.py docs/jamsu_bridge_review_draft.json --output-dir outputs/evaluation/jamsu_bridge_20261021/scratch_audio_v2`. On macOS this uses the local Yuna voice and writes script-bound scene audio, `story_audio.m4a`, and `story_review.html` under ignored `outputs/`; a rerun reuses verified scene audio. It makes no provider call or visual/BGM asset, and the page does not approve the story or verify its source claims. The local speech service may need OS permission in a sandboxed host.
 Add `--all-recent` to write `outputs/evaluation/rss_candidate_inventory.html` with recent leads from readable feeds that pass the same URL, age, history, and summary-length filters. It removes only the five-per-category sampling cap for free editorial browsing; scheduled paid scoring still sees at most five per category. The page shows the feed's publication date when present. Check the collection log for failed feeds; a missing date or attractive headline still needs an original-article check before script or visual production.
 
-An article enters topic history only after its script passes validation. Studio progress
+RSS article URLs enter topic history after a definite rejection or a validated script;
+uncertain provider failures do not mark them reviewed. Studio progress
 tracks completed editing work and finishes after an optional upload. Stop requests wait
 for the current external API call to return before the run is released.
 RSS planning may end without a script when every candidate is declined, topic scoring
@@ -63,8 +64,10 @@ An unavailable or malformed topic-scoring response similarly pauses the schedule
 `scoring_failed`; a valid response that selects no candidate simply ends that run.
 Other planning exceptions, including a failed script-validation request, pause as
 `planning_failed`; an actual editorial rejection can still try another source.
-A short RSS summary alone does not trigger paid script writing. A direct URL supplied by the user follows the same
-article-length boundary but remains a manual topic choice.
+A short RSS summary alone does not trigger paid script writing. The body extractor
+favors precision so navigation text does not satisfy the 100-word boundary; pages
+whose substantive facts live only in an attachment may be rejected. A direct URL
+supplied by the user follows the same article-length boundary but remains a manual topic choice.
 RSS discovery removes duplicate and disallowed article URLs before scoring. The paid
 topic scorer receives each title and a short plain-text RSS excerpt, and considers
 viewer stakes, source-checkable payoff, and whether the key relationship can be shown
@@ -76,7 +79,7 @@ excerpts are leads only: selected claims still require extracted article text an
 editorial review. A high model score is not editorial approval. A longer scoring prompt
 can modestly increase OpenAI token use.
 Automatic narration drafts use a calm, direct spoken Korean voice and a source-backed question only when it can be answered early. The 5–7 scene range follows the approved five-scene Sillim pilot, but generated scripts still need a full story and source review; the count itself is not a quality score.
-New source files include Seoul City's official housing, transport, and economy RSS feeds and the Ministry of the Interior and Safety's press-release RSS feed under `Life_Tips`; this workspace's ignored `rss_sources.json` includes them too. The formerly configured Psychology Today URL returned HTTP 404 and has been removed here. Existing customized source files are preserved, so add the new feeds in Studio's Sources tab if you want them there. Official press releases can still be promotional or describe expected benefits; inspect the article and its source claims before choosing a story.
+New source files use the same feeds as `rss_sources.json.example`, including Seoul City's official housing, transport, and economy feeds and the Ministry of the Interior and Safety's press-release feed under `Life_Tips`; this workspace's ignored `rss_sources.json` includes them too. The formerly configured Psychology Today URL returned HTTP 404 and has been removed here. Existing customized source files are preserved, so add the new feeds in Studio's Sources tab if you want them there. Official press releases can still be promotional or describe expected benefits; inspect the article and its source claims before choosing a story.
 Planning rejects scripts without source text and asks the editorial validator to reject
 claims or visual scenes that conflict with the supplied excerpt. Generated visual briefs
 favor one source-grounded moment and illustrative diagrams when a realistic reconstruction

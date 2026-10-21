@@ -7,6 +7,31 @@ from shorts_maker.utils.logger import get_logger
 
 
 class ContentExtractionTests(unittest.TestCase):
+    def test_navigation_does_not_make_short_article_pass_body_length_gate(self):
+        navigation = ''.join(
+            f'<li><a href="/menu/{i}">정책 금융 연구 경제 통계 자주 찾는 메뉴 {i}</a></li>'
+            for i in range(40)
+        )
+
+        def page(body):
+            return (
+                '<html><head><title>경제 통계 자료</title></head><body>'
+                f'<header><nav><ul>{navigation}</ul></nav></header>'
+                f'<main><article><h1>경제 통계 자료</h1><p>{body}</p></article></main>'
+                f'<footer>{navigation}</footer></body></html>'
+            )
+
+        with patch('shorts_maker.planner.content_extractor.trafilatura.fetch_url',
+                   side_effect=[page('주요 내용은 첨부 문서를 참고하세요.'),
+                                page('서울의 소비자 물가는 전월보다 안정되었습니다. ' * 25)]):
+            short = ContentExtractor().fetch_enhanced_article('https://example.com/short')
+            full = ContentExtractor().fetch_enhanced_article('https://example.com/full')
+
+        self.assertLess(short.word_count, 100)
+        self.assertNotIn('자주 찾는 메뉴', short.main_text)
+        self.assertGreaterEqual(full.word_count, 100)
+        self.assertNotIn('자주 찾는 메뉴', full.main_text)
+
     def test_generic_press_release_heading_uses_specific_page_title(self):
         html = '<html><head><title>서류 1,658개 간소화 | 행정안전부 &gt; 보도자료</title></head><body><h2>보도자료</h2><p>본문</p></body></html>'
         with patch('shorts_maker.planner.content_extractor.trafilatura.fetch_url', return_value=html), patch(

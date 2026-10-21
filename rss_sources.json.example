@@ -17,11 +17,16 @@
     ],
     "Finance_Economy": [
         "https://www.cnbc.com/id/10000664/device/rss/rss.html",
-        "https://rss.hankyung.com/feed/market.xml"
+        "https://rss.hankyung.com/feed/market.xml",
+        "https://mediahub.seoul.go.kr/news/rss/04"
+    ],
+    "City_Life": [
+        "https://mediahub.seoul.go.kr/news/rss/03",
+        "https://mediahub.seoul.go.kr/news/rss/01"
     ],
     "Life_Tips": [
         "https://lifehacker.com/rss",
-        "https://www.psychologytoday.com/us/feed/index.rss"
+        "https://www.mois.go.kr/gpms/view/jsp/rss/rss.jsp?ctxCd=1012"
     ],
     "Design_Culture": [
         "https://www.designboom.com/feed/",

@@ -52,7 +52,7 @@ class ContentExtractor:
                 include_links=False,  # 링크는 별도로 추출
                 with_metadata=True,  # 메타데이터 포함
                 output_format='json',  # JSON 포맷으로 더 많은 정보
-                favor_recall=True  # 정밀도보다 재현율 우선 (더 많은 콘텐츠)
+                favor_precision=True  # 메뉴 문구가 본문 길이 기준을 채우지 않도록 본문 우선
             )
             
             if not text:
