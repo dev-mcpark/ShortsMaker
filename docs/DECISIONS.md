@@ -479,3 +479,7 @@ The bounded free preview and paid discovery used independent random shuffles, so
 ## 2026-10-21 — Make the free story-listening gate reproducible
 
 The Jamsu Bridge story audition needed an ad hoc command to join five verified scratch scenes and write a review page. Extend the existing macOS Yuna CLI to produce a local combined audio file and escaped HTML page after its script-bound scene checks, without touching the production voice path or making a provider call. Rebuild the derived review on rerun while retaining verified scene files, and replace completed outputs only after FFmpeg succeeds. This gives later agents a one-command way to test an unapproved story's spoken arc before buying music, visuals, or final narration. A listen can reject a weak topic; it cannot establish source truth, visual clarity, or audience retention.
+
+## 2026-10-21 — Keep free RSS discovery independent of paid planner setup
+
+The RSS preview reused the production planner constructor, which required `OPENAI_API_KEY` and created paid planning helpers even though the preview never called them. A discovery-only factory now initializes exactly the state used by the existing RSS collector, leaving the production constructor and source filters unchanged. This lets an editor inspect candidates without a paid-provider key. The discovery-only instance cannot write or validate scripts; keep paid planning on the normal constructor. An offline no-key test verifies construction and zero OpenAI client creation, but live feed reachability remains a separate check.

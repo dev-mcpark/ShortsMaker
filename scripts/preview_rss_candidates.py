@@ -46,8 +46,7 @@ def render_html(candidates: list[dict], categories: list[str], all_recent: bool 
 
 
 def preview(categories: list[str], output: Path, all_recent: bool = False) -> Path:
-    # shortcut: reuse planner discovery; an OpenAI key must be configured even though no model is called.
-    planner = ScriptPlanner()
+    planner = ScriptPlanner.for_rss_discovery()
     unknown = set(categories) - set(planner.rss_sources)
     if unknown:
         raise ValueError(f"등록되지 않은 카테고리: {', '.join(sorted(unknown))}")

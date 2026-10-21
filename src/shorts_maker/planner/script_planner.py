@@ -90,6 +90,17 @@ class ScriptPlanner:
         # ContentEnricher for multi-source supplementary information
         self.content_enricher = ContentEnricher()
 
+    @classmethod
+    def for_rss_discovery(cls) -> 'ScriptPlanner':
+        """Build only the state needed for free RSS collection."""
+        # shortcut: this instance cannot plan scripts; split the collector if more free callers need it.
+        planner = cls.__new__(cls)
+        planner.logger = get_logger(__name__)
+        planner.url_history_file = str(settings.url_history_file)
+        planner.rss_cache = RSSCache(ttl_minutes=settings.rss_cache_ttl_minutes)
+        planner.rss_sources = SourceManager().load_sources()
+        return planner
+
     def _validate_url(self, url: str) -> bool:
         allowed = SourceManager.is_allowed_url(url)
         if not allowed:

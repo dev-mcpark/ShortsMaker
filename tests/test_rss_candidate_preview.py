@@ -6,6 +6,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts.preview_rss_candidates import preview, render_html
+from shorts_maker.planner.script_planner import ScriptPlanner
+from shorts_maker.utils.config import settings
 
 
 class RSSCandidatePreviewTests(unittest.TestCase):
@@ -31,7 +33,7 @@ class RSSCandidatePreviewTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, patch(
             "scripts.preview_rss_candidates.ScriptPlanner"
         ) as planner_type:
-            planner = planner_type.return_value
+            planner = planner_type.for_rss_discovery.return_value
             planner.rss_sources = {"City": ["https://example.com/feed"]}
             planner._fetch_rss_feeds.return_value = [
                 {"category": "City", "source": "News", "title": "A story",
@@ -55,7 +57,7 @@ class RSSCandidatePreviewTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, patch(
             "scripts.preview_rss_candidates.ScriptPlanner"
         ) as planner_type:
-            planner = planner_type.return_value
+            planner = planner_type.for_rss_discovery.return_value
             planner.rss_sources = {"Life_Tips": ["https://example.com/feed"]}
             planner._fetch_rss_feeds.return_value = [
                 {"category": "Life_Tips", "source": "Official", "title": "Completed change",
@@ -70,6 +72,20 @@ class RSSCandidatePreviewTests(unittest.TestCase):
             self.assertIn("2026-10-21", page)
             planner._fetch_rss_feeds.assert_called_once_with(limit_per_category=None)
             planner._score_topics.assert_not_called()
+
+    def test_preview_runs_without_openai_key_or_paid_clients(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(settings, "openai_api_key", ""), \
+                patch.object(settings, "rss_sources_file", Path(directory) / "sources.json"), \
+                patch.object(settings, "url_history_file", Path(directory) / "history.json"), \
+                patch.object(ScriptPlanner, "_fetch_rss_feeds", return_value=[]) as fetch, \
+                patch("shorts_maker.planner.script_planner.AsyncOpenAI") as openai:
+            output = Path(directory) / "preview.html"
+            preview(["City_Life"], output)
+
+            self.assertTrue(output.exists())
+            fetch.assert_called_once_with()
+            openai.assert_not_called()
 
 
 if __name__ == "__main__":
