@@ -4,8 +4,10 @@ import asyncio
 import importlib
 import json
 import tempfile
+import time
 import tomllib
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
@@ -30,6 +32,20 @@ class WorkflowTests(unittest.TestCase):
         budget = patch.object(settings, "google_monthly_budget_krw", None)
         budget.start()
         self.addCleanup(budget.stop)
+
+    def test_rss_recency_requires_a_valid_utc_date_within_fourteen_days(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        now = datetime.now(timezone.utc)
+
+        def entry_at(offset):
+            return SimpleNamespace(published_parsed=time.gmtime((now + offset).timestamp()))
+
+        self.assertTrue(planner._is_recent(entry_at(-timedelta(days=13))))
+        self.assertFalse(planner._is_recent(entry_at(-timedelta(days=15))))
+        self.assertFalse(planner._is_recent(entry_at(timedelta(days=1))))
+        self.assertFalse(planner._is_recent(SimpleNamespace(published_parsed=None)))
+        self.assertFalse(planner._is_recent(SimpleNamespace(published_parsed=("invalid",))))
 
     def test_script_preview_uses_selected_visual_mode_and_model_duration(self):
         script = SimpleNamespace(scenes=[

@@ -467,3 +467,7 @@ The approved Sillim pilot tells its complete question, pressure, layout, mechani
 ## 2026-10-21 — Treat contradictory script validation as unverified
 
 The editorial validator accepted `is_valid=true` with an unrecognized negative reason, and `is_valid=false` with no reason was treated as a definite script rejection. Either response can misclassify an unsupported claim or permanently mark a good RSS lead as reviewed. Keep known failure reasons as rejection, but treat unknown success reasons and reasonless rejection as `validation_error`; the existing planner and scheduler then stop instead of saving a decision about the article. Explicitly ask for an empty reason on a valid response. A strict result contract can pause a run after an otherwise usable script, so the operator must inspect it before re-enabling production. No extra validation request or retry is added.
+
+## 2026-10-21 — Require a dated RSS lead before automatic scoring
+
+The RSS recency check previously treated missing and invalid dates as recent, admitted future dates, and converted feedparser's UTC tuple through the local timezone. Require a valid publication date no more than 14 days old in UTC before either preview or paid scoring. This can hide useful articles from feeds that omit `pubDate`; the manual direct-URL path remains available after source review. A live feed refresh should measure the candidate-count change when network access returns. Do not spend on an undated lead merely because its feed presents it near the top.

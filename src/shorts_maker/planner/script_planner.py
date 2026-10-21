@@ -8,7 +8,7 @@ import feedparser
 import httpx
 from bs4 import BeautifulSoup
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import time
 from urllib.parse import urljoin
@@ -150,14 +150,16 @@ class ScriptPlanner:
             self.logger.warning(f"토픽 히스토리 저장 실패: {e}")
 
     def _is_recent(self, entry) -> bool:
+        published = getattr(entry, 'published_parsed', None)
+        if not published:
+            return False
         try:
-            if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                published_dt = datetime.fromtimestamp(time.mktime(entry.published_parsed))
-                return (datetime.now() - published_dt).days <= 14
-            return True
+            published_dt = datetime(*published[:6], tzinfo=timezone.utc)
+            age = datetime.now(timezone.utc) - published_dt
+            return timedelta(0) <= age <= timedelta(days=14)
         except (TypeError, ValueError, OverflowError) as e:
-            self.logger.debug(f"날짜 파싱 오류 (기본값 사용): {e}")
-            return True
+            self.logger.debug(f"RSS 날짜 파싱 오류: {e}")
+            return False
 
     def _fetch_rss_feeds(self, use_cache: bool = True, limit_per_category: Optional[int] = 5) -> List[Dict]:
         """
