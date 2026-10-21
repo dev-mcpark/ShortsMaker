@@ -79,10 +79,14 @@ class ContentExtractor:
             # 4. ArticleContent 객체 생성
             main_text = trafilatura_data.get('text', '')
             word_count = len(main_text.split())
+            title = trafilatura_data.get('title', '')
+            if title == '보도자료' and soup.title:
+                # shortcut: cover the observed generic press-release title; expand for other publishers only with evidence.
+                title = soup.title.get_text(' ', strip=True).split('|', 1)[0].strip() or title
             
             content = ArticleContent(
                 url=url,
-                title=trafilatura_data.get('title', ''),
+                title=title,
                 main_text=main_text,
                 author=trafilatura_data.get('author'),
                 published_date=trafilatura_data.get('date'),

@@ -35,7 +35,7 @@ DEFAULT_SOURCES = {
     ],
     "Life_Tips": [
         "https://lifehacker.com/rss",
-        "https://www.psychologytoday.com/us/feed/index.rss"
+        "https://www.mois.go.kr/gpms/view/jsp/rss/rss.jsp?ctxCd=1012"
     ],
     "Design_Culture": [
         "https://www.designboom.com/feed/",

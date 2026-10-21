@@ -1,6 +1,23 @@
 import asyncio
+import json
+import unittest
+from unittest.mock import patch
 from shorts_maker.planner.content_extractor import ContentExtractor
 from shorts_maker.utils.logger import get_logger
+
+
+class ContentExtractionTests(unittest.TestCase):
+    def test_generic_press_release_heading_uses_specific_page_title(self):
+        html = '<html><head><title>서류 1,658개 간소화 | 행정안전부 &gt; 보도자료</title></head><body><h2>보도자료</h2><p>본문</p></body></html>'
+        with patch('shorts_maker.planner.content_extractor.trafilatura.fetch_url', return_value=html), patch(
+            'shorts_maker.planner.content_extractor.trafilatura.extract',
+            return_value=json.dumps({'title': '보도자료', 'text': '확인된 본문입니다.'}),
+        ):
+            article = ContentExtractor().fetch_enhanced_article('https://example.com/press/1')
+
+        self.assertIsNotNone(article)
+        self.assertEqual(article.title, '서류 1,658개 간소화')
+
 
 async def test_extraction():
     logger = get_logger("test_extractor")
