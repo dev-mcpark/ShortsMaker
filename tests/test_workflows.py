@@ -743,6 +743,27 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(len(posts), 5)
         planner.rss_cache.get.assert_called_once_with("https://example.com/one")
 
+    def test_rss_free_inventory_reads_past_paid_category_limit(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.rss_sources = {"City_Life": ["https://example.com/one", "https://example.com/two"]}
+        planner._load_url_history = Mock(return_value=[])
+        planner._validate_url = Mock(return_value=True)
+        planner._is_recent = Mock(return_value=True)
+        planner.rss_cache = SimpleNamespace(get=Mock(side_effect=lambda url: [
+            {"title": f"Story {url}-{i}", "link": f"{url}/story-{i}",
+             "summary": "Source summary " * 20, "published": "2026-10-21",
+             "published_parsed": None}
+            for i in range(5)
+        ]), set=Mock())
+
+        with patch("shorts_maker.planner.script_planner.random.shuffle"):
+            posts = planner._fetch_rss_feeds(limit_per_category=None)
+
+        self.assertEqual(len(posts), 10)
+        self.assertEqual(planner.rss_cache.get.call_count, 2)
+        self.assertTrue(all(item["published"] == "2026-10-21" for item in posts))
+
     def test_rss_discovery_deduplicates_and_rejects_disallowed_article_urls(self):
         planner = object.__new__(ScriptPlanner)
         planner.logger = Mock()

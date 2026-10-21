@@ -158,12 +158,13 @@ class ScriptPlanner:
             self.logger.debug(f"날짜 파싱 오류 (기본값 사용): {e}")
             return True
 
-    def _fetch_rss_feeds(self, use_cache: bool = True) -> List[Dict]:
+    def _fetch_rss_feeds(self, use_cache: bool = True, limit_per_category: Optional[int] = 5) -> List[Dict]:
         """
         RSS 피드에서 후보 기사 수집
 
         Args:
             use_cache: True면 캐시 사용 (기본값)
+            limit_per_category: 유료 평가 후보 상한; None은 무료 편집 검토용 전체 최근 항목
         """
         posts = []
         url_history = self._load_url_history()
@@ -187,7 +188,7 @@ class ScriptPlanner:
         self.logger.info(f"📡 Fetching feeds from {len(selected_sources)} sources...")
         for category, url in selected_sources:
             try:
-                if sum(post['category'] == category for post in posts) >= 5:
+                if limit_per_category is not None and sum(post['category'] == category for post in posts) >= limit_per_category:
                     continue
                 if not self._validate_url(url):
                     continue
@@ -224,6 +225,7 @@ class ScriptPlanner:
                             'link': e.link,
                             'summary': getattr(e, 'summary', ''),
                             'description': getattr(e, 'description', ''),
+                            'published': getattr(e, 'published', ''),
                             'published_parsed': getattr(e, 'published_parsed', None)
                         }
                         for e in feed.entries
@@ -257,11 +259,11 @@ class ScriptPlanner:
                         'source': source_name,
                         'title': entry['title'],
                         'content': content[:3000],
+                        'published': entry.get('published', ''),
                         'url': entry['link']
                     })
                     seen_urls.add(entry['link'])
-                    # Increased limit: Collect up to 5 items per category
-                    if len([p for p in posts if p['category'] == category]) >= 5:
+                    if limit_per_category is not None and len([p for p in posts if p['category'] == category]) >= limit_per_category:
                         break
 
             except Exception as e:

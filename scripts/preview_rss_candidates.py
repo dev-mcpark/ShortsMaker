@@ -12,7 +12,7 @@ from shorts_maker.utils.config import settings
 from shorts_maker.utils.source_manager import SourceManager
 
 
-def render_html(candidates: list[dict], categories: list[str]) -> str:
+def render_html(candidates: list[dict], categories: list[str], all_recent: bool = False) -> str:
     cards = []
     for item in candidates:
         url = item["url"]
@@ -21,7 +21,8 @@ def render_html(candidates: list[dict], categories: list[str]) -> str:
         excerpt = BeautifulSoup(item.get("content") or "", "html.parser").get_text(" ", strip=True)
         cards.append(
             '<article><p class="category">' + escape(item["category"]) + ' · ' +
-            escape(item["source"]) + '</p><h2><a href="' + escape(url, quote=True) +
+            escape(item["source"]) + ' · ' + escape((item.get("published") or "발행일 미표기")[:80]) +
+            '</p><h2><a href="' + escape(url, quote=True) +
             '" target="_blank" rel="noopener noreferrer">' + escape(item["title"]) +
             '</a></h2><p>' + escape(" ".join(excerpt.split())[:300]) + '</p></article>'
         )
@@ -35,30 +36,35 @@ def render_html(candidates: list[dict], categories: list[str]) -> str:
             "h2{font-size:19px;margin:4px 0}a{color:#176e80}.category{font-size:13px;color:#657b84;margin:0}"
             "</style></head><body><h1>RSS 소재 미리보기</h1><p>" +
             escape(", ".join(categories)) + " · " + datetime.now().strftime("%Y-%m-%d %H:%M") +
-            " 수집. 비용이 드는 모델 평가·본문 검증은 실행하지 않았습니다. "
-            "제목과 RSS 요약은 단서일 뿐입니다. 흥미로운 후보를 골라도 원문과 시점·주장을 확인하세요.</p>" +
+            " 수집 · 후보 " + str(len(cards)) + "건. " +
+            ("읽힌 피드에서 수집 규칙을 통과한 최근 후보 전체입니다. 자동 유료 평가는 카테고리별 최대 5건만 무작위로 뽑습니다. "
+             if all_recent else "실제 자동 유료 평가의 카테고리별 최대 5건 후보입니다. ") +
+            "비용이 드는 모델 평가·본문 검증은 실행하지 않았습니다. "
+            "일부 피드는 실패했을 수 있으니 수집 로그를 확인하세요. 제목과 RSS 요약은 단서일 뿐입니다. 흥미로운 후보를 골라도 원문과 시점·주장을 확인하세요.</p>" +
             content + "</body></html>")
 
 
-def preview(categories: list[str], output: Path) -> Path:
+def preview(categories: list[str], output: Path, all_recent: bool = False) -> Path:
     # shortcut: reuse planner discovery; an OpenAI key must be configured even though no model is called.
     planner = ScriptPlanner()
     unknown = set(categories) - set(planner.rss_sources)
     if unknown:
         raise ValueError(f"등록되지 않은 카테고리: {', '.join(sorted(unknown))}")
     planner.rss_sources = {name: planner.rss_sources[name] for name in categories}
-    candidates = planner._fetch_rss_feeds()
+    candidates = planner._fetch_rss_feeds(limit_per_category=None) if all_recent else planner._fetch_rss_feeds()
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(render_html(candidates, categories), encoding="utf-8")
+    output.write_text(render_html(candidates, categories, all_recent), encoding="utf-8")
     return output
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--category", action="append", required=True, help="Registered RSS category; repeat to combine")
+    parser.add_argument("--all-recent", action="store_true", help="Show all recent leads passing collection filters for free editorial review")
     args = parser.parse_args()
-    output = settings.output_dir / "evaluation/rss_candidate_preview.html"
-    print(preview(args.category, output))
+    filename = "rss_candidate_inventory.html" if args.all_recent else "rss_candidate_preview.html"
+    output = settings.output_dir / "evaluation" / filename
+    print(preview(args.category, output, all_recent=args.all_recent))
 
 
 if __name__ == "__main__":
