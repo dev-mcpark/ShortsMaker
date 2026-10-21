@@ -40,6 +40,11 @@ class RSSCandidatePreviewTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "등록되지 않은"):
                 preview(["Unknown"], output)
             self.assertEqual(planner._fetch_rss_feeds.call_count, 1)
+            prior_page = output.read_text(encoding="utf-8")
+            planner._fetch_rss_feeds.side_effect = RuntimeError("RSS_SOURCE_UNVERIFIED")
+            with self.assertRaisesRegex(RuntimeError, "RSS_SOURCE_UNVERIFIED"):
+                preview(["City"], output)
+            self.assertEqual(output.read_text(encoding="utf-8"), prior_page)
 
 
 if __name__ == "__main__":

@@ -170,6 +170,7 @@ class ScriptPlanner:
         seen_urls = set(url_history)
         cache_hits = 0
         cache_misses = 0
+        successful_feeds = 0
 
         # Use ALL available sources to maximize candidate pool
         selected_sources = []
@@ -179,6 +180,9 @@ class ScriptPlanner:
 
         # Shuffle to mix categories during fetch
         random.shuffle(selected_sources)
+
+        if not selected_sources:
+            raise RuntimeError("RSS_SOURCE_UNVERIFIED: 등록된 RSS 피드가 없습니다.")
 
         self.logger.info(f"📡 Fetching feeds from {len(selected_sources)} sources...")
         for category, url in selected_sources:
@@ -209,6 +213,8 @@ class ScriptPlanner:
                             continue
                         response.raise_for_status()
                         feed = feedparser.parse(response.content)
+                        if not feed.version:
+                            raise ValueError("RSS 형식이 아닙니다.")
                         break
                     else:
                         raise ValueError("RSS 리다이렉트가 너무 많습니다.")
@@ -227,6 +233,8 @@ class ScriptPlanner:
                     # 캐시에 저장
                     if use_cache:
                         self.rss_cache.set(url, feed_entries)
+
+                successful_feeds += 1
 
                 # Shuffle entries to avoid only picking the latest "Breaking News"
                 random.shuffle(feed_entries)
@@ -260,6 +268,8 @@ class ScriptPlanner:
                 self.logger.warning(f"Failed to fetch {url}: {e}")
                 continue
 
+        if not successful_feeds:
+            raise RuntimeError("RSS_SOURCE_UNVERIFIED: 사용 가능한 RSS 피드를 읽지 못했습니다.")
         self.logger.info(f"✅ Found {len(posts)} recent candidates (캐시: {cache_hits}히트/{cache_misses}미스)")
         return posts
 

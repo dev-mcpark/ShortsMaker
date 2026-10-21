@@ -26,7 +26,7 @@ def render_html(candidates: list[dict], categories: list[str]) -> str:
             '</a></h2><p>' + escape(" ".join(excerpt.split())[:300]) + '</p></article>'
         )
     content = ("\n".join(cards) if cards else
-               "<p>표시할 후보가 없습니다. 피드 연결 실패도 같은 결과일 수 있으므로 수집 로그를 확인하세요.</p>")
+               "<p>표시할 후보가 없습니다. 일부 피드가 실패했을 수 있으므로 수집 로그도 확인하세요.</p>")
     return ("<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
             "<title>RSS 소재 미리보기</title><style>"

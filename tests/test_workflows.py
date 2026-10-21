@@ -790,10 +790,33 @@ class WorkflowTests(unittest.TestCase):
         with patch("shorts_maker.planner.script_planner.httpx", create=True) as httpx_client:
             httpx_client.get.return_value = redirect
             with patch("shorts_maker.planner.script_planner.feedparser.parse") as parse:
-                parse.return_value = SimpleNamespace(entries=[], feed={})
-                planner._fetch_rss_feeds()
+                with self.assertRaisesRegex(RuntimeError, "RSS_SOURCE_UNVERIFIED"):
+                    planner._fetch_rss_feeds()
 
         httpx_client.get.assert_called_once()
+        parse.assert_not_called()
+
+    def test_rss_failure_is_distinct_from_a_valid_empty_feed(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.rss_sources = {"City": ["https://example.com/feed"]}
+        planner._load_url_history = Mock(return_value=[])
+        planner.rss_cache = SimpleNamespace(get=Mock(return_value=None), set=Mock())
+
+        with patch("shorts_maker.planner.script_planner.httpx.get", side_effect=OSError("offline")):
+            with self.assertRaisesRegex(RuntimeError, "RSS_SOURCE_UNVERIFIED"):
+                planner._fetch_rss_feeds()
+
+        response = SimpleNamespace(is_redirect=False, raise_for_status=Mock(), content=(
+            b'<?xml version="1.0"?><rss version="2.0"><channel><title>Empty</title></channel></rss>'
+        ))
+        with patch("shorts_maker.planner.script_planner.httpx.get", return_value=response):
+            self.assertEqual(planner._fetch_rss_feeds(), [])
+
+        response.content = b"<html>not a feed</html>"
+        with patch("shorts_maker.planner.script_planner.httpx.get", return_value=response):
+            with self.assertRaisesRegex(RuntimeError, "RSS_SOURCE_UNVERIFIED"):
+                planner._fetch_rss_feeds()
 
     def test_regeneration_limit_counts_failed_attempts(self):
         service = ProductionService()

@@ -506,6 +506,10 @@ class ReviewRegressions(unittest.TestCase):
         service._planner.plan_content = AsyncMock(side_effect=ValueError("invalid script response"))
         result = asyncio.run(service.full_pipeline())
         self.assertIn("PLANNING_UNVERIFIED: invalid script response", result.error)
+        service._planner.plan_content = AsyncMock(side_effect=RuntimeError(
+            "RSS_SOURCE_UNVERIFIED: no readable feeds"))
+        result = asyncio.run(service.full_pipeline())
+        self.assertIn("PLANNING_UNVERIFIED: RSS_SOURCE_UNVERIFIED", result.error)
         service._planner.plan_content = AsyncMock(return_value=(None, None))
         result = asyncio.run(service.full_pipeline())
         self.assertEqual(result.error, "스크립트 생성 실패")
