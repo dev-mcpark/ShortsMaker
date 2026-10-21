@@ -42,6 +42,18 @@ The draft JSON is retained with the approved narration text and its original vis
 
 The [unapproved five-scene draft](composite_bus_review_draft.json) and [zero-provider-cost story audition](../outputs/evaluation/composite_bus_20261021/story_review.html) now test the hook, materials connection, and payoff using macOS Yuna speech, original concept diagrams, and no music. This is a story-interest test; the owner has not judged it, and it does not authorize final narration, generated visuals, or upload. [STATUS.md](STATUS.md) owns the technical result.
 
+## Jamsu Bridge design-revision paper gate — 2026-10-21
+
+**Question:** Why did the pink elevated walkway disappear from the Jamsu Bridge plan? [Seoul's 2024 competition announcement](https://mediahub.seoul.go.kr/archives/2011129) describes the winning concept as a separate, pink walkway above the bridge. [Seoul's October 13, 2026 design update](https://mediahub.seoul.go.kr/archives/2019683) says the elevated deck was excluded after considering flood-time safety, among other factors. The updated plan widens pedestrian space on the existing bridge, adds 22 viewing areas and transparent deck sections at two ship-passage areas, and targets opening in the second half of 2027. The 2024 announcement's older 2026 completion target is superseded by the later update.
+
+1. **Hook:** Show an original pink upper-path schematic marked as a 2024 proposal; ask why it vanished.
+2. **Original idea:** Reveal the two walking levels without copying the competition rendering.
+3. **Decision:** Remove the upper level as the narration attributes the safety consideration to Seoul. Do not invent a flood failure mechanism or claim the proposed deck was proven unsafe.
+4. **Revised plan:** Keep one widened bridge level; show viewing bays separately from transparent deck segments, with exact counts typeset locally.
+5. **Payoff and limit:** Compare proposal and revised plan, ending with the 2027 target. The bridge is not yet an observed completed outcome.
+
+**Paper verdict:** a source-grounded, visually distinct design reversal worth a free story audition, despite the project itself still being planned. The [unapproved five-scene draft](jamsu_bridge_review_draft.json) and [40.6-second Yuna story-audio page](../outputs/evaluation/jamsu_bridge_20261021/story_review.html) use no provider call, music, source imagery, or Veo footage. This does not establish viewer interest or publication readiness; the owner's story verdict, two-source manual claim check, moving visual proof, and any production budget approval remain open. The automatic validator accepts one excerpt, so it cannot verify both the 2024 proposal and the 2026 revision by itself.
+
 ## Unit-price paper story gate — 2026-10-13
 
 The [Consumer Agency's June 13, 2024 release](https://www.kca.go.kr/home/sub.do?menukey=4002&mode=view&no=1003678922) links the [four-page original PDF](https://www.kca.go.kr/home/board/download.do?menukey=4002&fno=10042412&bid=00000013&did=1003678922). Its domestic-product appendix records one marinated garlic-stem product changing from 150g to 120g in March 2024. A footnote says its factory dispatch price was reduced from ₩4,490 to ₩3,590 during monitoring, yielding about ₩2,993 and ₩2,992 per 100g on May 9. These are **factory dispatch prices**, not observed retail prices, receipts, or proof that shoppers paid less. The release's 33-product finding covers its stated sources and observation period; it is not a current market prevalence estimate. No retail-price history was verified for this candidate.
