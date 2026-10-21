@@ -550,7 +550,7 @@ class ProductionGateTests(unittest.TestCase):
             result = asyncio.run(service.full_pipeline())
         self.assertFalse(result.success)
         self.assertIn("VISUAL_COST_CAP_EXCEEDED", result.error)
-        self.assertIn("$3.840", result.error)
+        self.assertIn("$3.200", result.error)
         service.generate_script.assert_not_awaited()
 
     def test_full_video_pipeline_checks_monthly_room_before_paid_planning(self):
@@ -564,7 +564,7 @@ class ProductionGateTests(unittest.TestCase):
         ) as check:
             result = asyncio.run(service.full_pipeline())
         self.assertEqual(result.error, "GOOGLE_BUDGET_EXCEEDED: monthly room")
-        check.assert_called_once_with(3.84, 6)
+        check.assert_called_once_with(3.2, 5)
         service.generate_script.assert_not_awaited()
 
     def test_monthly_google_budget_blocks_before_tts(self):

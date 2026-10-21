@@ -101,7 +101,7 @@ class ScriptValidator:
         {{
             "is_valid": boolean,  // true if it passes ALL criteria
             "score": number,      // 0-100
-            "reason": "string",   // e.g. "weak_hook", "unsupported_claim", "insufficient_source", "too_long", "advertising_content"
+            "reason": "string",   // empty when valid; otherwise e.g. "weak_hook", "unsupported_claim", "insufficient_source", "too_long", "advertising_content"
             "feedback": "string"  // Specific instructions on how to fix it. If valid, leave empty.
         }}
 
@@ -139,12 +139,18 @@ class ScriptValidator:
             result_data["is_advertising"] = is_ad
 
             result = ValidationResult(**result_data)
-            if result.reason.lower() in {
+            failure_reasons = {
                 "advertising_content", "promotional_tone", "promotional_content",
                 "policy_violation", "unsupported_claim", "unsupported_visual",
                 "insufficient_source", "weak_hook", "missing_visual_proof",
-            }:
+            }
+            reason = result.reason.strip().lower()
+            if reason in failure_reasons:
                 result.is_valid = False
+            elif result.is_valid and reason not in {"", "valid", "approved", "ok"}:
+                raise ValueError("Validator returned a contradictory success reason")
+            elif not result.is_valid and reason in {"", "valid", "approved", "ok"}:
+                raise ValueError("Validator returned a rejection without a failure reason")
             if result.is_valid and result.score < 70:
                 result.is_valid = False
                 result.reason = "low_score"

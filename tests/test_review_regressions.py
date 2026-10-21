@@ -1026,10 +1026,10 @@ class ReviewRegressions(unittest.TestCase):
             "mood": "calm", "style": "The Info Curator", "source_name": "NASA",
             "music_direction": "조용한 호기심, 강한 드럼은 피함",
             "source_url": "https://example.com", "generation_mode": "hybrid",
-            "scenes": [{"scene_number": 1, "visual_mode": "image",
+            "scenes": [{"scene_number": i, "visual_mode": "image",
                         "visual_description": "Illustrative robot diagram",
                         "script_text": "로봇 세 대가 함께 시험했습니다.",
-                        "duration_seconds": 6}],
+                        "duration_seconds": 6} for i in range(1, 6)],
         }
         completion = AsyncMock(return_value=SimpleNamespace(choices=[
             SimpleNamespace(message=SimpleNamespace(content=json.dumps(script))),
@@ -1054,6 +1054,7 @@ class ReviewRegressions(unittest.TestCase):
         }))
 
         self.assertEqual(result.scenes[0].visual_mode, "image")
+        self.assertEqual(len(result.scenes), 5)
         self.assertEqual(result.music_direction, "조용한 호기심, 강한 드럼은 피함")
         prompt = completion.await_args.kwargs["messages"][0]["content"]
         self.assertIn("Music direction", prompt)
@@ -1076,6 +1077,9 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("Three robots were tested in Virginia.", prompt)
         self.assertNotIn("UNVERIFIED_TAIL", prompt)
         self.assertIn("Reveal what actually happened", prompt)
+        self.assertIn("not a press-release list", prompt)
+        self.assertIn("Generate 5-7 scenes", prompt)
+        self.assertIn("Do not add a scene merely to repeat", prompt)
         self.assertNotIn("4k resolution", prompt.lower())
         self.assertNotIn("15%", prompt)
         self.assertEqual(completion.await_args.kwargs["max_completion_tokens"], 4000)
@@ -1099,6 +1103,18 @@ class ReviewRegressions(unittest.TestCase):
                 "category": "Tech", "title": "ASTRA field test",
                 "content": "Three robots were tested in Virginia.",
             }))
+
+        script["mood"] = "calm"
+        first_scene = script["scenes"][0]
+        for count in (4, 8):
+            with self.subTest(scene_count=count):
+                script["scenes"] = [dict(first_scene, scene_number=i) for i in range(1, count + 1)]
+                completion.return_value.choices[0].message.content = json.dumps(script)
+                with self.assertRaisesRegex(ValueError, "SCRIPT_SCENE_COUNT_UNVERIFIED"):
+                    asyncio.run(planner._write_script({
+                        "category": "Tech", "title": "ASTRA field test",
+                        "content": "Three robots were tested in Virginia.",
+                    }))
 
     def test_scene_error_stops_before_editing(self):
         service = ProductionService(mode="image")
@@ -1185,6 +1201,12 @@ class ReviewRegressions(unittest.TestCase):
         response.choices[0].message.content = '{"is_valid": true, "score": 90}'
         self.assertTrue(asyncio.run(validator.validate_script(
             script, source_text="Test source.")).is_valid)
+        response.choices[0].message.content = '{"is_valid": true, "score": 90, "reason": "unsupported_effect"}'
+        self.assertEqual(asyncio.run(validator.validate_script(
+            script, source_text="Test source.")).reason, "validation_error")
+        response.choices[0].message.content = '{"is_valid": false, "score": 40}'
+        self.assertEqual(asyncio.run(validator.validate_script(
+            script, source_text="Test source.")).reason, "validation_error")
 
     def test_empty_source_stops_script_and_validation_requests(self):
         planner = object.__new__(ScriptPlanner)

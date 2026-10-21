@@ -35,7 +35,8 @@ class _FeedEntryProxy:
 # RSSCache → shorts_maker/utils/rss_cache.py로 이동
 
 class ScriptPlanner:
-    MIN_SCENES = 6
+    MIN_SCENES = 5
+    MAX_SCENES = 7
     MIN_ARTICLE_WORDS = 100
 
     def __init__(self, generation_mode: str = "image"):
@@ -665,6 +666,7 @@ class ScriptPlanner:
         - **Language:** **KOREAN ONLY** (For Script, Title, and Description).
         - **Title:** A specific, accurate Korean question or finding (max 40 chars). Do not exaggerate or promise facts absent from the source.
         - **Anti-Cliché Rule:** Do NOT start with "Did you know?" or generic intros. Dive straight into the specific fact or problem.
+        - **Spoken voice:** Use calm, curious Korean addressed to one viewer, not a press-release list. Ask one concrete question only when the source can answer it early; avoid repeated rhetorical questions.
         - **Depth:** Explain one source-supported mechanism or relationship. Give numbers only when the source provides them.
         - **Evidence tense:** Keep a device's capability or assigned role separate from an action observed in the test. Do not turn "can collect samples" into "collected samples" without source evidence.
         - **Evidence type:** Separate measured results from model projections and proposed uses. Do not present a simulated benefit as an observed field outcome. A completed facility proves its construction, not that its intended flood, traffic, or economic benefits have already occurred; preserve source attribution and future tense for those benefits.
@@ -676,7 +678,7 @@ class ScriptPlanner:
           2. **Turn (5-15s):** Reveal what actually happened in the source instead of delaying the answer with a vague teaser.
           3. **Mechanism (15-35s):** Explain only the two or three details needed to understand that choice, using cause and effect.
           4. **Payoff (35-50s):** State what this specific result changes or demonstrates. Distinguish a field test from a future mission; avoid generic future promises.
-        - **Scenes:** Generate {self.MIN_SCENES}-8 scenes with one point each. Keep the sum of scene durations under 50 seconds.
+        - **Scenes:** Generate {self.MIN_SCENES}-{self.MAX_SCENES} scenes with one point each. Keep the sum of scene durations under 50 seconds. Do not add a scene merely to repeat a fact or restate the conclusion.
         - **Duration:** Plan about 5-8 seconds per scene; the renderer uses measured narration duration.
 
         {visual_truth_instruction}
@@ -730,4 +732,7 @@ class ScriptPlanner:
         # Inject source info from the item to ensure accuracy
         data['source_name'] = item.get('source', 'Unknown Source')
         data['source_url'] = item.get('url', '')
-        return ShortsScript(**data)
+        script = ShortsScript(**data)
+        if not self.MIN_SCENES <= len(script.scenes) <= self.MAX_SCENES:
+            raise ValueError("SCRIPT_SCENE_COUNT_UNVERIFIED: 자동 대본 장면 수가 허용 범위를 벗어났습니다.")
+        return script

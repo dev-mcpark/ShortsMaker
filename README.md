@@ -74,6 +74,7 @@ score responses also stop planning before article analysis or visual spending. F
 excerpts are leads only: selected claims still require extracted article text and
 editorial review. A high model score is not editorial approval. A longer scoring prompt
 can modestly increase OpenAI token use.
+Automatic narration drafts use a calm, direct spoken Korean voice and a source-backed question only when it can be answered early. The 5–7 scene range follows the approved five-scene Sillim pilot, but generated scripts still need a full story and source review; the count itself is not a quality score.
 New source files include Seoul City's official housing, transport, and economy RSS feeds and the Ministry of the Interior and Safety's press-release RSS feed under `Life_Tips`; this workspace's ignored `rss_sources.json` includes them too. The formerly configured Psychology Today URL returned HTTP 404 and has been removed here. Existing customized source files are preserved, so add the new feeds in Studio's Sources tab if you want them there. Official press releases can still be promotional or describe expected benefits; inspect the article and its source claims before choosing a story.
 Planning rejects scripts without source text and asks the editorial validator to reject
 claims or visual scenes that conflict with the supplied excerpt. Generated visual briefs
@@ -87,7 +88,7 @@ higher attempt count reserves that many outputs in the estimate. This is a plann
 cap: prompt tokens, GPT, TTS, provider-side retries, and taxes are excluded. It then checks narration length before
 requesting Veo or Gemini media. It also checks for documented music before TTS or visual requests. Scene files in `outputs/clips/scenes/` are keyed by the
 visual prompt, model, duration, and character overlay, so narration edits reuse them.
-An automatic full run also checks the writer's minimum six-scene visual cost and local Google monthly room before paying to plan a new script. If that minimum cannot fit, the run stops and a repeating schedule pauses. Planning a script on its own still works; an approved script with retained clips follows its separate reuse path.
+An automatic full run also checks the writer's minimum five-scene visual cost and local Google monthly room before paying to plan a new script. Automatic scripts must contain 5–7 scenes; a malformed scene count stops planning before validation, narration, or visuals. If the minimum cannot fit, the run stops and a repeating schedule pauses. Planning a script on its own still works; an approved script with retained clips follows its separate reuse path.
 Changes to the Veo prompt wrapper invalidate only Veo scene cache entries.
 When a silent scene clip is shorter than its narration, the editor holds its final frame instead of restarting or retiming the animation. Review long static holds before publication.
 The editor matches each narration scene to about -18 LUFS before mixing, fades the selected BGM at the start and end, then normalizes the final audio locally after rendering; this adds no API request. Prepared caller-owned narration files are retained for later edits.
