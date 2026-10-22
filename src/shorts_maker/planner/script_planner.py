@@ -17,6 +17,7 @@ from typing import List, Dict, Optional, Tuple
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
+from shorts_maker.services.openai_budget import OpenAIBudgetExceeded, reserve_openai_chat
 from shorts_maker.planner.script_validator import ScriptValidator
 from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.planner.models import VideoScene, ShortsScript, ArticleContent, ContentAnalysis, TopicCandidate, ScriptGenerationContext
@@ -372,9 +373,11 @@ class ScriptPlanner:
         """
         try:
             require_paid_production_enabled()
+            messages = [{"role": "user", "content": prompt}]
+            reserve_openai_chat("gpt-4o-mini", messages, 2000)
             response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
                 response_format={"type": "json_object"},
                 max_completion_tokens=2000,
             )
@@ -404,6 +407,8 @@ class ScriptPlanner:
 
             return result
         except RateLimitError:
+            raise
+        except OpenAIBudgetExceeded:
             raise
         except Exception as e:
             self.logger.warning(f"토픽 점수화 실패, 이번 제작을 중단: {e}")
@@ -761,9 +766,11 @@ class ScriptPlanner:
         """
 
         require_paid_production_enabled()
+        messages = [{"role": "user", "content": prompt}]
+        reserve_openai_chat("gpt-4o", messages, 4000)
         response = await self.client.chat.completions.create(
             model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
             response_format={"type": "json_object"},
             max_completion_tokens=4000,
         )

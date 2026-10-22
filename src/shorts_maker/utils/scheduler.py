@@ -19,6 +19,7 @@ from shorts_maker.utils.source_manager import SourceManager
 _PROVIDER_LIMIT = re.compile(r"(?<!\d)429(?!\d)|RESOURCE_EXHAUSTED", re.IGNORECASE)
 _VEO_RESULT_UNVERIFIED = "VEO_RESULT_UNVERIFIED"
 _GOOGLE_BUDGET_EXCEEDED = "GOOGLE_BUDGET_EXCEEDED"
+_OPENAI_BUDGET_EXCEEDED = "OPENAI_BUDGET_EXCEEDED"
 _VISUAL_COST_CAP_EXCEEDED = "VISUAL_COST_CAP_EXCEEDED"
 _BGM_SELECTION_REQUIRED = "BGM_SELECTION_REQUIRED"
 _ARTICLE_ANALYSIS_UNVERIFIED = "ARTICLE_ANALYSIS_UNVERIFIED"
@@ -412,6 +413,7 @@ class ScheduleManager:
             provider_limited = not result.success and bool(_PROVIDER_LIMIT.search(result.error or ""))
             veo_unverified = not result.success and _VEO_RESULT_UNVERIFIED in (result.error or "")
             google_budget_exceeded = not result.success and _GOOGLE_BUDGET_EXCEEDED in (result.error or "")
+            openai_budget_exceeded = not result.success and _OPENAI_BUDGET_EXCEEDED in (result.error or "")
             visual_cost_cap_exceeded = not result.success and _VISUAL_COST_CAP_EXCEEDED in (result.error or "")
             music_selection_required = not result.success and _BGM_SELECTION_REQUIRED in (result.error or "")
             analysis_unverified = not result.success and _ARTICLE_ANALYSIS_UNVERIFIED in (result.error or "")
@@ -432,6 +434,8 @@ class ScheduleManager:
                 last_result = 'veo_result_unverified'
             elif google_budget_exceeded:
                 last_result = 'google_budget_exceeded'
+            elif openai_budget_exceeded:
+                last_result = 'openai_budget_exceeded'
             elif visual_cost_cap_exceeded:
                 last_result = 'visual_cost_cap_exceeded'
             elif music_selection_required:
@@ -450,7 +454,7 @@ class ScheduleManager:
                 'last_result': last_result,
             }
             if (billing_disabled or music_missing or provider_limited or veo_unverified
-                    or google_budget_exceeded or visual_cost_cap_exceeded
+                    or google_budget_exceeded or openai_budget_exceeded or visual_cost_cap_exceeded
                     or music_selection_required or analysis_unverified or scoring_unverified
                     or planning_unverified or rendered_failed or non_story_failure):
                 updates['enabled'] = False
@@ -478,6 +482,8 @@ class ScheduleManager:
                 updates['last_result'] = 'veo_result_unverified'
             elif _GOOGLE_BUDGET_EXCEEDED in str(e):
                 updates['last_result'] = 'google_budget_exceeded'
+            elif _OPENAI_BUDGET_EXCEEDED in str(e):
+                updates['last_result'] = 'openai_budget_exceeded'
             elif _VISUAL_COST_CAP_EXCEEDED in str(e):
                 updates['last_result'] = 'visual_cost_cap_exceeded'
             elif _BGM_SELECTION_REQUIRED in str(e):

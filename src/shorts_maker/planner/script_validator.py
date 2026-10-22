@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
+from shorts_maker.services.openai_budget import OpenAIBudgetExceeded, reserve_openai_chat
 
 class ValidationResult(BaseModel):
     is_valid: bool = Field(strict=True)
@@ -117,15 +118,17 @@ class ScriptValidator:
 
         try:
             require_paid_production_enabled()
+            messages = [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": json.dumps({
+                    "script": json.loads(script_content),
+                    "source_excerpt": source_excerpt,
+                }, ensure_ascii=False)},
+            ]
+            reserve_openai_chat("gpt-4o", messages, 1500)
             response = await self.client.chat.completions.create(
                 model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": json.dumps({
-                        "script": json.loads(script_content),
-                        "source_excerpt": source_excerpt,
-                    }, ensure_ascii=False)},
-                ],
+                messages=messages,
                 response_format={"type": "json_object"},
                 max_completion_tokens=1500,
             )
@@ -171,6 +174,8 @@ class ScriptValidator:
             return result
             
         except RateLimitError:
+            raise
+        except OpenAIBudgetExceeded:
             raise
         except Exception as e:
             self.logger.error(f"Validation failed due to error: {e}")

@@ -301,6 +301,7 @@ class ReviewRegressions(unittest.TestCase):
             manager = ScheduleManager(str(Path(directory) / "schedules.json"))
             for marker, expected in (("ARTICLE_ANALYSIS_UNVERIFIED", "analysis_failed"),
                                      ("TOPIC_SCORING_UNVERIFIED", "scoring_failed"),
+                                     ("OPENAI_BUDGET_EXCEEDED", "openai_budget_exceeded"),
                                      ("PLANNING_UNVERIFIED", "planning_failed")):
                 failure = ProductionService()._failed_result(f"{marker}: planning failed")
                 for outcome in (failure, RuntimeError(failure.error)):

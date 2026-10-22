@@ -6,6 +6,7 @@ from typing import Optional, Dict, List
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
+from shorts_maker.services.openai_budget import OpenAIBudgetExceeded, reserve_openai_chat
 from shorts_maker.planner.models import ArticleContent, ContentAnalysis
 
 
@@ -79,9 +80,11 @@ class ContentAnalyzer:
         
         try:
             require_paid_production_enabled()
+            messages = [{"role": "user", "content": prompt}]
+            reserve_openai_chat(self.model, messages, 1500)
             response = await self.client.chat.completions.create(
                 model=self.model,
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
                 response_format={"type": "json_object"},
                 temperature=0.3,
                 max_completion_tokens=1500,
@@ -98,6 +101,8 @@ class ContentAnalyzer:
             return analysis
             
         except RateLimitError:
+            raise
+        except OpenAIBudgetExceeded:
             raise
         except Exception as e:
             self.logger.error(f"Error during content analysis: {e}")

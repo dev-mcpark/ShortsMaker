@@ -9,6 +9,7 @@ import requests
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
+from shorts_maker.services.openai_budget import OpenAIBudgetExceeded, reserve_openai_chat
 
 
 class ContentEnricher:
@@ -74,9 +75,11 @@ class ContentEnricher:
         """
         
         require_paid_production_enabled()
+        messages = [{"role": "user", "content": prompt}]
+        reserve_openai_chat("gpt-4o-mini", messages, 128)
         response = await self.client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
             temperature=0.3,
             max_completion_tokens=128,
         )
@@ -150,9 +153,11 @@ class ContentEnricher:
         
         try:
             require_paid_production_enabled()
+            messages = [{"role": "user", "content": prompt}]
+            reserve_openai_chat("gpt-4o-mini", messages, 1000)
             response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
                 response_format={"type": "json_object"},
                 max_completion_tokens=1000,
             )
@@ -168,6 +173,8 @@ class ContentEnricher:
                         return val[:5]
             return []
         except RateLimitError:
+            raise
+        except OpenAIBudgetExceeded:
             raise
         except Exception as e:
             self.logger.error(f"Error summarizing search results: {e}")

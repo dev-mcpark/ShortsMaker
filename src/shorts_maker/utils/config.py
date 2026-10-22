@@ -92,6 +92,15 @@ class Settings:
         default_factory=lambda: int(os.environ["GOOGLE_USD_KRW_RESERVE_RATE"])
         if "GOOGLE_USD_KRW_RESERVE_RATE" in os.environ else None
     )
+    openai_monthly_budget_usd: Optional[float] = field(
+        default_factory=lambda: float(os.environ["OPENAI_MONTHLY_BUDGET_USD"])
+        if "OPENAI_MONTHLY_BUDGET_USD" in os.environ else None
+    )
+    openai_budget_month: str = field(default_factory=lambda: os.getenv("OPENAI_BUDGET_MONTH", ""))
+    openai_budget_opening_usd: Optional[float] = field(
+        default_factory=lambda: float(os.environ["OPENAI_BUDGET_OPENING_USD"])
+        if "OPENAI_BUDGET_OPENING_USD" in os.environ else None
+    )
     paid_production_enabled: bool = field(
         default_factory=lambda: os.getenv("PAID_PRODUCTION_ENABLED", "false").strip().lower()
         in {"true", "1", "yes"}
@@ -156,6 +165,14 @@ class Settings:
                     or self.google_usd_krw_rate <= 0
                     or not re.fullmatch(r"\d{4}-(?:0[1-9]|1[0-2])", self.google_budget_month)):
                 raise ValueError("Google 월 예산에는 양의 한도·환산값, 0 이상 기초 사용액, YYYY-MM 월이 필요합니다.")
+        if self.openai_monthly_budget_usd is not None:
+            if (not math.isfinite(self.openai_monthly_budget_usd)
+                    or self.openai_monthly_budget_usd <= 0
+                    or self.openai_budget_opening_usd is None
+                    or not math.isfinite(self.openai_budget_opening_usd)
+                    or self.openai_budget_opening_usd < 0
+                    or not re.fullmatch(r"\d{4}-(?:0[1-9]|1[0-2])", self.openai_budget_month)):
+                raise ValueError("OpenAI 월 예산에는 양의 달러 한도, 0 이상 기초 사용액, YYYY-MM 월이 필요합니다.")
         # 디렉토리 생성
         for dir_path in [self.temp_dir, self.output_dir, self.scripts_dir,
                          self.clips_dir, self.bgm_dir, self.logs_dir,

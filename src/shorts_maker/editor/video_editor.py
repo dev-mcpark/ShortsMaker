@@ -21,6 +21,7 @@ from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
+from shorts_maker.services.openai_budget import reserve_openai_speech
 
 # [CRITICAL FIX] Manually set ImageMagick path for macOS Homebrew install
 if os.path.exists("/opt/homebrew/bin/magick"):
@@ -636,6 +637,7 @@ class VideoEditor:
 
         for attempt in range(self.TTS_MAX_ATTEMPTS):
             try:
+                reserve_openai_speech(self.TTS_MODEL, text)
                 response = await self.client.audio.speech.create(
                     model=self.TTS_MODEL,
                     voice=voice,
