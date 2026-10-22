@@ -110,7 +110,6 @@ class WorkflowTests(unittest.TestCase):
         bad_responses = [
             {"candidates": [valid[0]]},
             {"candidates": [valid[0], valid[0]]},
-            {"candidates": [dict(valid[0], selected=True), dict(valid[1], selected=True)]},
             {"candidates": [dict(valid[0], selected="false"), valid[1]]},
             {"candidates": [dict(valid[0], score=11), valid[1]]},
         ]
@@ -122,6 +121,14 @@ class WorkflowTests(unittest.TestCase):
                     asyncio.run(planner._score_topics(candidates))
 
         create.return_value = SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content=json.dumps({"candidates": [
+                dict(valid[0], selected=True), dict(valid[1], selected=True),
+            ]})))])
+        with patch.object(settings, "max_topic_retries", 1):
+            with self.assertRaisesRegex(RuntimeError, "TOPIC_SCORING_UNVERIFIED"):
+                asyncio.run(planner._score_topics(candidates))
+
+        create.return_value = SimpleNamespace(choices=[SimpleNamespace(
             finish_reason="length", message=SimpleNamespace(content=json.dumps({"candidates": valid})))])
         with self.assertRaisesRegex(RuntimeError, "TOPIC_SCORING_UNVERIFIED"):
             asyncio.run(planner._score_topics(candidates))
@@ -130,6 +137,12 @@ class WorkflowTests(unittest.TestCase):
             message=SimpleNamespace(content=json.dumps({"candidates": valid})))])
         result = asyncio.run(planner._score_topics(candidates))
         self.assertEqual([candidate.selected for candidate in result], [True, False])
+        create.return_value = SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content=json.dumps({"candidates": [
+                dict(valid[0], selected=True), dict(valid[1], selected=True),
+            ]})))])
+        result = asyncio.run(planner._score_topics(candidates))
+        self.assertEqual([candidate.selected for candidate in result], [True, True])
 
     def test_topic_scoring_can_decline_the_whole_pool(self):
         planner = object.__new__(ScriptPlanner)
@@ -646,8 +659,10 @@ class WorkflowTests(unittest.TestCase):
         ]
         planner._fetch_rss_feeds = Mock(return_value=candidates)
         planner._validate_url = Mock(return_value=True)
-        planner._score_topics = AsyncMock(side_effect=lambda remaining: [
-            TopicCandidate(item=remaining[0], score=8, reason="test", selected=True)
+        planner._score_topics = AsyncMock(return_value=[
+            TopicCandidate(item=candidates[2], score=7, reason="test", selected=True),
+            TopicCandidate(item=candidates[1], score=8, reason="test", selected=True),
+            TopicCandidate(item=candidates[0], score=9, reason="test", selected=True),
         ])
         short = SimpleNamespace(word_count=99)
         evidence = "The source describes the choice and its concrete mechanism."
@@ -670,6 +685,7 @@ class WorkflowTests(unittest.TestCase):
             result, _ = asyncio.run(planner.plan_content())
 
         self.assertIs(result, script)
+        planner._score_topics.assert_awaited_once_with(candidates)
         self.assertEqual(planner.content_extractor.fetch_enhanced_article.call_count, 3)
         planner._write_script.assert_awaited_once()
         self.assertEqual(planner._write_script.await_args.args[0]["url"],
@@ -717,7 +733,8 @@ class WorkflowTests(unittest.TestCase):
         planner._fetch_rss_feeds = Mock(return_value=candidates)
         planner._validate_url = Mock(return_value=True)
         planner._score_topics = AsyncMock(return_value=[
-            TopicCandidate(item=candidates[0], score=8, reason="lead", selected=True)
+            TopicCandidate(item=candidates[0], score=8, reason="lead", selected=True),
+            TopicCandidate(item=candidates[1], score=7, reason="backup", selected=True),
         ])
         planner.content_extractor = SimpleNamespace(fetch_enhanced_article=Mock(return_value=
             SimpleNamespace(word_count=120, title="First", main_text="Article body")))
@@ -728,6 +745,7 @@ class WorkflowTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "ARTICLE_ANALYSIS_UNVERIFIED"):
                 asyncio.run(planner.plan_content())
         planner._score_topics.assert_awaited_once()
+        planner.content_extractor.fetch_enhanced_article.assert_called_once_with(candidates[0]["url"])
         planner._write_script.assert_not_awaited()
 
     def test_empty_feed_does_not_invent_a_topic(self):
@@ -737,6 +755,18 @@ class WorkflowTests(unittest.TestCase):
         planner._score_topics = AsyncMock()
 
         self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+        planner._score_topics.assert_not_awaited()
+
+    def test_zero_rss_attempts_does_not_buy_topic_scoring(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner._fetch_rss_feeds = Mock(return_value=[
+            {"title": "Lead", "category": "City_Life", "url": "https://example.com/lead"}
+        ])
+        planner._score_topics = AsyncMock()
+
+        with patch.object(settings, "max_topic_retries", 0):
+            self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
         planner._score_topics.assert_not_awaited()
 
     def test_rss_category_limit_balances_sources_without_more_paid_candidates(self):

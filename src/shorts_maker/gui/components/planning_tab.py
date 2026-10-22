@@ -425,7 +425,8 @@ def render_planning_tab(state: 'AppState') -> None:
                                 score_color = 'text-green-400' if candidate.score >= 7 else ('text-yellow-400' if candidate.score >= 5 else 'text-red-400')
                                 ui.label(f'{candidate.score}/10').classes(f'text-xs font-bold {score_color}')
                                 if candidate.selected:
-                                    ui.badge('선택됨', color='teal').props('dense')
+                                    adopted = state.script and state.script.source_url == candidate.item.get('url')
+                                    ui.badge('대본 채택' if adopted else '1차 선별', color='teal').props('dense')
                                 ui.label(candidate.item.get('title', '')[:50]).classes('text-xs text-gray-300 flex-grow')
                             ui.label(candidate.reason).classes('text-xs text-gray-500')
 

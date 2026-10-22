@@ -366,7 +366,7 @@ class ScriptPlanner:
         {json.dumps(candidate_briefs, ensure_ascii=False)}
 
         Score EACH candidate from 1-10 and give a brief reason in Korean (1-2 sentences).
-        Mark selected=true for at most ONE candidate only when the supplied lead supports a meaningful viewer question, a source-checkable turn, and a visible explanatory relationship. If none meets all three, mark all selected=false; do not force a topic. Write reasons specific to each lead, not generic claims about being visual or interesting.
+        Mark selected=true for at most {settings.max_topic_retries} candidates only when each supplied lead supports a meaningful viewer question, a source-checkable turn, and a visible explanatory relationship. The highest-scored selected lead is tried first. If none meets all three, mark all selected=false; do not force a topic. Write reasons specific to each lead, not generic claims about being visual or interesting.
 
         Output one JSON object with a "candidates" array containing every index exactly once. Each item has integer "index", integer "score" (1-10), Korean string "reason", and boolean "selected".
         """
@@ -399,8 +399,8 @@ class ScriptPlanner:
                     raise ValueError('후보 점수 항목이 잘못되었습니다')
                 seen_indices.add(idx)
                 result.append(TopicCandidate(candidates[idx], score, reason.strip(), selected))
-            if sum(candidate.selected for candidate in result) > 1:
-                raise ValueError('여러 후보가 동시에 선택되었습니다')
+            if sum(candidate.selected for candidate in result) > settings.max_topic_retries:
+                raise ValueError('선택된 후보가 재시도 상한을 초과했습니다')
 
             return result
         except RateLimitError:
@@ -479,22 +479,24 @@ class ScriptPlanner:
         script = None
         scored: List[TopicCandidate] = []
 
-        for attempt in range(max_topic_retries):
-            if not candidates:
-                self.logger.warning("No more candidates available for selection.")
-                break
+        if max_topic_retries < 1:
+            self.logger.warning("RSS 소재 시도 상한이 0이라 점수화를 건너뜁니다.")
+            return None, None
 
-            # 1. Score Topics
-            scored = await self._score_topics(candidates)
-            selected_candidate = next((c for c in scored if c.selected), None)
-            if not selected_candidate:
-                self.logger.warning(f"Attempt {attempt+1}: 선택 가능한 후보 없음. 종료.")
-                self._remember_rss_urls([candidate.item['url'] for candidate in scored])
-                break
+        # One paid score for the pool; article failures use its other selected leads.
+        scored = await self._score_topics(candidates)
+        selected_candidates = sorted(
+            (candidate for candidate in scored if candidate.selected),
+            key=lambda candidate: candidate.score, reverse=True,
+        )
+        if not selected_candidates:
+            self.logger.warning("선택 가능한 RSS 후보 없음. 종료.")
+            self._remember_rss_urls([candidate.item['url'] for candidate in scored])
+            return None, None
 
+        for attempt, selected_candidate in enumerate(selected_candidates[:max_topic_retries]):
             selection = selected_candidate.item
             if not self._validate_url(selection['url']):
-                candidates = [c for c in candidates if c['url'] != selection['url']]
                 continue
             self.logger.info(f"🔥 Selected Topic (Attempt {attempt+1}): {selection['title']} ({selection['category']}) [score={selected_candidate.score}]")
 
@@ -506,7 +508,6 @@ class ScriptPlanner:
             if not article_content or article_content.word_count < self.MIN_ARTICLE_WORDS:
                 self.logger.warning("RSS article text missing or too short; skipping this candidate before script writing")
                 self._remember_rss_urls([selection['url']])
-                candidates = [c for c in candidates if c['url'] != selection['url']]
                 continue
             self.logger.info(f"✅ Successfully extracted {article_content.word_count} words.")
 
@@ -521,7 +522,6 @@ class ScriptPlanner:
                     or evidence not in source_text):
                 self.logger.info("RSS article lacks a source-backed explanatory turn; skipping before enrichment and writing")
                 self._remember_rss_urls([selection['url']])
-                candidates = [c for c in candidates if c['url'] != selection['url']]
                 continue
 
             enriched_info = []
@@ -551,7 +551,6 @@ class ScriptPlanner:
             # Validation failed → remove candidate and retry
             self.logger.info("🔄 Discarding this topic and selecting a NEW one...")
             self._remember_rss_urls([selection['url']])
-            candidates = [c for c in candidates if c['url'] != selection['url']]
 
         self.logger.error("Failed to generate a valid script after retries.")
         return None, None
