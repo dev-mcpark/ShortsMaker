@@ -237,15 +237,26 @@ def render_main_page() -> None:
                 voice_select.bind_value(state, 'tts_voice')
 
                 ui.label('BGM MOOD').classes('text-[10px] text-slate-400 font-semibold mb-1')
+                bgm_manager = BGMManager()
+                mood_options = {'auto': 'Follow Script (matching track needed)'}
+                mood_options.update({mood: label for mood, label in {
+                    'calm': 'Calm & Soft', 'sci-fi': 'Sci-Fi', 'futuristic': 'Curious Tech',
+                    'mysterious': 'Mysterious', 'energetic': 'Energetic Pop',
+                    'dark': 'Dark Mystery', 'synthwave': 'Retro Synthwave',
+                }.items() if bgm_manager.get_bgm_path(mood)})
+                if state.bgm_mood not in mood_options:
+                    mood_options[state.bgm_mood] = f'Unavailable: {state.bgm_mood}'
                 bgm_select = ui.select(
-                    options={'auto': 'Follow Script', 'calm': 'Calm & Soft', 'sci-fi': 'Sci-Fi', 'futuristic': 'Curious Tech', 'mysterious': 'Mysterious', 'energetic': 'Energetic Pop', 'dark': 'Dark Mystery', 'synthwave': 'Retro Synthwave'},
+                    options=mood_options,
                     value=state.bgm_mood
                 ).props('outlined dense dark aria-label="BGM 분위기"').classes('w-full mb-3')
                 bgm_select.bind_value(state, 'bgm_mood')
+                ui.label('Auto stops before narration if no licensed track matches the script mood.') \
+                    .classes('text-[10px] text-slate-400 mb-2')
 
                 ui.label('BGM TRACK').classes('text-[10px] text-slate-400 font-semibold mb-1')
                 track_options = {'': 'Auto by mood'}
-                track_options.update(BGMManager().list_documented_tracks())
+                track_options.update(bgm_manager.list_documented_tracks())
                 if state.bgm_track and state.bgm_track not in track_options:
                     track_options[state.bgm_track] = f'Unavailable: {state.bgm_track}'
                 bgm_track_select = ui.select(
