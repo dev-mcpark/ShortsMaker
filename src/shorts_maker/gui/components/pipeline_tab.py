@@ -9,6 +9,7 @@ from shorts_maker.gui.components.common.safe_ui import (
 )
 from shorts_maker.services.production_service import ProductionPhase, ProductionProgress
 from shorts_maker.utils.logger import get_logger
+from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.gui.components.common.progress_utils import format_time, update_scene_grid
 
 if TYPE_CHECKING:
@@ -81,11 +82,11 @@ def render_pipeline_tab(
                     value='Auto (RSS)'
                 ).props('color=violet size=32px').classes('text-xs text-slate-300 gap-4 mb-1')
 
-                topic_input = ui.input(
-                    'RSS 토픽 키워드',
-                    placeholder='예: AI, 과학, 테크 뉴스'
+                category_select = ui.select(
+                    ['전체 분야', *SourceManager().get_categories()],
+                    value='전체 분야', label='RSS 분야'
                 ).props('outlined dense dark').classes('w-full text-xs')
-                topic_input.bind_visibility_from(source_mode, 'value', value='Auto (RSS)')
+                category_select.bind_visibility_from(source_mode, 'value', value='Auto (RSS)')
 
                 url_input = ui.input(
                     '개별 기사 URL 주소',
@@ -237,7 +238,8 @@ def render_pipeline_tab(
                     logger.info("=== Production Full Pipeline Triggered ===")
 
                     result = await service.full_pipeline(
-                        topic=topic_input.value if source_mode.value == 'Auto (RSS)' else None,
+                        topic=(category_select.value if source_mode.value == 'Auto (RSS)'
+                               and category_select.value != '전체 분야' else None),
                         direct_url=url_input.value if source_mode.value == 'Direct URL' else None,
                         auto_upload=auto_upload.value
                     )

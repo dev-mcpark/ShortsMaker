@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.utils.scheduler import ScheduleManager
+from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -83,7 +84,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                     # Schedule Name
                     with ui.column().classes('w-full gap-1 mb-4'):
                         ui.label('Schedule Name').classes('text-xs text-gray-400 uppercase tracking-wider')
-                        schedule_name = ui.input('Schedule Name', value='Daily Tech News').props('outlined dense dark').classes('w-full')
+                        schedule_name = ui.input('Schedule Name', value='Daily RSS Shorts').props('outlined dense dark').classes('w-full')
 
                     # Time & Frequency
                     with ui.row().classes('w-full gap-4 mb-4'):
@@ -127,11 +128,11 @@ def render_scheduling_tab(state: 'AppState') -> None:
                             value='Auto-Discovery (RSS)'
                         ).props('color=purple size=32px')
 
-                    topic_input = ui.input(
-                        'Topic Keyword',
-                        placeholder='e.g., AI, Technology'
+                    category_select = ui.select(
+                        ['전체 분야', *SourceManager().get_categories()],
+                        value='전체 분야', label='RSS Category'
                     ).props('outlined dense dark').classes('w-full mb-3')
-                    topic_input.bind_visibility_from(source_mode, 'value', value='Auto-Discovery (RSS)')
+                    category_select.bind_visibility_from(source_mode, 'value', value='Auto-Discovery (RSS)')
 
                     url_input = ui.input(
                         'Article URL',
@@ -190,7 +191,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                 name=schedule_name.value,
                                 time=time_str,
                                 frequency=frequency_select.value,
-                                topic=topic_input.value if source_mode.value == 'Auto-Discovery (RSS)' else None,
+                                topic=(category_select.value if source_mode.value == 'Auto-Discovery (RSS)'
+                                       and category_select.value != '전체 분야' else None),
                                 direct_url=url_input.value if source_mode.value == 'Direct URL' else None,
                                 auto_upload=auto_upload_check.value,
                                 mode=mode_select.value,
@@ -277,6 +279,11 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 with ui.row().classes('items-center gap-1'):
                                                     ui.icon('date_range', size='xs').classes('text-gray-400')
                                                     ui.label(schedule.get('frequency', 'Daily')).classes('text-sm text-gray-400')
+
+                                            ui.label(
+                                                '직접 URL' if schedule.get('direct_url')
+                                                else f"RSS: {schedule.get('topic') or '전체 분야'}"
+                                            ).classes('text-xs text-gray-400')
 
                                             if registered:
                                                 with ui.element('div').classes('mt-2 p-2 bg-teal-900/30 rounded-lg border border-teal-500/20'):

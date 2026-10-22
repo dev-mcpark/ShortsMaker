@@ -10,6 +10,7 @@ from shorts_maker.planner.script_planner import ShortsScript
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.logger import get_logger
+from shorts_maker.utils.source_manager import SourceManager
 
 if TYPE_CHECKING:
     from shorts_maker.gui.state.app_state import AppState
@@ -55,7 +56,7 @@ def render_planning_tab(state: 'AppState') -> None:
                     with ui.column().classes('items-center gap-4'):
                         ui.icon('auto_stories', size='xl').classes('text-slate-700')
                         ui.label('각본이 아직 기획되지 않았습니다').classes('text-lg font-bold text-slate-300')
-                        ui.label('각본 생성 컨트롤에서 주제를 정하고 각본을 기획하세요.').classes('text-xs text-slate-400')
+                        ui.label('RSS 분야 또는 기사 URL을 선택해 각본을 기획하세요.').classes('text-xs text-slate-400')
             return
 
         script = state.script
@@ -195,9 +196,9 @@ def render_planning_tab(state: 'AppState') -> None:
                     source_mode, 'value', value='직접 URL 입력'
                 ).props('outlined dense dark').classes('w-full mb-2')
 
-                topic_input = ui.input(
-                    '키워드 (선택)',
-                    placeholder='예: AI, 기술, 과학'
+                category_select = ui.select(
+                    ['전체 분야', *SourceManager().get_categories()],
+                    value='전체 분야', label='RSS 분야'
                 ).bind_visibility_from(
                     source_mode, 'value', value='RSS 자동 발견'
                 ).props('outlined dense dark').classes('w-full mb-2')
@@ -217,7 +218,8 @@ def render_planning_tab(state: 'AppState') -> None:
                         logger.info(f"Starting Plan: Mode={source_mode.value}")
                         service = state.get_or_create_service()
                         script, context = await service.generate_script(
-                            topic=topic_input.value,
+                            topic=(category_select.value if source_mode.value == 'RSS 자동 발견'
+                                   and category_select.value != '전체 분야' else None),
                             direct_url=url_input.value if source_mode.value == '직접 URL 입력' else None
                         )
                         if script:

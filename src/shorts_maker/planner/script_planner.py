@@ -172,16 +172,20 @@ class ScriptPlanner:
             self.logger.debug(f"RSS 날짜 파싱 오류: {e}")
             return False
 
-    def _fetch_rss_feeds(self, use_cache: bool = True, limit_per_category: Optional[int] = 5) -> List[Dict]:
+    def _fetch_rss_feeds(self, use_cache: bool = True, limit_per_category: Optional[int] = 5,
+                         category: Optional[str] = None) -> List[Dict]:
         """
         RSS 피드에서 후보 기사 수집
 
         Args:
             use_cache: True면 캐시 사용 (기본값)
             limit_per_category: 유료 평가 후보 상한; None은 무료 편집 검토용 전체 최근 항목
+            category: 등록된 RSS 분야 하나; None이면 전체 분야
         """
         if limit_per_category is not None and limit_per_category < 1:
             raise ValueError("limit_per_category must be positive")
+        if category is not None and (not isinstance(category, str) or category not in self.rss_sources):
+            raise ValueError(f"등록되지 않은 RSS 분야: {category}")
         posts = []
         day = datetime.now().date().isoformat()
         url_history = self._load_url_history()
@@ -191,11 +195,13 @@ class ScriptPlanner:
         cache_misses = 0
         successful_feeds = 0
 
-        # Use ALL available sources to maximize candidate pool
+        # Read every source in the selected category scope.
         selected_sources = []
-        for category, urls in self.rss_sources.items():
+        for source_category, urls in self.rss_sources.items():
+            if category is not None and source_category != category:
+                continue
             for url in urls:
-                selected_sources.append((category, url))
+                selected_sources.append((source_category, url))
 
         # Keep the same daily sample for preview and production with unchanged feeds.
         selected_sources.sort(key=lambda item: hashlib.sha256(
@@ -464,7 +470,7 @@ class ScriptPlanner:
             return final_script, context
 
         # [Mode 2: RSS Discovery]
-        candidates = await asyncio.to_thread(self._fetch_rss_feeds)
+        candidates = await asyncio.to_thread(self._fetch_rss_feeds, category=topic or None)
         if not candidates:
             self.logger.warning("사용 가능한 RSS 기사가 없어 각본 생성을 중단합니다.")
             return None, None

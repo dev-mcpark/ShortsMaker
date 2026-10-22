@@ -408,7 +408,7 @@ class ProductionService:
         스크립트 생성
 
         Args:
-            topic: RSS에서 찾을 토픽 키워드 (선택)
+            topic: 등록된 RSS 분야 (선택, None이면 전체)
             direct_url: 직접 URL 입력 (선택)
 
         Returns:
@@ -844,7 +844,7 @@ class ProductionService:
         전체 프로덕션 파이프라인 실행
 
         Args:
-            topic: RSS에서 찾을 토픽 키워드 (선택)
+            topic: 등록된 RSS 분야 (선택, None이면 전체)
             direct_url: 직접 URL 입력 (선택)
             auto_upload: True면 자동으로 YouTube 업로드
             upload_metadata: 업로드 메타데이터 (auto_upload가 True일 때 필요)

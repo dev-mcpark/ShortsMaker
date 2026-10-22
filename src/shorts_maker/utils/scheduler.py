@@ -152,7 +152,7 @@ class ScheduleManager:
             name: 스케줄 이름
             time: 실행 시간 (HH:MM 형식)
             frequency: 반복 주기 ('Daily', 'Weekly (Mon)', 'Weekly (Fri)', 등)
-            topic: RSS 검색 토픽 (선택)
+            topic: 등록된 RSS 분야 (선택, None이면 전체)
             direct_url: 직접 URL (선택)
             auto_upload: YouTube 자동 업로드 여부
             mode: 생성 모드 ('hybrid', 'image' 또는 'video')

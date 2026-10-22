@@ -762,6 +762,33 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             planner._fetch_rss_feeds(limit_per_category=0)
 
+    def test_rss_category_choice_filters_sources_before_scoring(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.rss_sources = {
+            "City_Life": ["https://example.com/city"],
+            "Finance_Economy": ["https://example.com/finance"],
+        }
+        planner._load_url_history = Mock(return_value=[])
+        planner._is_recent = Mock(return_value=True)
+        planner.rss_cache = SimpleNamespace(get=Mock(side_effect=lambda url: [{
+            "title": url, "link": f"{url}/story", "summary": "Source summary " * 20,
+            "published_parsed": None,
+        }]), set=Mock())
+
+        posts = planner._fetch_rss_feeds(category="Finance_Economy")
+        self.assertEqual([post["category"] for post in posts], ["Finance_Economy"])
+        planner.rss_cache.get.assert_called_once_with("https://example.com/finance")
+        with self.assertRaisesRegex(ValueError, "등록되지 않은 RSS 분야"):
+            planner._fetch_rss_feeds(category="Technology")
+        planner.rss_cache.get.assert_called_once()
+
+        planner._fetch_rss_feeds = Mock(return_value=[])
+        planner._score_topics = AsyncMock()
+        self.assertEqual(asyncio.run(planner.plan_content(topic="City_Life")), (None, None))
+        planner._fetch_rss_feeds.assert_called_once_with(category="City_Life")
+        planner._score_topics.assert_not_awaited()
+
     def test_rss_length_gate_uses_visible_summary_text(self):
         planner = object.__new__(ScriptPlanner)
         planner.logger = Mock()
