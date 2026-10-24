@@ -72,13 +72,15 @@ class WorkflowTests(unittest.TestCase):
         planner.client = SimpleNamespace(chat=SimpleNamespace(
             completions=SimpleNamespace(create=create)))
 
-        result = asyncio.run(planner._score_topics([
-            {"title": "Article title", "category": "Tech", "url": "https://example.com",
-             "content": "<p>차고지 아래 저류조가 폭우 때 물을 모읍니다.</p>" + "x" * 250 + "END"}
-        ]))
+        with patch('shorts_maker.planner.script_planner.reserve_openai_chat') as reserve:
+            result = asyncio.run(planner._score_topics([
+                {"title": "Article title", "category": "Tech", "url": "https://example.com",
+                 "content": "<p>차고지 아래 저류조가 폭우 때 물을 모읍니다.</p>" + "x" * 250 + "END"}
+            ]))
 
         self.assertTrue(result[0].selected)
-        self.assertEqual(create.await_args.kwargs["max_completion_tokens"], 2000)
+        self.assertEqual(reserve.call_args.args[2], 4000)
+        self.assertEqual(create.await_args.kwargs["max_completion_tokens"], 4000)
         prompt = create.await_args.kwargs["messages"][0]["content"]
         self.assertIn("Concrete stakes", prompt)
         self.assertIn("Source-backed turn", prompt)
@@ -86,6 +88,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("Event guides, discounts, openings, and promotional visits", prompt)
         self.assertIn("Do not turn an intended economic benefit into a measured outcome", prompt)
         self.assertIn("A niche mechanism alone", prompt)
+        self.assertIn("select at most one of those leads", prompt)
+        self.assertIn("one concise Korean clause", prompt)
         self.assertIn("차고지 아래 저류조가 폭우 때 물을 모읍니다.", prompt)
         self.assertNotIn("<p>", prompt)
         self.assertNotIn("END", prompt)
