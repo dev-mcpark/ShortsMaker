@@ -519,7 +519,8 @@ class ScriptPlanner:
                 raise RuntimeError("ARTICLE_ANALYSIS_UNVERIFIED: 기사 분석 결과를 확인할 수 없습니다.")
 
             evidence = ' '.join(analysis.story_fit_evidence.split())
-            source_text = ' '.join(article_content.main_text.split())
+            # shortcut: only the first 5,000 source characters reach writing and validation; upgrade if later evidence must be included.
+            source_text = ' '.join(article_content.main_text.strip()[:5000].split())
             if (analysis.story_fit is not True or len(evidence) < 20
                     or evidence not in source_text):
                 self.logger.info("RSS article lacks a source-backed explanatory turn; skipping before enrichment and writing")

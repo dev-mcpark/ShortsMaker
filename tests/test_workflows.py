@@ -738,6 +738,34 @@ class WorkflowTests(unittest.TestCase):
         planner._write_script.assert_not_awaited()
         self.assertEqual(planner._remember_rss_urls.call_count, 3)
 
+    def test_rss_does_not_buy_writing_for_evidence_outside_validator_excerpt(self):
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        candidate = {"title": "Long article", "category": "City_Life",
+                     "url": "https://example.com/long"}
+        evidence = "The completed project has a source-backed explanatory result."
+        planner._fetch_rss_feeds = Mock(return_value=[candidate])
+        planner._validate_url = Mock(return_value=True)
+        planner._score_topics = AsyncMock(return_value=[
+            TopicCandidate(item=candidate, score=8, reason="promising lead", selected=True)
+        ])
+        planner.content_extractor = SimpleNamespace(fetch_enhanced_article=Mock(return_value=
+            SimpleNamespace(word_count=120, title="Long article",
+                            main_text="A" * 5000 + evidence,
+                            quotes=[evidence], headings=[], captions=[])))
+        planner.content_analyzer = SimpleNamespace(analyze_content=AsyncMock(return_value=
+            SimpleNamespace(story_fit=True, story_fit_evidence=evidence)))
+        planner.content_enricher = SimpleNamespace(enrich_content=AsyncMock())
+        planner._write_script = AsyncMock()
+        planner._remember_rss_urls = Mock()
+
+        with patch.object(settings, "max_topic_retries", 1):
+            self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+
+        planner.content_enricher.enrich_content.assert_not_awaited()
+        planner._write_script.assert_not_awaited()
+        planner._remember_rss_urls.assert_called_once_with([candidate["url"]])
+
     def test_rss_analysis_failure_stops_before_another_paid_selection(self):
         planner = object.__new__(ScriptPlanner)
         planner.logger = Mock()

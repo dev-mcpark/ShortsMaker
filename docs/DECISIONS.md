@@ -563,3 +563,7 @@ An upload can reach YouTube even when the app receives no ID or cannot persist i
 ## 2026-10-24 — Include routine automatic cuts in standalone review
 
 The scorecard previously treated only manual-clip runs as editorial cuts, so a recurring automatic video's review row could never contribute to the accepted-video cost or seven-day outcome summaries unless it formed a unique image/hybrid experiment pair. Keep unique eligible pairs separate for mode comparison; aggregate every other finished cut as a standalone editorial review regardless of visual mode or scene source. Rejected drafts still contribute cost when their bill is allocated, and repeated cuts do not become independent topics. This changes summary grouping only, not acceptance, billing, or publication status.
+
+## 2026-10-24 — Require RSS story evidence within the shared source excerpt
+
+Automatic RSS analysis could return a valid quote from anywhere in a long article, but writing and validation each inspect only the first 5,000 source characters. Require the story-fit evidence sentence within that same excerpt before enrichment or script writing. This does not add a provider call and prevents paying for a draft whose decisive source proof the validator cannot inspect. A long article with its meaningful turn only later may now be skipped; revisit excerpt selection if that pattern appears in viable sources, and use deliberate direct-URL review meanwhile.
