@@ -4,6 +4,7 @@ import asyncio
 import httpx
 import importlib
 import json
+import sqlite3
 import tempfile
 import threading
 import unittest
@@ -366,6 +367,46 @@ class ReviewRegressions(unittest.TestCase):
             self.assertEqual(peak, 1)
             self.assertEqual(manager.get_schedule(first["id"])["run_count"], 1)
             self.assertEqual(manager.get_schedule(second["id"])["run_count"], 1)
+
+    def test_separate_schedule_managers_do_not_repeat_one_paid_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            filename = str(Path(directory) / "schedules.json")
+            first_manager = ScheduleManager(filename)
+            second_manager = ScheduleManager(filename)
+            schedule = first_manager.create_schedule("Shared RSS", "09:00")
+            result = SimpleNamespace(success=True, video_path="/retained/video.mp4", error=None)
+            calls = 0
+
+            async def production(*args, **kwargs):
+                nonlocal calls
+                calls += 1
+                await asyncio.sleep(0.05)
+                return result
+
+            async def run_due_jobs():
+                await asyncio.gather(first_manager._execute_pipeline(schedule),
+                                     second_manager._execute_pipeline(schedule))
+
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new=production,
+            ):
+                asyncio.run(run_due_jobs())
+
+            self.assertEqual(calls, 1)
+            self.assertEqual(first_manager.get_schedule(schedule["id"])["run_count"], 1)
+            self.assertFalse(second_manager.get_schedule(schedule["id"])["enabled"])
+
+    def test_corrupt_schedule_lock_stops_before_paid_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("RSS", "09:00")
+            Path(directory, "schedules.json.lock.sqlite3").write_bytes(b"not a database")
+            with patch("shorts_maker.services.production_service.ProductionService.full_pipeline",
+                       new_callable=AsyncMock) as pipeline:
+                with self.assertRaises(sqlite3.DatabaseError):
+                    asyncio.run(manager._execute_pipeline(schedule))
+            pipeline.assert_not_awaited()
 
     def test_two_due_schedules_for_one_article_render_only_once(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -7,6 +7,7 @@ import asyncio
 import json
 import os
 import re
+import sqlite3
 import tempfile
 import uuid
 from pathlib import Path
@@ -360,9 +361,23 @@ class ScheduleManager:
 
     async def _execute_pipeline(self, schedule: Dict[str, Any]):
         """스케줄된 파이프라인 실행"""
-        # A later job must see the first job's saved source history and budget state.
+        # The saved schedule must be re-read after both in-process and cross-process waiting.
         async with self._production_lock:
-            await self._execute_pipeline_serial(schedule)
+            lock_path = self.filename.with_name(f"{self.filename.name}.lock.sqlite3")
+            connection = sqlite3.connect(lock_path, timeout=0, isolation_level=None)
+            locked = False
+            try:
+                while not locked:
+                    try:
+                        connection.execute("BEGIN EXCLUSIVE")
+                        locked = True
+                    except sqlite3.OperationalError as error:
+                        if error.sqlite_errorcode not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+                            raise
+                        await asyncio.sleep(0.1)
+                await self._execute_pipeline_serial(schedule)
+            finally:
+                connection.close()
 
     async def _execute_pipeline_serial(self, schedule: Dict[str, Any]):
         from shorts_maker.services.production_service import ProductionService
