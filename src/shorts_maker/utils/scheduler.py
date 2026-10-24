@@ -3,6 +3,7 @@ ScheduleManager - 자동 비디오 프로덕션 스케줄링 관리 모듈
 
 정기적인 비디오 생성 작업을 스케줄링하고 실행합니다.
 """
+import asyncio
 import json
 import os
 import re
@@ -46,6 +47,7 @@ class ScheduleManager:
         self.filename = Path(filename)
         self._scheduler = None
         self._scheduler_running = False
+        self._production_lock = asyncio.Lock()
 
     def _ensure_scheduler(self):
         """APScheduler 인스턴스 생성 (지연 초기화)"""
@@ -358,6 +360,11 @@ class ScheduleManager:
 
     async def _execute_pipeline(self, schedule: Dict[str, Any]):
         """스케줄된 파이프라인 실행"""
+        # A later job must see the first job's saved source history and budget state.
+        async with self._production_lock:
+            await self._execute_pipeline_serial(schedule)
+
+    async def _execute_pipeline_serial(self, schedule: Dict[str, Any]):
         from shorts_maker.services.production_service import ProductionService
         from shorts_maker.services.google_budget import budget_status as google_budget_status
         from shorts_maker.services.openai_budget import budget_status as openai_budget_status
@@ -371,10 +378,17 @@ class ScheduleManager:
 
         try:
             # A fixed article URL is one story; use topic discovery for a repeating source.
-            if (schedule.get('direct_url')
-                    and (schedule.get('last_rendered_url') == schedule['direct_url']
-                         or (not schedule.get('last_rendered_url')
-                             and schedule.get('last_result') == 'success'))):
+            article_url = schedule.get('direct_url')
+            prior_article_run = article_url and any(
+                other.get('id') != schedule['id'] and other.get('direct_url') == article_url
+                and (other.get('last_rendered_url') == article_url
+                     or (not other.get('last_rendered_url') and other.get('last_result') == 'success'))
+                for other in self.load_schedules()
+            )
+            if (article_url and (prior_article_run
+                    or schedule.get('last_rendered_url') == article_url
+                    or (not schedule.get('last_rendered_url')
+                        and schedule.get('last_result') == 'success'))):
                 self.update_schedule(schedule['id'], {
                     'last_run': datetime.now().isoformat(),
                     'run_count': schedule.get('run_count', 0) + 1,

@@ -335,6 +335,58 @@ class ReviewRegressions(unittest.TestCase):
                 asyncio.run(manager._execute_pipeline(no_story))
             self.assertTrue(manager.get_schedule(no_story["id"])["enabled"])
 
+    def test_two_due_schedules_do_not_overlap_production(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            first = manager.create_schedule("RSS one", "09:00")
+            second = manager.create_schedule("RSS two", "09:00")
+            active = peak = 0
+
+            async def production(*args, **kwargs):
+                nonlocal active, peak
+                active += 1
+                peak = max(peak, active)
+                await asyncio.sleep(0)
+                active -= 1
+                return ProductionService()._failed_result("스크립트 생성 실패")
+
+            async def run_due_jobs():
+                await asyncio.gather(manager._execute_pipeline(first),
+                                     manager._execute_pipeline(second))
+
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new=production,
+            ):
+                asyncio.run(run_due_jobs())
+
+            self.assertEqual(peak, 1)
+            self.assertEqual(manager.get_schedule(first["id"])["run_count"], 1)
+            self.assertEqual(manager.get_schedule(second["id"])["run_count"], 1)
+
+    def test_two_due_schedules_for_one_article_render_only_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            article_url = "https://example.com/article"
+            first = manager.create_schedule("First", "09:00", direct_url=article_url)
+            second = manager.create_schedule("Second", "09:00", direct_url=article_url)
+            result = SimpleNamespace(success=True, video_path="/retained/video.mp4", error=None)
+
+            async def run_due_jobs():
+                await asyncio.gather(manager._execute_pipeline(first),
+                                     manager._execute_pipeline(second))
+
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, return_value=result,
+            ) as pipeline:
+                asyncio.run(run_due_jobs())
+
+            pipeline.assert_awaited_once()
+            self.assertEqual(manager.get_schedule(first["id"])["last_result"], "success")
+            self.assertEqual(manager.get_schedule(second["id"])["last_result"], "duplicate_url")
+            self.assertFalse(manager.get_schedule(second["id"])["enabled"])
+
     def test_unverified_planning_result_pauses_repeating_schedule(self):
         with tempfile.TemporaryDirectory() as directory:
             manager = ScheduleManager(str(Path(directory) / "schedules.json"))
