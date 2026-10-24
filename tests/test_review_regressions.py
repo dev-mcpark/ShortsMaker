@@ -39,6 +39,15 @@ class ReviewRegressions(unittest.TestCase):
         budget = patch.object(settings, "google_monthly_budget_krw", None)
         budget.start()
         self.addCleanup(budget.stop)
+        for target, balance in (
+            ("shorts_maker.services.google_budget.budget_status",
+             {"enabled": True, "remaining_krw": 10000}),
+            ("shorts_maker.services.openai_budget.budget_status",
+             {"enabled": True, "remaining_usd": 1.0}),
+        ):
+            budget_status = patch(target, return_value=balance)
+            budget_status.start()
+            self.addCleanup(budget_status.stop)
 
     def test_planning_openai_clients_have_no_hidden_sdk_retries(self):
         with patch.object(settings, "openai_api_key", "test-key"):
@@ -220,6 +229,36 @@ class ReviewRegressions(unittest.TestCase):
             stored = manager.get_schedule(schedule["id"])
             self.assertFalse(stored["enabled"])
             self.assertEqual(stored["last_result"], "billing_disabled")
+
+    def test_scheduled_production_requires_both_monthly_ledgers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            for provider, result, expected in (
+                ("google", {"enabled": False}, "google_budget_exceeded"),
+                ("google", RuntimeError("missing ledger"), "google_budget_exceeded"),
+                ("openai", {"enabled": False}, "openai_budget_exceeded"),
+                ("openai", RuntimeError("stale month"), "openai_budget_exceeded"),
+            ):
+                with self.subTest(provider=provider, result=result):
+                    schedule = manager.create_schedule("Pilot", "09:00")
+                    target = f"shorts_maker.services.{provider}_budget.budget_status"
+                    with patch(target) as status, patch(
+                        "shorts_maker.utils.bgm_manager.BGMManager.has_documented_track"
+                    ) as music, patch(
+                        "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                        new_callable=AsyncMock,
+                    ) as pipeline:
+                        if isinstance(result, Exception):
+                            status.side_effect = result
+                        else:
+                            status.return_value = result
+                        asyncio.run(manager._execute_pipeline(schedule))
+                    stored = manager.get_schedule(schedule["id"])
+                    self.assertFalse(stored["enabled"])
+                    self.assertEqual(stored["last_result"], expected)
+                    self.assertEqual(stored["run_count"], 1)
+                    music.assert_not_called()
+                    pipeline.assert_not_awaited()
 
     def test_provider_limit_pauses_repeating_schedule(self):
         with tempfile.TemporaryDirectory() as directory:

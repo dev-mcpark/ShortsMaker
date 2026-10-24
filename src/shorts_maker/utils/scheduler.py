@@ -359,6 +359,8 @@ class ScheduleManager:
     async def _execute_pipeline(self, schedule: Dict[str, Any]):
         """스케줄된 파이프라인 실행"""
         from shorts_maker.services.production_service import ProductionService
+        from shorts_maker.services.google_budget import budget_status as google_budget_status
+        from shorts_maker.services.openai_budget import budget_status as openai_budget_status
         from shorts_maker.utils.bgm_manager import BGMManager
         from shorts_maker.utils.config import settings
 
@@ -389,6 +391,24 @@ class ScheduleManager:
                     'enabled': False,
                 })
                 self.logger.warning("Scheduled pipeline paused: paid production disabled")
+                return
+            for status, remaining, reason in (
+                (google_budget_status, 'remaining_krw', 'google_budget_exceeded'),
+                (openai_budget_status, 'remaining_usd', 'openai_budget_exceeded'),
+            ):
+                try:
+                    snapshot = status()
+                    if snapshot.get('enabled') and snapshot.get(remaining, 0) > 0:
+                        continue
+                except (RuntimeError, ValueError, OSError):
+                    pass
+                self.update_schedule(schedule['id'], {
+                    'last_run': datetime.now().isoformat(),
+                    'run_count': schedule.get('run_count', 0) + 1,
+                    'last_result': reason,
+                    'enabled': False,
+                })
+                self.logger.warning("Scheduled pipeline paused: %s", reason)
                 return
             if not BGMManager().has_documented_track():
                 self.update_schedule(schedule['id'], {

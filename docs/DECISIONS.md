@@ -539,3 +539,7 @@ The manual Publishing action and a recovered automatic run can call upload again
 ## 2026-10-24 — Carry the primary source link into upload metadata
 
 The writer was asked to mention the source in the description, but its `source_url` lived in a separate script field and the default auto-upload path sent the description verbatim. Append the exact selected primary URL when it is absent from automatic upload metadata, and prefill the same credited description when Studio loads script metadata for manual review. Do not alter an explicitly supplied approved-script upload description: that text is an editorial choice. A link helps viewers and reviewers find the source; it does not validate the claims or make publication automatic.
+
+## 2026-10-24 — Require both monthly ledgers for unattended production
+
+Per-request Google and OpenAI reservations are optional for supervised manual work. That leaves a repeating schedule able to spend on planning and media each trigger if an operator enables the paid switch without one of the monthly guards. Before any scheduled pipeline call, require both local ledgers to be enabled for the current month, readable, and above zero remaining room; otherwise disable that schedule with the existing provider budget status. Keep per-request reservations and the exact visual preflight because positive monthly room does not guarantee that one episode fits. Do not initialize a ledger or guess opening usage automatically; the operator must reconcile the account first. This does not change manual, separately approved production.
