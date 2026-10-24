@@ -559,3 +559,7 @@ A quality-passed sidecar and matching path did not prove that the MP4 still held
 ## 2026-10-24 — Leave an upload claim until its result is recorded
 
 An upload can reach YouTube even when the app receives no ID or cannot persist it. Claim the video path with an exclusive, local `*.upload-pending.json` file before submission; a concurrent or later attempt without a recorded ID stops instead of creating another private copy. Remove the claim only after the returned ID is saved in the production sidecar. A failed call may also leave a claim when YouTube received nothing, so an operator checks Studio before clearing or reconciling it. This favors duplicate prevention over automatic retry and does not retroactively resolve earlier ambiguous uploads.
+
+## 2026-10-24 — Include routine automatic cuts in standalone review
+
+The scorecard previously treated only manual-clip runs as editorial cuts, so a recurring automatic video's review row could never contribute to the accepted-video cost or seven-day outcome summaries unless it formed a unique image/hybrid experiment pair. Keep unique eligible pairs separate for mode comparison; aggregate every other finished cut as a standalone editorial review regardless of visual mode or scene source. Rejected drafts still contribute cost when their bill is allocated, and repeated cuts do not become independent topics. This changes summary grouping only, not acceptance, billing, or publication status.

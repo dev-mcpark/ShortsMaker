@@ -111,10 +111,12 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
     outcomes = {mode: {"views": 0.0, "watch_seconds": 0.0, "revenue": 0.0}
                 for mode in ("image", "hybrid")}
     paired = complete = outcome_pairs = revenue_pairs = 0
+    paired_paths = set()
     for modes in grouped.values():
         if len(modes["image"]) != 1 or len(modes["hybrid"]) != 1:
             continue
         paired += 1
+        paired_paths.update(modes[mode][0] for mode in totals)
         rows = {mode: reviews.get(modes[mode][0]) for mode in totals}
         if any(row is None or row["accepted"].strip().lower() not in {"yes", "no"}
                or _number(row, "billed_cost_usd") is None for row in rows.values()):
@@ -150,8 +152,7 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
             for mode in totals:
                 outcomes[mode]["revenue"] += metrics[mode][2]
 
-    editorial_paths = [path for path, report in reports.items()
-                       if report.get("paired_comparison_eligible") is False]
+    editorial_paths = [path for path in reports if path not in paired_paths]
     editorial_complete = editorial_accepted = 0
     editorial_cost = 0.0
     editorial_outcome_count = editorial_revenue_count = 0

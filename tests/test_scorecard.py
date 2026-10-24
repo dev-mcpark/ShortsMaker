@@ -166,6 +166,47 @@ class ScorecardTests(unittest.TestCase):
                 "complete_revenue_videos": 1, "revenue_usd": None,
             })
 
+    def test_unpaired_automatic_runs_are_counted_as_editorial_cuts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outputs = Path(directory)
+            reviews = outputs / "reviews.csv"
+            for name, key, mode in (
+                ("pair_image", "pair", "image"),
+                ("pair_hybrid", "pair", "hybrid"),
+                ("solo_hybrid", "solo", "hybrid"),
+                ("solo_video", "video", "video"),
+                ("pending_image", "pending", "image"),
+            ):
+                (outputs / f"{name}.production.json").write_text(json.dumps({
+                    "schema_version": 1, "script_key": key, "production_mode": mode,
+                    "quality_passed": True, "paired_comparison_eligible": True,
+                    "youtube_id": name if name == "solo_hybrid" else None,
+                }), encoding="utf-8")
+            init_reviews(outputs, reviews)
+            with reviews.open(encoding="utf-8", newline="") as file:
+                rows = list(csv.DictReader(file))
+            for row in rows:
+                name = Path(row["report_path"]).name.split(".")[0]
+                if name == "solo_hybrid":
+                    row.update(accepted="yes", billed_cost_usd="0.5",
+                               public_release_confirmed="yes", views_7d="100",
+                               average_view_duration_seconds_7d="20")
+                elif name == "solo_video":
+                    row.update(accepted="no", billed_cost_usd="0.3")
+            with reviews.open("w", encoding="utf-8", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=FIELDS)
+                writer.writeheader()
+                writer.writerows(rows)
+
+            summary = summarize(outputs, reviews)
+            self.assertEqual(summary["paired_scripts"], 1)
+            self.assertEqual(summary["editorial_cuts"], {
+                "rendered": 3, "complete_cost_reviews": 2, "accepted": 1,
+                "accepted_rate": 0.5, "billed_cost_usd": 0.8,
+                "billed_cost_per_accepted_usd": 0.8,
+            })
+            self.assertEqual(summary["editorial_outcomes_7d"]["complete_videos"], 1)
+
     def test_init_adds_public_release_column_without_losing_existing_reviews(self):
         with tempfile.TemporaryDirectory() as directory:
             outputs = Path(directory)
