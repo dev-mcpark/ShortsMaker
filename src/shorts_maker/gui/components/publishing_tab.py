@@ -69,11 +69,12 @@ def render_publishing_tab(state: 'AppState') -> None:
                             "contains_synthetic_media": synthetic_input.value == 'yes',
                         }
 
-                        result = await state.get_or_create_service().upload_to_youtube(state.final_video_path, meta)
+                        service = state.get_or_create_service()
+                        result = await service.upload_to_youtube(state.final_video_path, meta)
                         vid_id = result.youtube_id
 
                         if vid_id:
-                            safe_notify(f"Uploaded! ID: {vid_id}", type='positive')
+                            safe_notify(f"{service.progress.message} (ID: {vid_id})", type='positive')
                             logger.info(f"Upload success: https://youtube.com/shorts/{vid_id}")
                         else:
                             safe_notify(f"Upload failed: {result.error or 'unknown error'}", type='negative')

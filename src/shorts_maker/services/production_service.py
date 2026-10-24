@@ -805,7 +805,28 @@ class ProductionService:
             if self.is_cancelled():
                 return self._failed_result("사용자에 의해 취소됨", video_path=video_path)
 
+            report_path = Path(video_path).with_suffix(".production.json")
+            try:
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+                if (not isinstance(report, dict) or report.get("video_path") != video_path
+                        or report.get("quality_passed") is not True):
+                    raise ValueError("영상과 일치하는 품질 통과 기록이 없습니다")
+                existing_id = report.get("youtube_id")
+                if existing_id is not None and (not isinstance(existing_id, str)
+                                                or not existing_id.strip()):
+                    raise ValueError("기존 YouTube ID가 올바르지 않습니다")
+            except (OSError, ValueError, TypeError, UnicodeError) as error:
+                return self._failed_result(f"제작 기록 확인 실패: {error}", video_path=video_path)
+
             await asyncio.to_thread(check_video_quality, video_path)
+
+            if existing_id:
+                self._update_progress(ProductionPhase.COMPLETED, 100,
+                                      f"이미 비공개 업로드됨: {existing_id}")
+                return ProductionResult(
+                    success=True, video_path=video_path, youtube_id=existing_id,
+                    ready_for_upload=True, report_path=str(report_path),
+                )
 
             uploader = self._get_uploader()
             video_id = await uploader.upload(video_path, metadata)

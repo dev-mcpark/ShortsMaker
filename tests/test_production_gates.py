@@ -712,9 +712,13 @@ class ProductionGateTests(unittest.TestCase):
             script.scenes = script.scenes[:1]
             produced = asyncio.run(service.produce_video(script, manual_clip_paths={1: str(clip)}))
             uploaded = asyncio.run(service.upload_to_youtube(str(output), {"title": script.title}))
+            repeated = asyncio.run(service.upload_to_youtube(str(output), {"title": "changed"}))
 
             self.assertTrue(produced.success)
             self.assertTrue(uploaded.success)
+            self.assertTrue(repeated.success)
+            self.assertEqual(repeated.youtube_id, "video-id")
+            service._uploader.upload.assert_awaited_once()
             report = json.loads(Path(produced.report_path).read_text(encoding="utf-8"))
             self.assertEqual(report["scenes"][0]["source"], "manual")
             self.assertFalse(report["paired_comparison_eligible"])
@@ -722,6 +726,27 @@ class ProductionGateTests(unittest.TestCase):
             self.assertEqual(report["youtube_id"], "video-id")
             self.assertIs(report["contains_synthetic_media"], True)
             self.assertIn("uploaded_at_utc", report)
+
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_upload_refuses_missing_or_unverified_production_record(self, _check):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output.mp4"
+            output.touch()
+            report_path = output.with_suffix(".production.json")
+            service = ProductionService()
+            service._uploader = SimpleNamespace(upload=AsyncMock(return_value="video-id"))
+
+            for record in (None, {"video_path": str(output), "quality_passed": False},
+                           {"video_path": "another.mp4", "quality_passed": True}):
+                if record is None:
+                    report_path.unlink(missing_ok=True)
+                else:
+                    report_path.write_text(json.dumps(record), encoding="utf-8")
+                result = asyncio.run(service.upload_to_youtube(str(output), {"title": "Example"}))
+                self.assertFalse(result.success)
+                self.assertIn("제작 기록", result.error)
+            service._uploader.upload.assert_not_awaited()
+            _check.assert_not_called()
 
     def test_narration_duration_limit_and_audio_reuse(self):
         editor = object.__new__(VideoEditor)

@@ -531,3 +531,7 @@ The current RSS collector deduplicates exact article URLs, but two publishers ca
 ## 2026-10-24 — Audition new licensed music before mood mapping
 
 Keep newly sourced, hash-checked Mixkit tracks under `candidate_` filenames so they can be selected exactly for local comparisons without appearing in automatic mood lookup. The existing manager validates their license records and file hashes; the filename prefix deliberately prevents an unreviewed song from filling a broad mood. Promote a track to a mood prefix only after listening to it against a specific narration and checking speech masking, then revisit whether that pairing generalizes. A license record establishes provenance, not musical fit or immunity from future platform claims.
+
+## 2026-10-24 — Reuse a recorded private upload ID for the same cut
+
+The manual Publishing action and a recovered automatic run can call upload again for a finished file. Before contacting YouTube, require that file's matching, quality-passed production record. If it already contains a YouTube ID, return that ID and show the existing-upload state instead of creating another private copy; a missing or invalid record stops the request. Keep the uploader itself private-only. The local record cannot resolve a provider response lost before its ID was saved, and a path match alone does not prove that an existing file was never altered. Such uncertain uploads require a Studio check before a manual retry.
