@@ -587,3 +587,7 @@ The scorecard's editorial-cut denominator counts every local revision, so it can
 ## 2026-10-24 — Serialize scheduled production within one app process
 
 Two schedules due together could read the same pre-production RSS history and start paid runs for the same lead. Run one scheduled pipeline at a time within `ScheduleManager`, then reload each waiting schedule so changed budget and enabled state are checked before it spends. If another schedule has already rendered a fixed article URL, stop the second as `duplicate_url`, even if it has its own schedule ID. Keep paired mode experiments as separately reviewed manual work instead of overlapping recurring jobs for one article. This does not lock across multiple app processes or identify duplicate events at different URLs; the local monthly ledgers still guard concurrent visual and OpenAI requests separately.
+
+## 2026-10-24 — Reject silent scene narration before buying visuals
+
+The final MP4's non-silent audio check can pass on BGM alone, while the earlier narration preflight checked only file duration and optional script-bound hashes. Sample each retained or newly generated narration file for a minimal signal before visual requests. Reject a silent or nearly silent scene rather than letting music mask a missing voice. Keep the final human listen: a peak threshold cannot identify wrong words, pronunciation, or masking after the mix. Do not treat this as a second TTS request or a reason to regenerate visuals.

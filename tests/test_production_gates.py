@@ -70,7 +70,7 @@ class ProductionGateTests(unittest.TestCase):
             }}}
             (Path(directory) / "narration.json").write_text(json.dumps(manifest))
             with patch("shorts_maker.editor.video_editor.AudioFileClip",
-                       return_value=SimpleNamespace(duration=1.0, close=Mock())):
+                       return_value=SimpleNamespace(duration=1.0, get_frame=Mock(return_value=np.array([0.2])), close=Mock())):
                 VideoEditor.validate_narration([str(audio)], script)
                 script.scenes[0].script_text = "Different claim"
                 with self.assertRaisesRegex(ValueError, "대본"):
@@ -79,6 +79,22 @@ class ProductionGateTests(unittest.TestCase):
                 audio.write_bytes(b"changed")
                 with self.assertRaisesRegex(ValueError, "준비 기록"):
                     VideoEditor.validate_narration([str(audio)], script)
+
+    def test_silent_narration_is_rejected_before_visual_work(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = []
+            for name, amplitude in (("silent", 0.0), ("quiet", 0.01)):
+                path = Path(directory) / f"{name}.wav"
+                audio = AudioClip(lambda t: amplitude * np.sin(2 * np.pi * 220 * t),
+                                  duration=1, fps=8000)
+                try:
+                    audio.write_audiofile(str(path), fps=8000, logger=None)
+                finally:
+                    audio.close()
+                paths.append(str(path))
+            with self.assertRaisesRegex(ValueError, "내레이션이 무음"):
+                VideoEditor.validate_narration(paths)
+            VideoEditor.validate_narration(paths[1:])
 
     def test_direct_provider_helpers_respect_paid_switch(self):
         video_client = SimpleNamespace(models=SimpleNamespace(generate_videos=Mock()))
@@ -908,7 +924,7 @@ class ProductionGateTests(unittest.TestCase):
         editor._get_voice_for_mood = Mock(return_value="alloy")
         editor._generate_tts = AsyncMock(side_effect=["one.mp3", "two.mp3"])
         editor.cleanup_temp_files = Mock()
-        audio = SimpleNamespace(duration=40, close=Mock())
+        audio = SimpleNamespace(duration=40, get_frame=Mock(return_value=np.array([0.2])), close=Mock())
         with patch("shorts_maker.editor.video_editor.AudioFileClip", return_value=audio):
             with self.assertRaisesRegex(ValueError, "내레이션"):
                 asyncio.run(editor.prepare_narration(sample_script()))

@@ -219,6 +219,10 @@ class VideoEditor:
             audio = AudioFileClip(path)
             try:
                 total_duration += audio.duration + 0.5
+                # Scalar samples avoid MoviePy's broken array split near the file end.
+                times = np.arange(0, max(0, audio.duration - 0.02), 1 / 37)
+                if not len(times) or max(np.max(np.abs(audio.get_frame(t))) for t in times) < 0.001:
+                    raise ValueError(f"내레이션이 무음이거나 너무 작습니다: {Path(path).name}")
             finally:
                 audio.close()
         if total_duration > settings.max_shorts_duration:
