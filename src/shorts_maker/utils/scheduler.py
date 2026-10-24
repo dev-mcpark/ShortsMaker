@@ -215,12 +215,14 @@ class ScheduleManager:
                 updated = {**schedule, **updates}
                 self._validate_schedule(updated['name'], updated['time'], updated['frequency'],
                                         updated['mode'], updated.get('direct_url'))
+                reschedule = any(schedule.get(key) != updated.get(key)
+                                 for key in ('enabled', 'time', 'frequency'))
                 schedule = updated
                 schedules[i] = schedule
                 self.save_schedules(schedules)
 
                 # 스케줄러 작업 갱신
-                if self._scheduler_running:
+                if self._scheduler_running and reschedule:
                     self._unregister_job(schedule_id)
                     if schedule.get('enabled', True):
                         try:
@@ -451,6 +453,14 @@ class ScheduleManager:
 
             service = ProductionService(mode=schedule.get('mode', 'image'))
 
+            # Persist the pause before the first paid call; a killed process cannot save a final result.
+            self.update_schedule(schedule['id'], {
+                'last_run': datetime.now().isoformat(),
+                'run_count': schedule.get('run_count', 0) + 1,
+                'last_result': 'run_in_progress',
+                'enabled': False,
+            })
+
             result = await service.full_pipeline(
                 topic=schedule.get('topic'),
                 direct_url=schedule.get('direct_url'),
@@ -470,7 +480,6 @@ class ScheduleManager:
             planning_unverified = not result.success and _PLANNING_UNVERIFIED in (result.error or "")
             rendered_failed = not result.success and bool(result.video_path)
             # Only an ordinary no-story result waits for the next source window.
-            non_story_failure = not result.success and result.error != "스크립트 생성 실패"
             # 공급자 제한 뒤의 다음 일정이 계획·내레이션 비용을 다시 쓰지 않도록 멈춘다.
             last_result = 'success' if result.success else 'failed'
             if billing_disabled:
@@ -501,14 +510,10 @@ class ScheduleManager:
                 'last_run': datetime.now().isoformat(),
                 'run_count': schedule.get('run_count', 0) + 1,
                 'last_result': last_result,
+                'enabled': not result.success and result.error == "스크립트 생성 실패" and not result.video_path,
             }
             if result.video_path:
                 updates['last_video_path'] = str(result.video_path)
-            if (result.success or billing_disabled or music_missing or provider_limited or veo_unverified
-                    or google_budget_exceeded or openai_budget_exceeded or visual_cost_cap_exceeded
-                    or music_selection_required or analysis_unverified or scoring_unverified
-                    or planning_unverified or rendered_failed or non_story_failure):
-                updates['enabled'] = False
             if schedule.get('direct_url') and (result.success or result.video_path):
                 updates['last_rendered_url'] = schedule['direct_url']
                 updates['enabled'] = False

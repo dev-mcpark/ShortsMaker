@@ -335,8 +335,10 @@ class ReviewRegressions(unittest.TestCase):
                 "shorts_maker.services.production_service.ProductionService.full_pipeline",
                 new_callable=AsyncMock,
                 return_value=ProductionService()._failed_result("스크립트 생성 실패"),
-            ):
+            ) as pipeline:
                 asyncio.run(manager._execute_pipeline(no_story))
+                asyncio.run(manager._execute_pipeline(no_story))
+                self.assertEqual(pipeline.await_count, 2)
             self.assertTrue(manager.get_schedule(no_story["id"])["enabled"])
 
     def test_two_due_schedules_do_not_overlap_production(self):
@@ -396,6 +398,25 @@ class ReviewRegressions(unittest.TestCase):
             self.assertEqual(calls, 1)
             self.assertEqual(first_manager.get_schedule(schedule["id"])["run_count"], 1)
             self.assertFalse(second_manager.get_schedule(schedule["id"])["enabled"])
+
+    def test_interrupted_schedule_stays_paused_before_another_paid_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            filename = str(Path(directory) / "schedules.json")
+            manager = ScheduleManager(filename)
+            schedule = manager.create_schedule("RSS", "09:00")
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, side_effect=asyncio.CancelledError,
+            ) as pipeline:
+                with self.assertRaises(asyncio.CancelledError):
+                    asyncio.run(manager._execute_pipeline(schedule))
+                asyncio.run(ScheduleManager(filename)._execute_pipeline(schedule))
+
+            pipeline.assert_awaited_once()
+            stored = manager.get_schedule(schedule["id"])
+            self.assertEqual(stored["last_result"], "run_in_progress")
+            self.assertEqual(stored["run_count"], 1)
+            self.assertFalse(stored["enabled"])
 
     def test_corrupt_schedule_lock_stops_before_paid_run(self):
         with tempfile.TemporaryDirectory() as directory:

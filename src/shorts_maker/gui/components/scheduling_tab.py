@@ -306,6 +306,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 message = ('영상 검토 대기 · 확인 후 일정 재개' if review_path else
                                                            '최근 성공 기록 · 영상은 출력 폴더에서 확인')
                                                 ui.label(message).classes('text-xs text-amber-300')
+                                            elif not enabled and schedule.get('last_result') == 'run_in_progress':
+                                                ui.label('제작 완료 미확인 · 출력과 청구 내역 확인 후 일정 재개').classes('text-xs text-amber-300')
                                             if review_path:
                                                 with ui.dialog() as review_dialog, ui.card():
                                                     ui.label('최근 제작 영상').classes('text-lg font-medium')
