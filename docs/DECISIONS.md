@@ -555,3 +555,7 @@ Auto music previously checked only whether *some* licensed track existed before 
 ## 2026-10-24 — Bind private upload reuse to finished video bytes
 
 A quality-passed sidecar and matching path did not prove that the MP4 still held the rendered or already uploaded cut. Record a SHA-256 after a successful render check and compare it before YouTube submission or reuse of an existing upload ID. Reject a changed file; for an older unuploaded sidecar, bind the current file only after another technical check. An older already-uploaded sidecar without a hash cannot prove identity, so require Studio verification instead of claiming it is the current file. This improves local identity, not the unresolved case where YouTube accepted an upload but its response or sidecar update was lost; that still needs a Studio check.
+
+## 2026-10-24 — Leave an upload claim until its result is recorded
+
+An upload can reach YouTube even when the app receives no ID or cannot persist it. Claim the video path with an exclusive, local `*.upload-pending.json` file before submission; a concurrent or later attempt without a recorded ID stops instead of creating another private copy. Remove the claim only after the returned ID is saved in the production sidecar. A failed call may also leave a claim when YouTube received nothing, so an operator checks Studio before clearing or reconciling it. This favors duplicate prevention over automatic retry and does not retroactively resolve earlier ambiguous uploads.

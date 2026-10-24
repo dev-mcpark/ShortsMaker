@@ -751,12 +751,86 @@ class ProductionGateTests(unittest.TestCase):
             self.assertEqual(report["youtube_id"], "video-id")
             self.assertIs(report["contains_synthetic_media"], True)
             self.assertIn("uploaded_at_utc", report)
+            self.assertFalse(output.with_suffix(".upload-pending.json").exists())
 
             output.write_bytes(b"different video at the same path")
             changed = asyncio.run(service.upload_to_youtube(str(output), {"title": "changed"}))
             self.assertFalse(changed.success)
             self.assertIn("변경", changed.error)
             service._uploader.upload.assert_awaited_once()
+
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_uncertain_upload_requires_studio_check_before_retry(self, _check):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output.mp4"
+            output.write_bytes(b"reviewed video")
+            report_path = output.with_suffix(".production.json")
+            report_path.write_text(json.dumps({
+                "video_path": str(output), "quality_passed": True,
+                "video_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
+                "youtube_id": None,
+            }), encoding="utf-8")
+            service = ProductionService()
+            service._uploader = SimpleNamespace(upload=AsyncMock(return_value=None))
+
+            first = asyncio.run(service.upload_to_youtube(str(output), {"title": "Example"}))
+            pending = output.with_suffix(".upload-pending.json")
+            self.assertFalse(first.success)
+            self.assertTrue(pending.exists())
+            self.assertEqual(json.loads(pending.read_text(encoding="utf-8"))["video_sha256"],
+                             hashlib.sha256(output.read_bytes()).hexdigest())
+
+            second = asyncio.run(service.upload_to_youtube(str(output), {"title": "Example"}))
+            self.assertFalse(second.success)
+            self.assertIn("Studio", second.error)
+            service._uploader.upload.assert_awaited_once()
+
+            pending.unlink()
+            service._uploader.upload.return_value = "video-id"
+            with patch.object(service, "_record_upload", return_value=None):
+                missing_record = asyncio.run(service.upload_to_youtube(
+                    str(output), {"title": "Example"},
+                ))
+            self.assertFalse(missing_record.success)
+            self.assertIn("video-id", missing_record.error)
+            self.assertTrue(pending.exists())
+
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_concurrent_upload_claim_allows_one_provider_call(self, _check):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output.mp4"
+            output.write_bytes(b"reviewed video")
+            output.with_suffix(".production.json").write_text(json.dumps({
+                "video_path": str(output), "quality_passed": True,
+                "video_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
+                "youtube_id": None,
+            }), encoding="utf-8")
+            first = ProductionService()
+            second = ProductionService()
+            started = asyncio.Event()
+            release = asyncio.Event()
+
+            async def upload(*_args):
+                started.set()
+                await release.wait()
+                return "video-id"
+
+            first._uploader = SimpleNamespace(upload=AsyncMock(side_effect=upload))
+            second._uploader = SimpleNamespace(upload=AsyncMock(return_value="duplicate-id"))
+
+            async def run_both():
+                task = asyncio.create_task(first.upload_to_youtube(str(output), {"title": "Example"}))
+                await started.wait()
+                blocked = await second.upload_to_youtube(str(output), {"title": "Example"})
+                release.set()
+                return await task, blocked
+
+            uploaded, blocked = asyncio.run(run_both())
+            self.assertTrue(uploaded.success)
+            self.assertFalse(blocked.success)
+            self.assertIn("Studio", blocked.error)
+            first._uploader.upload.assert_awaited_once()
+            second._uploader.upload.assert_not_awaited()
 
     @patch("shorts_maker.services.production_service.check_video_quality")
     def test_legacy_upload_record_requires_hash_before_id_reuse(self, _check):

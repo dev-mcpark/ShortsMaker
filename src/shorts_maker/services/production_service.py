@@ -394,6 +394,19 @@ class ProductionService:
         with open(video_path, "rb") as video:
             return hashlib.file_digest(video, "sha256").hexdigest()
 
+    @staticmethod
+    def _claim_upload(video_path: str, video_sha256: str) -> Path:
+        path = Path(video_path).with_suffix(".upload-pending.json")
+        with path.open("x", encoding="utf-8") as file:
+            json.dump({
+                "video_path": video_path,
+                "video_sha256": video_sha256,
+                "started_at_utc": datetime.now(timezone.utc).isoformat(),
+            }, file)
+            file.flush()
+            os.fsync(file.fileno())
+        return path
+
     def _record_upload(self, video_path: str, video_id: str, contains_synthetic_media: bool) -> Optional[str]:
         path = Path(video_path).with_suffix(".production.json")
         if not path.is_file():
@@ -862,6 +875,11 @@ class ProductionService:
                     return self._failed_result("영상 해시를 제작 기록에 저장하지 못했습니다.",
                                                video_path=video_path)
 
+            try:
+                pending_path = await asyncio.to_thread(self._claim_upload, video_path, current_hash)
+            except FileExistsError:
+                return self._failed_result("이전 업로드 결과가 확인되지 않았습니다. YouTube Studio에서 확인하세요.",
+                                           video_path=video_path)
             uploader = self._get_uploader()
             video_id = await uploader.upload(video_path, metadata)
 
@@ -870,6 +888,15 @@ class ProductionService:
                     self._record_upload, video_path, video_id,
                     metadata.get("contains_synthetic_media", True),
                 )
+                if not report_path:
+                    return self._failed_result(
+                        f"YouTube ID {video_id}를 제작 기록에 저장하지 못했습니다. Studio에서 확인하세요.",
+                        video_path=video_path,
+                    )
+                try:
+                    pending_path.unlink()
+                except OSError as error:
+                    self.logger.warning("업로드 보류 기록을 지우지 못했습니다: %s", error)
                 self._update_progress(ProductionPhase.COMPLETED, 100, f"업로드 완료: {video_id}")
                 return ProductionResult(
                     success=True,
@@ -879,7 +906,8 @@ class ProductionService:
                     report_path=report_path,
                 )
             else:
-                return self._failed_result("업로드 실패", video_path=video_path)
+                return self._failed_result("업로드 결과를 확인할 수 없습니다. YouTube Studio에서 확인하세요.",
+                                           video_path=video_path)
 
         except Exception as e:
             self.logger.error(f"YouTube 업로드 오류: {e}")
