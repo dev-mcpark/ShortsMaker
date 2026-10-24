@@ -431,15 +431,21 @@ class ProductionService:
                 self._update_progress(ProductionPhase.FAILED, 0, "사용자에 의해 취소됨")
                 return None, None
 
-            if self.editor_options.get("bgm_volume", 0.2) > 0:
-                if (not self.editor_options.get("bgm_track")
-                        and self.editor_options.get("bgm_mood") in (None, "", "auto")):
-                    if not BGMManager().has_documented_track():
-                        raise ValueError("사용 권한이 기록된 BGM이 없습니다")
-                else:
-                    self._get_editor().preflight_music(None)
+            auto_music = (self.editor_options.get("bgm_volume", 0.2) > 0
+                          and not self.editor_options.get("bgm_track")
+                          and self.editor_options.get("bgm_mood") in (None, "", "auto"))
+            available_moods = list(ScriptPlanner.SUPPORTED_MOODS)
+            if auto_music:
+                manager = BGMManager()
+                available_moods = [mood for mood in available_moods
+                                   if manager.get_bgm_path(mood)]
+                if not available_moods:
+                    raise ValueError("BGM_SELECTION_REQUIRED: 자동 분위기에 맞는 사용 권한이 기록된 BGM이 없습니다")
+            elif self.editor_options.get("bgm_volume", 0.2) > 0:
+                self._get_editor().preflight_music(None)
 
             planner = self._get_planner()
+            planner.allowed_moods = available_moods
 
             self._update_progress(ProductionPhase.PLANNING, 30, "RSS 피드 스캔 중...")
 

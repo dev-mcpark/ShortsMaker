@@ -1106,6 +1106,8 @@ class ReviewRegressions(unittest.TestCase):
         self.assertEqual(result.music_direction, "조용한 호기심, 강한 드럼은 피함")
         prompt = completion.await_args.kwargs["messages"][0]["content"]
         self.assertIn("Music direction", prompt)
+        self.assertIn("If none fits this story, set mood to null", prompt)
+        self.assertIn('"mood": "calm"', prompt)
         self.assertIn("primary article's real location", prompt)
         self.assertIn("clearly illustrative diagram", prompt)
         self.assertIn("show its parts and their connection", prompt)
@@ -1145,6 +1147,14 @@ class ReviewRegressions(unittest.TestCase):
         self.assertEqual(ShortsScript.model_validate(legacy).music_direction, "")
 
         script["mood"] = "curious"
+        completion.return_value.choices[0].message.content = json.dumps(script)
+        with self.assertRaisesRegex(ValueError, "BGM_SELECTION_REQUIRED"):
+            asyncio.run(planner._write_script({
+                "category": "Tech", "title": "ASTRA field test",
+                "content": "Three robots were tested in Virginia.",
+            }))
+
+        script["mood"] = None
         completion.return_value.choices[0].message.content = json.dumps(script)
         with self.assertRaisesRegex(ValueError, "BGM_SELECTION_REQUIRED"):
             asyncio.run(planner._write_script({

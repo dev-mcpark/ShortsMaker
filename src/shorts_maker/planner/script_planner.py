@@ -39,6 +39,10 @@ class ScriptPlanner:
     MIN_SCENES = 5
     MAX_SCENES = 7
     MIN_ARTICLE_WORDS = 100
+    SUPPORTED_MOODS = (
+        'suspense', 'sci-fi', 'corporate', 'emotional',
+        'energetic', 'calm', 'luxury',
+    )
 
     def __init__(self, generation_mode: str = "image"):
         self.logger = get_logger(__name__)
@@ -56,16 +60,7 @@ class ScriptPlanner:
         self.script_output_dir = str(settings.scripts_dir)
         self.generation_mode = generation_mode # 'image', 'video' or 'hybrid'
 
-        # Expanded Moods for diverse storytelling
-        self.allowed_moods = [
-            'suspense',   # For shocking news, warnings, mysteries
-            'sci-fi',     # For AI, space, future tech
-            'corporate',  # For business, money, success stories
-            'emotional',  # For human stories, healing, sadness
-            'energetic',  # For sports, gaming, excitement
-            'calm',       # For nature, tips, meditation
-            'luxury'      # For fashion, expensive cars, design
-        ]
+        self.allowed_moods = list(self.SUPPORTED_MOODS)
         self.story_styles = ["The Insight Curator", "The Trend Reporter"]
 
         # [NEW] Character Persona for Consistency
@@ -740,7 +735,8 @@ class ScriptPlanner:
         - Write visual_description and motion_instruction in concise English. Write title, description, and script_text in Korean.
         - If realistic AI reconstruction is proposed, identify it as a reconstruction in the description. The upload disclosure choice remains a human review step.
 
-        **Mood:** Choose best from [{mood_list_str}].
+        **Mood:** Choose a fitting mood from [{mood_list_str}]. If none fits this story, set mood to null;
+        never force an unsuitable music bed just because it is available.
         **Music direction:** Write one short Korean sentence for an editor choosing stock BGM.
         Describe the story's emotional arc, how strong the beat should feel under narration,
         and one mood to avoid. This is a review brief, not a claim that any track is approved.
@@ -750,7 +746,7 @@ class ScriptPlanner:
             "title": "원문에 근거한 구체적인 한글 제목",
             "description": "출처와 재현 여부를 밝힌 한글 설명",
             "tags": ["category_name", "shorts", "trend"],
-            "mood": "energetic",
+            "mood": "{self.allowed_moods[0]}",
             "style": "The Info Curator",
             "music_direction": "호기심 어린 낮은 박자로 시작해 발견 순간만 가볍게 고조하고, 과장된 승리감은 피함",
             "source_name": "Source Name",

@@ -547,3 +547,7 @@ Per-request Google and OpenAI reservations are optional for supervised manual wo
 ## 2026-10-24 — Distinguish explanatory prices from sales offers
 
 The validator's blanket rejection of pricing information contradicted the source-grounded unit-price candidate and would exclude useful economics stories. Reject prices used as a sales offer, discount codes, purchase links, and calls to buy; allow neutral, source-backed price figures and arithmetic when the script clearly separates hypothetical examples from observed figures. Keep the existing source-claim and unsupported-visual gates. This changes the model's review instructions, not a deterministic classification rule: check a future budgeted result and the finished cut before treating the topic as accepted.
+
+## 2026-10-24 — Offer only available music moods to automatic writing
+
+Auto music previously checked only whether *some* licensed track existed before spending on a script; five of the writer's seven allowed moods currently have no matching track. Restrict the writer's mood list to locally documented matches for auto music, and stop before planning if the list is empty. Ask the writer to abstain when none of the offered moods fits instead of forcing an unrelated bed. Keep the full mood list when an exact reviewed track is chosen or music is intentionally silent. This avoids a predictable post-planning failure without pretending that a filename proves story fit or that a model will reliably abstain. The chosen track still needs full-cut listening before publication.

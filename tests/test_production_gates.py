@@ -21,6 +21,7 @@ from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.generator.video_generator import VideoGenerator
 from shorts_maker.planner.content_enricher import ContentEnricher
 from shorts_maker.planner.models import ShortsScript, VideoScene
+from shorts_maker.planner.script_planner import ScriptPlanner
 from shorts_maker.services.production_service import ProductionService
 from shorts_maker.uploader.youtube_uploader import YouTubeUploader
 from shorts_maker.utils.bgm_manager import BGMManager
@@ -265,18 +266,36 @@ class ProductionGateTests(unittest.TestCase):
         self.assertEqual(asyncio.run(exact_track.generate_script()), (None, None))
         exact_track._planner.plan_content.assert_not_awaited()
 
-        with patch.object(BGMManager, "has_documented_track", return_value=False):
+        with tempfile.TemporaryDirectory() as directory, patch.object(settings, "bgm_dir", Path(directory)):
+            track = Path(directory) / "candidate_review.mp3"
+            track.write_bytes(b"documented automatic music")
+            record = Path(f"{track}.license.json")
+            record.write_text(json.dumps({
+                "title": "Review", "artist": "Test artist",
+                "source_url": "https://example.com/music", "license": "No attribution required",
+                "attribution_required": False,
+                "sha256": hashlib.sha256(track.read_bytes()).hexdigest(),
+            }), encoding="utf-8")
             automatic_mood = ProductionService(editor_options={"bgm_mood": "auto"})
             automatic_mood._planner = SimpleNamespace(plan_content=AsyncMock())
             self.assertEqual(asyncio.run(automatic_mood.generate_script()), (None, None))
             automatic_mood._planner.plan_content.assert_not_awaited()
-        with patch.object(BGMManager, "has_documented_track", return_value=True):
-            automatic_mood = ProductionService(editor_options={"bgm_mood": "auto"})
-            automatic_mood._editor = SimpleNamespace(preflight_music=Mock())
-            automatic_mood._planner = SimpleNamespace(
-                plan_content=AsyncMock(return_value=(sample_script(), None)))
-            self.assertEqual(asyncio.run(automatic_mood.generate_script())[0].mood, "calm")
-            automatic_mood._editor.preflight_music.assert_not_called()
+
+            new_track = Path(directory) / "futuristic_review.mp3"
+            track.rename(new_track)
+            record.rename(Path(f"{new_track}.license.json"))
+            track = new_track
+            script = sample_script()
+            script.mood = "sci-fi"
+            automatic_mood._planner.plan_content.return_value = (script, None)
+            self.assertEqual(asyncio.run(automatic_mood.generate_script())[0].mood, "sci-fi")
+            self.assertEqual(automatic_mood._planner.allowed_moods, ["sci-fi"])
+
+            exact_track = ProductionService(editor_options={"bgm_track": track.name})
+            exact_track._editor = SimpleNamespace(preflight_music=Mock(return_value=str(track)))
+            exact_track._planner = SimpleNamespace(plan_content=AsyncMock(return_value=(script, None)))
+            self.assertEqual(asyncio.run(exact_track.generate_script())[0].mood, "sci-fi")
+            self.assertEqual(exact_track._planner.allowed_moods, list(ScriptPlanner.SUPPORTED_MOODS))
 
     def test_sci_fi_music_prefers_documented_futuristic_track(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(settings, "bgm_dir", Path(directory)):
