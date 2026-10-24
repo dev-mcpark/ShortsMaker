@@ -184,6 +184,22 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
             editorial_revenue_count += 1
             editorial_revenue += revenue
 
+    source_groups = defaultdict(list)
+    for path, report in reports.items():
+        source_url = report.get("source_url")
+        if isinstance(source_url, str) and source_url.strip():
+            source_groups[source_url.strip()].append(path)
+    source_complete = source_accepted = 0
+    source_cost = 0.0
+    for paths in source_groups.values():
+        rows = [reviews.get(path) for path in paths]
+        if any(row is None or row["accepted"].strip().lower() not in {"yes", "no"}
+               or _number(row, "billed_cost_usd") is None for row in rows):
+            continue
+        source_complete += 1
+        source_accepted += any(row["accepted"].strip().lower() == "yes" for row in rows)
+        source_cost += sum(_number(row, "billed_cost_usd") for row in rows)
+
     return {
         "rendered_reports": len(reports),
         "paired_scripts": paired,
@@ -208,6 +224,16 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
             "billed_cost_per_accepted_usd": round(
                 editorial_cost / editorial_accepted, 4,
             ) if editorial_accepted else None,
+        },
+        "source_stories": {
+            "tracked": len(source_groups),
+            "unattributed_cuts": len(reports) - sum(map(len, source_groups.values())),
+            "complete_cost_stories": source_complete,
+            "accepted": source_accepted,
+            "accepted_rate": round(source_accepted / source_complete, 4) if source_complete else None,
+            "billed_cost_usd": round(source_cost, 4) if source_complete else None,
+            "billed_cost_per_accepted_usd": round(source_cost / source_accepted, 4)
+            if source_accepted else None,
         },
         "editorial_outcomes_7d": {
             "complete_videos": editorial_outcome_count,

@@ -207,6 +207,47 @@ class ScorecardTests(unittest.TestCase):
             })
             self.assertEqual(summary["editorial_outcomes_7d"]["complete_videos"], 1)
 
+    def test_source_story_cost_counts_revisions_and_comparison_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outputs = Path(directory)
+            reviews = outputs / "reviews.csv"
+            for name, source, script, mode in (
+                ("first", "https://example.com/a", "a-v1", "image"),
+                ("comparison", "https://example.com/a", "a-v1", "hybrid"),
+                ("revised", "https://example.com/a", "a-v2", "video"),
+                ("other", "https://example.com/b", "b", "video"),
+                ("legacy", None, "legacy", "video"),
+            ):
+                (outputs / f"{name}.production.json").write_text(json.dumps({
+                    "schema_version": 1, "script_key": script, "source_url": source,
+                    "production_mode": mode, "quality_passed": True,
+                }), encoding="utf-8")
+            init_reviews(outputs, reviews)
+            with reviews.open(encoding="utf-8", newline="") as file:
+                rows = list(csv.DictReader(file))
+            for row in rows:
+                name = Path(row["report_path"]).name.split(".")[0]
+                row["accepted"] = "yes" if name == "revised" else "no"
+                row["billed_cost_usd"] = "0.1"
+            with reviews.open("w", encoding="utf-8", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=FIELDS)
+                writer.writeheader()
+                writer.writerows(rows)
+
+            summary = summarize(outputs, reviews)["source_stories"]
+            self.assertEqual(summary, {
+                "tracked": 2, "unattributed_cuts": 1, "complete_cost_stories": 2,
+                "accepted": 1, "accepted_rate": 0.5, "billed_cost_usd": 0.4,
+                "billed_cost_per_accepted_usd": 0.4,
+            })
+
+            rows[0]["billed_cost_usd"] = ""
+            with reviews.open("w", encoding="utf-8", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=FIELDS)
+                writer.writeheader()
+                writer.writerows(rows)
+            self.assertEqual(summarize(outputs, reviews)["source_stories"]["complete_cost_stories"], 1)
+
     def test_init_adds_public_release_column_without_losing_existing_reviews(self):
         with tempfile.TemporaryDirectory() as directory:
             outputs = Path(directory)
