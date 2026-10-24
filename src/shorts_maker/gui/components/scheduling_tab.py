@@ -1,11 +1,14 @@
 """Schedule Management 탭 컴포넌트"""
 
-from nicegui import ui
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+from nicegui import ui
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.utils.scheduler import ScheduleManager
+from shorts_maker.utils.config import settings
 from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.utils.logger import get_logger
 
@@ -16,6 +19,19 @@ logger = get_logger(__name__)
 
 # 전역 스케줄 매니저
 schedule_manager = ScheduleManager()
+
+
+def _reviewable_video_path(path: object) -> str | None:
+    if not isinstance(path, str) or not path:
+        return None
+    try:
+        candidate = Path(path).resolve()
+        if (candidate.suffix.lower() == '.mp4' and candidate.is_file()
+                and candidate.is_relative_to(settings.output_dir.resolve())):
+            return str(candidate)
+    except (OSError, ValueError, RuntimeError):
+        pass
+    return None
 
 
 def render_scheduling_tab(state: 'AppState') -> None:
@@ -285,8 +301,19 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 else f"RSS: {schedule.get('topic') or '전체 분야'}"
                                             ).classes('text-xs text-gray-400')
 
+                                            review_path = _reviewable_video_path(schedule.get('last_video_path'))
                                             if not enabled and schedule.get('last_result') == 'success':
-                                                ui.label('영상 검토 대기 · 확인 후 일정 재개').classes('text-xs text-amber-300')
+                                                message = ('영상 검토 대기 · 확인 후 일정 재개' if review_path else
+                                                           '최근 성공 기록 · 영상은 출력 폴더에서 확인')
+                                                ui.label(message).classes('text-xs text-amber-300')
+                                            if review_path:
+                                                with ui.dialog() as review_dialog, ui.card():
+                                                    ui.label('최근 제작 영상').classes('text-lg font-medium')
+                                                    ui.video(review_path).classes('w-full max-w-[270px] max-h-[480px] bg-black')
+                                                    ui.button('닫기', on_click=review_dialog.close)
+                                                ui.button('최근 영상 재생', on_click=review_dialog.open).props('flat dense color=teal')
+                                            elif schedule.get('last_video_path'):
+                                                ui.label('최근 영상 파일을 찾을 수 없습니다. 출력 폴더를 확인하세요.').classes('text-xs text-amber-300')
 
                                             if registered:
                                                 with ui.element('div').classes('mt-2 p-2 bg-teal-900/30 rounded-lg border border-teal-500/20'):

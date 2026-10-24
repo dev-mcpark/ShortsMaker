@@ -16,6 +16,7 @@ from PIL import Image
 from moviepy import ColorClip, VideoFileClip
 
 from shorts_maker.generator.video_generator import VideoGenerator
+from shorts_maker.gui.components.scheduling_tab import _reviewable_video_path
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.content_enricher import ContentEnricher
 from shorts_maker.planner.content_analyzer import ContentAnalyzer
@@ -405,7 +406,24 @@ class ReviewRegressions(unittest.TestCase):
             self.assertEqual(paused["last_result"], "success")
             self.assertFalse(paused["enabled"])
             self.assertEqual(paused["run_count"], 1)
+            self.assertEqual(paused["last_video_path"], "/retained/video.mp4")
             pipeline.assert_awaited_once()
+
+    def test_schedule_review_player_rejects_missing_and_external_files(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            settings, "output_dir", Path(directory) / "outputs"
+        ):
+            output = settings.output_dir
+            output.mkdir()
+            video = output / "review.mp4"
+            video.write_bytes(b"video")
+            outside = Path(directory) / "outside.mp4"
+            outside.write_bytes(b"video")
+            self.assertEqual(_reviewable_video_path(str(video)), str(video.resolve()))
+            self.assertIsNone(_reviewable_video_path(str(outside)))
+            self.assertIsNone(_reviewable_video_path(str(output / "missing.mp4")))
+            self.assertIsNone(_reviewable_video_path(42))
+            self.assertIsNone(_reviewable_video_path("bad\x00path.mp4"))
 
     def test_unverified_planning_result_pauses_repeating_schedule(self):
         with tempfile.TemporaryDirectory() as directory:
