@@ -20,7 +20,8 @@ DEFAULT_SOURCES = {
         "https://www.investing.com/rss/news.rss"
     ],
     "Finance_Economy": [
-        "https://www.stlouisfed.org/rss/page%20resources/publications/blog-entries"
+        "https://www.stlouisfed.org/rss/page%20resources/publications/blog-entries",
+        "https://www.bok.or.kr/portal/bbs/P0000559/news.rss?menuNo=200690"
     ],
     "City_Life": [
         "https://mediahub.seoul.go.kr/news/rss/03",

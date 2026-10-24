@@ -81,6 +81,8 @@ class ReviewRegressions(unittest.TestCase):
     def test_default_rss_example_excludes_misattributed_feed(self):
         example = json.loads((PROJECT_ROOT / "rss_sources.json.example").read_text(encoding="utf-8"))
         self.assertEqual(example, DEFAULT_SOURCES)
+        self.assertIn("https://www.bok.or.kr/portal/bbs/P0000559/news.rss?menuNo=200690",
+                      example["Finance_Economy"])
         self.assertNotIn("https://feeds.feedburner.com/TechCrunch/", example["Tech_IT"])
         self.assertNotIn("https://kedglobal.com/newsRss", example["Tech_IT"])
         self.assertNotIn("https://mediahub.seoul.go.kr/news/rss/04", example["Finance_Economy"])

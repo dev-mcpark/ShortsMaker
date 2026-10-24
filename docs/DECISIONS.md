@@ -591,3 +591,7 @@ Two schedules due together could read the same pre-production RSS history and st
 ## 2026-10-24 — Reject silent scene narration before buying visuals
 
 The final MP4's non-silent audio check can pass on BGM alone, while the earlier narration preflight checked only file duration and optional script-bound hashes. Sample each retained or newly generated narration file for a minimal signal before visual requests. Reject a silent or nearly silent scene rather than letting music mask a missing voice. Keep the final human listen: a peak threshold cannot identify wrong words, pronunciation, or masking after the mix. Do not treat this as a second TTS request or a reason to regenerate visuals.
+
+## 2026-10-24 — Add a verified Korean monetary-policy lead without relaxing source gates
+
+The default finance pool supplied only U.S. Fed blog leads. Add the Bank of Korea's official monetary-policy RSS after its current release passed the existing parser, 150-character teaser filter, and 100-word precision-extraction gate. Keep the category cap, scorer, article analysis, and source-grounded script checks unchanged: a policy decision can be a lead while its forecasts and claimed downstream effects remain unverified for narration. The feed publishes infrequently, so it does not by itself establish a sustainable domestic-economics pipeline. Existing customized source files are not overwritten; this workspace's ignored file receives the feed explicitly.
