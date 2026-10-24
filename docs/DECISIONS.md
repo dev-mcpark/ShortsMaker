@@ -571,3 +571,7 @@ Automatic RSS analysis could return a valid quote from anywhere in a long articl
 ## 2026-10-24 — Select the shared RSS excerpt around verified later evidence
 
 The fixed-prefix guard above protected validation but discarded a source-backed long article when its decisive sentence appeared later. Keep its invariant that the writer and validator inspect the same 5,000-character source excerpt, but choose a contiguous window containing the exact analyzer evidence after confirming it occurs in the full extracted article. Keep the article beginning when the evidence fits there. This avoids another provider call and preserves late-source candidates; one window may omit distant introductory facts, which remain an editorial review limit. The earlier fixed-prefix rejection is superseded.
+
+## 2026-10-24 — Preflight the normal hybrid video hook before paid planning
+
+The full-run preflight used five image outputs for `hybrid`, even though its normal minimum five-scene composition has one Veo hook and four images. Check that normal composition, including explicit Veo attempts and Google monthly request slots, before buying an automatic script. This prevents a predictable post-planning visual-cap failure without changing exact post-script cost checks or forcing a still hook. A tight cap can now block a script that would have chosen an all-image hybrid; the operator can select `image` mode for that cheaper intent. The reserve is an output-list estimate, not a provider-enforced spending limit.

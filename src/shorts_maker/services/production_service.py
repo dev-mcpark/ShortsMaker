@@ -957,20 +957,30 @@ class ProductionService:
         if script is None:
             if settings.paid_production_enabled:
                 # shortcut: future cache hits are unknown; use approved_script to reuse existing visuals.
-                cheapest_mode = "video" if self.mode == "video" else "image"
-                model = settings.veo_model_id if cheapest_mode == "video" else settings.image_model_id
-                attempts = self.max_veo_attempts if cheapest_mode == "video" else 1
-                duration = settings.veo_duration_seconds if cheapest_mode == "video" else 0
                 try:
-                    minimum_cost = (ScriptPlanner.MIN_SCENES * attempts
-                                    * estimated_scene_cost(cheapest_mode, model, duration))
+                    if self.mode == "hybrid":
+                        minimum_cost = (
+                            self.max_veo_attempts * estimated_scene_cost(
+                                "video", settings.veo_model_id, settings.hybrid_veo_duration_seconds)
+                            + (ScriptPlanner.MIN_SCENES - 1) * estimated_scene_cost(
+                                "image", settings.image_model_id)
+                        )
+                        request_count = self.max_veo_attempts + ScriptPlanner.MIN_SCENES - 1
+                    else:
+                        mode = self.mode
+                        attempts = self.max_veo_attempts if mode == "video" else 1
+                        duration = settings.veo_duration_seconds if mode == "video" else 0
+                        model = settings.veo_model_id if mode == "video" else settings.image_model_id
+                        minimum_cost = (ScriptPlanner.MIN_SCENES * attempts
+                                        * estimated_scene_cost(mode, model, duration))
+                        request_count = ScriptPlanner.MIN_SCENES * attempts
                     if minimum_cost > settings.max_visual_cost_usd:
                         return self._failed_result(
-                            f"VISUAL_COST_CAP_EXCEEDED: 자동 대본의 최소 {ScriptPlanner.MIN_SCENES}장면 "
+                            f"VISUAL_COST_CAP_EXCEEDED: 자동 대본의 {ScriptPlanner.MIN_SCENES}장면 기준 "
                             f"비주얼 예약액 ${minimum_cost:.3f}가 상한 "
                             f"${settings.max_visual_cost_usd:.2f}를 초과합니다."
                         )
-                    check_google_budget(minimum_cost, ScriptPlanner.MIN_SCENES * attempts)
+                    check_google_budget(minimum_cost, request_count)
                 except (ValueError, RuntimeError) as error:
                     return self._failed_result(str(error))
             script, _context = await self.generate_script(topic=topic, direct_url=direct_url)

@@ -572,6 +572,29 @@ class ProductionGateTests(unittest.TestCase):
         self.assertIn("$3.200", result.error)
         service.generate_script.assert_not_awaited()
 
+    def test_full_hybrid_pipeline_checks_video_hook_before_paid_planning(self):
+        service = ProductionService(mode="hybrid")
+        service.generate_script = AsyncMock()
+        with patch.object(settings, "veo_model_id", "veo-3.1-fast-generate-001"), patch.object(
+            settings, "hybrid_veo_duration_seconds", 6,
+        ), patch.object(settings, "max_visual_cost_usd", 0.5):
+            result = asyncio.run(service.full_pipeline())
+        self.assertFalse(result.success)
+        self.assertIn("VISUAL_COST_CAP_EXCEEDED", result.error)
+        self.assertIn("$0.616", result.error)
+        service.generate_script.assert_not_awaited()
+
+    def test_full_hybrid_pipeline_checks_monthly_room_for_hook_and_images(self):
+        service = ProductionService(mode="hybrid", max_veo_attempts=2)
+        service.generate_script = AsyncMock(return_value=(None, None))
+        with patch.object(settings, "veo_model_id", "veo-3.1-fast-generate-001"), patch.object(
+            settings, "hybrid_veo_duration_seconds", 6,
+        ), patch.object(settings, "max_visual_cost_usd", 2.0), patch(
+            "shorts_maker.services.production_service.check_google_budget",
+        ) as check:
+            asyncio.run(service.full_pipeline())
+        check.assert_called_once_with(1.096, 6)
+
     def test_full_video_pipeline_checks_monthly_room_before_paid_planning(self):
         service = ProductionService(mode="video")
         service.generate_script = AsyncMock()
