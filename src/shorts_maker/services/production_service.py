@@ -389,6 +389,11 @@ class ProductionService:
         finally:
             temporary.unlink(missing_ok=True)
 
+    @staticmethod
+    def _video_hash(video_path: str) -> str:
+        with open(video_path, "rb") as video:
+            return hashlib.file_digest(video, "sha256").hexdigest()
+
     def _record_upload(self, video_path: str, video_id: str, contains_synthetic_media: bool) -> Optional[str]:
         path = Path(video_path).with_suffix(".production.json")
         if not path.is_file():
@@ -713,8 +718,10 @@ class ProductionService:
                 return self._failed_result("비디오 편집 실패", clips)
 
             quality_error = None
+            video_sha256 = None
             try:
                 await asyncio.to_thread(check_video_quality, video_path)
+                video_sha256 = await asyncio.to_thread(self._video_hash, video_path)
             except Exception as error:
                 quality_error = str(error)
 
@@ -760,6 +767,7 @@ class ProductionService:
                 "reused_or_manual_scenes": reused_scenes,
                 "quality_passed": quality_error is None,
                 "quality_error": quality_error,
+                "video_sha256": video_sha256,
                 "youtube_id": None,
             })
             if quality_error:
@@ -831,6 +839,14 @@ class ProductionService:
                 return self._failed_result(f"제작 기록 확인 실패: {error}", video_path=video_path)
 
             await asyncio.to_thread(check_video_quality, video_path)
+            current_hash = await asyncio.to_thread(self._video_hash, video_path)
+            recorded_hash = report.get("video_sha256")
+            if recorded_hash and recorded_hash != current_hash:
+                return self._failed_result("제작 이후 영상 파일이 변경되었습니다. 다시 검토하세요.",
+                                           video_path=video_path)
+            if existing_id and not recorded_hash:
+                return self._failed_result("기존 업로드 기록에 영상 해시가 없습니다. Studio에서 확인하세요.",
+                                           video_path=video_path)
 
             if existing_id:
                 self._update_progress(ProductionPhase.COMPLETED, 100,
@@ -839,6 +855,12 @@ class ProductionService:
                     success=True, video_path=video_path, youtube_id=existing_id,
                     ready_for_upload=True, report_path=str(report_path),
                 )
+
+            if not recorded_hash:
+                report["video_sha256"] = current_hash
+                if not await asyncio.to_thread(self._write_report, video_path, report):
+                    return self._failed_result("영상 해시를 제작 기록에 저장하지 못했습니다.",
+                                               video_path=video_path)
 
             uploader = self._get_uploader()
             video_id = await uploader.upload(video_path, metadata)

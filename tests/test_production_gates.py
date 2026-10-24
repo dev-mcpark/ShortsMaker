@@ -642,6 +642,7 @@ class ProductionGateTests(unittest.TestCase):
             self.assertEqual([call.kwargs["mode_override"] for call in calls], ["video", "image"])
             report = json.loads(Path(result.report_path).read_text(encoding="utf-8"))
             self.assertTrue(report["quality_passed"])
+            self.assertEqual(report["video_sha256"], hashlib.sha256(output.read_bytes()).hexdigest())
             self.assertEqual(report["source_url"], script.source_url)
             self.assertEqual(report["production_mode"], "hybrid")
             self.assertEqual(report["music_direction"], script.music_direction)
@@ -730,6 +731,11 @@ class ProductionGateTests(unittest.TestCase):
             script = sample_script()
             script.scenes = script.scenes[:1]
             produced = asyncio.run(service.produce_video(script, manual_clip_paths={1: str(clip)}))
+            output.write_bytes(b"changed before upload")
+            changed_before = asyncio.run(service.upload_to_youtube(str(output), {"title": script.title}))
+            self.assertFalse(changed_before.success)
+            service._uploader.upload.assert_not_awaited()
+            output.write_bytes(b"")
             uploaded = asyncio.run(service.upload_to_youtube(str(output), {"title": script.title}))
             repeated = asyncio.run(service.upload_to_youtube(str(output), {"title": "changed"}))
 
@@ -745,6 +751,37 @@ class ProductionGateTests(unittest.TestCase):
             self.assertEqual(report["youtube_id"], "video-id")
             self.assertIs(report["contains_synthetic_media"], True)
             self.assertIn("uploaded_at_utc", report)
+
+            output.write_bytes(b"different video at the same path")
+            changed = asyncio.run(service.upload_to_youtube(str(output), {"title": "changed"}))
+            self.assertFalse(changed.success)
+            self.assertIn("변경", changed.error)
+            service._uploader.upload.assert_awaited_once()
+
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_legacy_upload_record_requires_hash_before_id_reuse(self, _check):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output.mp4"
+            output.write_bytes(b"legacy reviewed video")
+            report_path = output.with_suffix(".production.json")
+            service = ProductionService()
+            service._uploader = SimpleNamespace(upload=AsyncMock(return_value="video-id"))
+            report = {"video_path": str(output), "quality_passed": True, "youtube_id": "old-id"}
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+
+            old_uploaded = asyncio.run(service.upload_to_youtube(str(output), {"title": "Example"}))
+            self.assertFalse(old_uploaded.success)
+            self.assertIn("Studio", old_uploaded.error)
+            service._uploader.upload.assert_not_awaited()
+
+            report["youtube_id"] = None
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+            newly_uploaded = asyncio.run(service.upload_to_youtube(str(output), {"title": "Example"}))
+            self.assertTrue(newly_uploaded.success)
+            saved = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["video_sha256"], hashlib.sha256(output.read_bytes()).hexdigest())
+            self.assertEqual(saved["youtube_id"], "video-id")
+            service._uploader.upload.assert_awaited_once()
 
     @patch("shorts_maker.services.production_service.check_video_quality")
     def test_upload_refuses_missing_or_unverified_production_record(self, _check):
