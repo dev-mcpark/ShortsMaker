@@ -1299,6 +1299,9 @@ class ReviewRegressions(unittest.TestCase):
         self.assertEqual(result.reason, "unsupported_claim")
         request = completion.await_args.kwargs["messages"]
         self.assertIn("Source grounding", request[0]["content"])
+        self.assertIn("source-backed price figures in an informational (non-promotional) context", request[0]["content"])
+        self.assertIn("Keep hypothetical and observed prices distinct", request[0]["content"])
+        self.assertNotIn("Includes pricing information, discount codes, or purchase links", request[0]["content"])
         self.assertIn("Distinguish measured results from simulations", request[0]["content"])
         self.assertIn("completed facility alone does not prove", request[0]["content"])
         self.assertIn("The factory expanded.", request[1]["content"])
