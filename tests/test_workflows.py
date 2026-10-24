@@ -738,7 +738,7 @@ class WorkflowTests(unittest.TestCase):
         planner._write_script.assert_not_awaited()
         self.assertEqual(planner._remember_rss_urls.call_count, 3)
 
-    def test_rss_does_not_buy_writing_for_evidence_outside_validator_excerpt(self):
+    def test_rss_shares_late_evidence_with_writer_and_validator(self):
         planner = object.__new__(ScriptPlanner)
         planner.logger = Mock()
         candidate = {"title": "Long article", "category": "City_Life",
@@ -751,20 +751,28 @@ class WorkflowTests(unittest.TestCase):
         ])
         planner.content_extractor = SimpleNamespace(fetch_enhanced_article=Mock(return_value=
             SimpleNamespace(word_count=120, title="Long article",
-                            main_text="A" * 5000 + evidence,
+                            main_text="A" * 5000 + " " + evidence + " " + "B" * 2500,
                             quotes=[evidence], headings=[], captions=[])))
         planner.content_analyzer = SimpleNamespace(analyze_content=AsyncMock(return_value=
-            SimpleNamespace(story_fit=True, story_fit_evidence=evidence)))
-        planner.content_enricher = SimpleNamespace(enrich_content=AsyncMock())
-        planner._write_script = AsyncMock()
+            SimpleNamespace(story_fit=True, story_fit_evidence=evidence,
+                            core_message="Completed work", visual_keywords=[])))
+        planner.content_enricher = SimpleNamespace(enrich_content=AsyncMock(return_value=[]))
+        script = object()
+        planner._write_script = AsyncMock(return_value=script)
+        planner._validate_and_save = AsyncMock(return_value=script)
+        planner._save_history = Mock()
         planner._remember_rss_urls = Mock()
 
         with patch.object(settings, "max_topic_retries", 1):
-            self.assertEqual(asyncio.run(planner.plan_content()), (None, None))
+            result, _ = asyncio.run(planner.plan_content())
 
-        planner.content_enricher.enrich_content.assert_not_awaited()
-        planner._write_script.assert_not_awaited()
-        planner._remember_rss_urls.assert_called_once_with([candidate["url"]])
+        self.assertIs(result, script)
+        source_excerpt = planner._write_script.await_args.args[0]["content"]
+        self.assertLessEqual(len(source_excerpt), 5000)
+        self.assertIn(evidence, source_excerpt)
+        self.assertIs(planner._validate_and_save.await_args.args[1],
+                      planner._write_script.await_args.args[0])
+        planner._remember_rss_urls.assert_not_called()
 
     def test_rss_analysis_failure_stops_before_another_paid_selection(self):
         planner = object.__new__(ScriptPlanner)

@@ -519,13 +519,17 @@ class ScriptPlanner:
                 raise RuntimeError("ARTICLE_ANALYSIS_UNVERIFIED: 기사 분석 결과를 확인할 수 없습니다.")
 
             evidence = ' '.join(analysis.story_fit_evidence.split())
-            # shortcut: only the first 5,000 source characters reach writing and validation; upgrade if later evidence must be included.
-            source_text = ' '.join(article_content.main_text.strip()[:5000].split())
+            source_text = ' '.join(article_content.main_text.split())
             if (analysis.story_fit is not True or len(evidence) < 20
-                    or evidence not in source_text):
+                    or len(evidence) > 5000 or evidence not in source_text):
                 self.logger.info("RSS article lacks a source-backed explanatory turn; skipping before enrichment and writing")
                 self._remember_rss_urls([selection['url']])
                 continue
+
+            evidence_at = source_text.index(evidence)
+            # shortcut: one 5,000-character window can omit distant context; use multiple spans if a vetted story needs both.
+            excerpt_start = (0 if evidence_at + len(evidence) <= 5000 else
+                             max(evidence_at - 1500, evidence_at + len(evidence) - 5000))
 
             enriched_info = []
             self.logger.info("🌐 Searching for supplementary info...")
@@ -535,7 +539,7 @@ class ScriptPlanner:
                 visual_keywords=analysis.visual_keywords
             )
 
-            selection['content'] = article_content.main_text[:8000]
+            selection['content'] = source_text[excerpt_start:excerpt_start + 5000]
             selection['quotes'] = article_content.quotes
             selection['headings'] = article_content.headings
             selection['captions'] = article_content.captions

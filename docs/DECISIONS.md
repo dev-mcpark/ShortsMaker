@@ -567,3 +567,7 @@ The scorecard previously treated only manual-clip runs as editorial cuts, so a r
 ## 2026-10-24 — Require RSS story evidence within the shared source excerpt
 
 Automatic RSS analysis could return a valid quote from anywhere in a long article, but writing and validation each inspect only the first 5,000 source characters. Require the story-fit evidence sentence within that same excerpt before enrichment or script writing. This does not add a provider call and prevents paying for a draft whose decisive source proof the validator cannot inspect. A long article with its meaningful turn only later may now be skipped; revisit excerpt selection if that pattern appears in viable sources, and use deliberate direct-URL review meanwhile.
+
+## 2026-10-24 — Select the shared RSS excerpt around verified later evidence
+
+The fixed-prefix guard above protected validation but discarded a source-backed long article when its decisive sentence appeared later. Keep its invariant that the writer and validator inspect the same 5,000-character source excerpt, but choose a contiguous window containing the exact analyzer evidence after confirming it occurs in the full extracted article. Keep the article beginning when the evidence fits there. This avoids another provider call and preserves late-source candidates; one window may omit distant introductory facts, which remain an editorial review limit. The earlier fixed-prefix rejection is superseded.
