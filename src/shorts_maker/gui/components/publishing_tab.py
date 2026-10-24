@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify
 from shorts_maker.gui.components.common.card_header import card_with_header
+from shorts_maker.services.production_service import source_credited_description
 from shorts_maker.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -33,7 +34,8 @@ def render_publishing_tab(state: 'AppState') -> None:
                     """스크립트에서 메타데이터 로드"""
                     if state.script:
                         title_input.value = state.script.title
-                        desc_input.value = state.script.description
+                        desc_input.value = source_credited_description(
+                            state.script.description, state.script.source_url)
                         tags_input.value = ",".join(state.script.tags)
                     else:
                         safe_notify("No script loaded", type='warning')

@@ -32,6 +32,12 @@ from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
 from shorts_maker.services.google_budget import check_google_budget
 
 
+def source_credited_description(description: str, source_url: str) -> str:
+    if source_url and source_url not in description:
+        return f"{description.rstrip()}\n\n출처: {source_url}".strip()
+    return description
+
+
 class ProductionPhase(Enum):
     """프로덕션 단계 열거형"""
     IDLE = "idle"
@@ -946,7 +952,8 @@ class ProductionService:
         if auto_upload and result.video_path:
             metadata = upload_metadata or {
                 "title": script.title,
-                "description": script.description,
+                "description": source_credited_description(
+                    script.description, getattr(script, "source_url", "")),
                 "tags": script.tags,
                 "contains_synthetic_media": True,
             }

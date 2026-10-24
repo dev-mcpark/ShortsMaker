@@ -18,7 +18,9 @@ from shorts_maker.gui.components.planning_tab import estimate_new_visual_cost
 from shorts_maker.gui.state.app_state import AppState
 from shorts_maker.planner.models import ScriptGenerationContext, TopicCandidate
 from shorts_maker.planner.script_planner import ScriptPlanner
-from shorts_maker.services.production_service import ProductionPhase, ProductionResult, ProductionService
+from shorts_maker.services.production_service import (
+    ProductionPhase, ProductionResult, ProductionService, source_credited_description,
+)
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.rss_cache import RSSCache
@@ -383,7 +385,8 @@ class WorkflowTests(unittest.TestCase):
 
     def test_full_pipeline_retains_work_after_upload_failure(self):
         service = ProductionService()
-        script = SimpleNamespace(title="Title", description="Description", tags=[])
+        script = SimpleNamespace(title="Title", description="Description", tags=[],
+                                 source_url="https://example.com/report")
         service.generate_script = AsyncMock(return_value=(script, None))
         service.produce_video = AsyncMock(return_value=ProductionResult(
             success=True, video_path="video.mp4", clips=["scene.png"], ready_for_upload=True,
@@ -399,6 +402,14 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(result.video_path, "video.mp4")
         self.assertEqual(result.clips, ["scene.png"])
         self.assertTrue(result.ready_for_upload)
+        metadata = service.upload_to_youtube.await_args.args[1]
+        self.assertEqual(metadata["description"],
+                         "Description\n\n출처: https://example.com/report")
+
+    def test_source_credit_does_not_duplicate_existing_link(self):
+        description = "설명\n출처: https://example.com/report"
+        self.assertEqual(source_credited_description(description, "https://example.com/report"),
+                         description)
 
     def test_full_pipeline_reuses_approved_script_and_assets_for_private_upload(self):
         service = ProductionService(mode="video")

@@ -535,3 +535,7 @@ Keep newly sourced, hash-checked Mixkit tracks under `candidate_` filenames so t
 ## 2026-10-24 — Reuse a recorded private upload ID for the same cut
 
 The manual Publishing action and a recovered automatic run can call upload again for a finished file. Before contacting YouTube, require that file's matching, quality-passed production record. If it already contains a YouTube ID, return that ID and show the existing-upload state instead of creating another private copy; a missing or invalid record stops the request. Keep the uploader itself private-only. The local record cannot resolve a provider response lost before its ID was saved, and a path match alone does not prove that an existing file was never altered. Such uncertain uploads require a Studio check before a manual retry.
+
+## 2026-10-24 — Carry the primary source link into upload metadata
+
+The writer was asked to mention the source in the description, but its `source_url` lived in a separate script field and the default auto-upload path sent the description verbatim. Append the exact selected primary URL when it is absent from automatic upload metadata, and prefill the same credited description when Studio loads script metadata for manual review. Do not alter an explicitly supplied approved-script upload description: that text is an editorial choice. A link helps viewers and reviewers find the source; it does not validate the claims or make publication automatic.
