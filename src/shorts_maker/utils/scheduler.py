@@ -487,7 +487,7 @@ class ScheduleManager:
                 'run_count': schedule.get('run_count', 0) + 1,
                 'last_result': last_result,
             }
-            if (billing_disabled or music_missing or provider_limited or veo_unverified
+            if (result.success or billing_disabled or music_missing or provider_limited or veo_unverified
                     or google_budget_exceeded or openai_budget_exceeded or visual_cost_cap_exceeded
                     or music_selection_required or analysis_unverified or scoring_unverified
                     or planning_unverified or rendered_failed or non_story_failure):

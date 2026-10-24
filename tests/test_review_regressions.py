@@ -389,6 +389,24 @@ class ReviewRegressions(unittest.TestCase):
             self.assertEqual(manager.get_schedule(second["id"])["last_result"], "duplicate_url")
             self.assertFalse(manager.get_schedule(second["id"])["enabled"])
 
+    def test_successful_rss_schedule_waits_for_review_before_another_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("RSS", "09:00", auto_upload=True)
+            result = SimpleNamespace(success=True, video_path="/retained/video.mp4", error=None)
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, return_value=result,
+            ) as pipeline:
+                asyncio.run(manager._execute_pipeline(schedule))
+                paused = manager.get_schedule(schedule["id"])
+                asyncio.run(manager._execute_pipeline(schedule))
+
+            self.assertEqual(paused["last_result"], "success")
+            self.assertFalse(paused["enabled"])
+            self.assertEqual(paused["run_count"], 1)
+            pipeline.assert_awaited_once()
+
     def test_unverified_planning_result_pauses_repeating_schedule(self):
         with tempfile.TemporaryDirectory() as directory:
             manager = ScheduleManager(str(Path(directory) / "schedules.json"))

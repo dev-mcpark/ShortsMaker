@@ -595,3 +595,7 @@ The final MP4's non-silent audio check can pass on BGM alone, while the earlier 
 ## 2026-10-24 — Add a verified Korean monetary-policy lead without relaxing source gates
 
 The default finance pool supplied only U.S. Fed blog leads. Add the Bank of Korea's official monetary-policy RSS after its current release passed the existing parser, 150-character teaser filter, and 100-word precision-extraction gate. Keep the category cap, scorer, article analysis, and source-grounded script checks unchanged: a policy decision can be a lead while its forecasts and claimed downstream effects remain unverified for narration. The feed publishes infrequently, so it does not by itself establish a sustainable domestic-economics pipeline. Existing customized source files are not overwritten; this workspace's ignored file receives the feed explicitly.
+
+## 2026-10-24 — Pause a successful scheduled episode for editorial review
+
+An RSS schedule previously continued after successful rendering or private upload, allowing its next trigger to buy another episode before the first had a story and visual verdict. Disable the job after any successful finished video and show the review-pending state in Studio; the operator can resume it after checking the cut, source claims, music, and private delivery. Keep no-story RSS discovery eligible for the next source window and preserve the existing failure pauses. This adds a human cadence gate to unattended production without treating technical success or private upload as publication approval.

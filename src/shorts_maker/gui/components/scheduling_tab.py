@@ -285,6 +285,9 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 else f"RSS: {schedule.get('topic') or '전체 분야'}"
                                             ).classes('text-xs text-gray-400')
 
+                                            if not enabled and schedule.get('last_result') == 'success':
+                                                ui.label('영상 검토 대기 · 확인 후 일정 재개').classes('text-xs text-amber-300')
+
                                             if registered:
                                                 with ui.element('div').classes('mt-2 p-2 bg-teal-900/30 rounded-lg border border-teal-500/20'):
                                                     with ui.row().classes('items-center gap-2'):
