@@ -875,6 +875,13 @@ class ProductionService:
                 )
 
             upload_body = YouTubeUploader.build_upload_body(metadata)
+            source_url = report.get("source_url")
+            if source_url is not None and not isinstance(source_url, str):
+                return self._failed_result("제작 기록의 출처 URL 형식이 올바르지 않습니다.",
+                                           video_path=video_path)
+            if source_url and source_url.strip() not in upload_body["snippet"]["description"]:
+                return self._failed_result("설명에 제작 기록의 출처 URL을 포함하세요.",
+                                           video_path=video_path)
             if not recorded_hash:
                 report["video_sha256"] = current_hash
                 if not await asyncio.to_thread(self._write_report, video_path, report):

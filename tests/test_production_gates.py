@@ -863,6 +863,34 @@ class ProductionGateTests(unittest.TestCase):
             service._uploader.upload.assert_not_awaited()
 
     @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_upload_requires_recorded_source_in_description(self, _check):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output.mp4"
+            output.write_bytes(b"reviewed video")
+            report_path = output.with_suffix(".production.json")
+            report_path.write_text(json.dumps({
+                "video_path": str(output), "quality_passed": True,
+                "video_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
+                "source_url": "https://example.com/article", "youtube_id": None,
+            }), encoding="utf-8")
+            service = ProductionService()
+            service._uploader = SimpleNamespace(upload=AsyncMock(return_value="video-id"))
+
+            missing = asyncio.run(service.upload_to_youtube(
+                str(output), {"title": "Example", "description": "요약만 있음"},
+            ))
+            self.assertFalse(missing.success)
+            self.assertIn("출처 URL", missing.error)
+            self.assertFalse(output.with_suffix(".upload-pending.json").exists())
+            service._uploader.upload.assert_not_awaited()
+
+            credited = asyncio.run(service.upload_to_youtube(
+                str(output), {"title": "Example", "description": "출처: https://example.com/article"},
+            ))
+            self.assertTrue(credited.success)
+            service._uploader.upload.assert_awaited_once()
+
+    @patch("shorts_maker.services.production_service.check_video_quality")
     def test_auth_failure_clears_upload_claim_for_retry(self, _check):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "output.mp4"
