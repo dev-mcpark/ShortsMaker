@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from shorts_maker.editor.video_editor import VideoEditor
+from shorts_maker.services.openai_budget import check_openai_speech_budget
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
@@ -116,6 +117,11 @@ async def prepare(script_path: Path, output_dir: Path, voice: str, max_cost_usd:
               "output_dir": str(output_dir)}
     if plan_only:
         return result
+    if missing:
+        check_openai_speech_budget(
+            VideoEditor.TTS_MODEL, [scene.script_text for scene in missing],
+            VideoEditor.TTS_MAX_ATTEMPTS,
+        )
     if any(state != "complete" for state in states):
         require_paid_production_enabled()
         if not settings.openai_api_key:

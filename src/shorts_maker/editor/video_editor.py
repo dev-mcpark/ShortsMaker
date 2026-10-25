@@ -21,7 +21,7 @@ from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
-from shorts_maker.services.openai_budget import reserve_openai_speech
+from shorts_maker.services.openai_budget import check_openai_speech_budget, reserve_openai_speech
 
 # [CRITICAL FIX] Manually set ImageMagick path for macOS Homebrew install
 if os.path.exists("/opt/homebrew/bin/magick"):
@@ -180,6 +180,9 @@ class VideoEditor:
     async def prepare_narration(self, script) -> List[str]:
         """Generate narration once, before the costly visual generation step."""
         self.preflight_music(script)
+        check_openai_speech_budget(
+            self.TTS_MODEL, [scene.script_text for scene in script.scenes], self.TTS_MAX_ATTEMPTS,
+        )
         audio_paths = []
         voice = self._get_voice_for_mood(getattr(script, 'mood', 'cinematic'))
         try:

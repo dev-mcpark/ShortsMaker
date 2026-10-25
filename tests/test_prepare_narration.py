@@ -10,10 +10,16 @@ from unittest.mock import patch
 from scripts.prepare_narration import prepare
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.models import ShortsScript, VideoScene
+from shorts_maker.services import openai_budget
 from shorts_maker.utils.config import settings
 
 
 class PrepareNarrationTests(unittest.TestCase):
+    def setUp(self):
+        disabled = patch.object(settings, "openai_monthly_budget_usd", None)
+        disabled.start()
+        self.addCleanup(disabled.stop)
+
     def test_plan_requires_no_paid_access_and_refuses_oversized_reserve(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -81,6 +87,23 @@ class PrepareNarrationTests(unittest.TestCase):
                 script.write_text(script.read_text() + " ", encoding="utf-8")
                 with self.assertRaisesRegex(ValueError, "different script"):
                     asyncio.run(prepare(script, output, "nova", 0.02, 15, plan_only=True))
+
+    def test_monthly_budget_blocks_standalone_narration_before_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = self._script(root)
+            output = root / "narration"
+            with patch.object(settings, "output_dir", root), patch.object(
+                settings, "openai_monthly_budget_usd", 0.0051,
+            ), patch.object(settings, "openai_budget_opening_usd", 0.005), patch.object(
+                settings, "openai_budget_month", openai_budget._period(),
+            ), patch.object(VideoEditor, "_generate_tts") as tts:
+                openai_budget.initialize_openai_budget()
+                with self.assertRaisesRegex(openai_budget.OpenAIBudgetExceeded, "내레이션 최대 예약액"):
+                    asyncio.run(prepare(script, output, "nova", 0.02, 15))
+                tts.assert_not_called()
+                self.assertFalse(output.exists())
+                self.assertEqual(openai_budget.budget_status()["local_reserved_usd"], 0)
 
     @staticmethod
     def _script(root: Path) -> Path:

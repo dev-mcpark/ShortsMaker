@@ -76,6 +76,24 @@ class OpenAIBudgetTests(unittest.TestCase):
         self.assertEqual(status["unattributed_reserved_usd"], 0.0002)
         self.assertEqual(status["local_reserved_usd"], 0.0017)
 
+    def test_narration_preflight_blocks_partial_set_without_reserving(self):
+        openai_budget.initialize_openai_budget()
+        with self.assertRaisesRegex(openai_budget.OpenAIBudgetExceeded, "내레이션 최대 예약액"):
+            openai_budget.check_openai_speech_budget("tts-1", ["가" * 100, "나" * 300], 2)
+        self.assertEqual(openai_budget.budget_status()["local_reserved_usd"], 0)
+
+        editor = VideoEditor(bgm_volume=0)
+        editor._generate_tts = AsyncMock()
+        script = SimpleNamespace(
+            scenes=[SimpleNamespace(script_text="가" * 100),
+                    SimpleNamespace(script_text="나" * 300)],
+            mood="sci-fi", source_url="https://example.com/story",
+        )
+        with self.assertRaisesRegex(openai_budget.OpenAIBudgetExceeded, "내레이션 최대 예약액"):
+            asyncio.run(editor.prepare_narration(script))
+        editor._generate_tts.assert_not_awaited()
+        self.assertEqual(openai_budget.budget_status()["local_reserved_usd"], 0)
+
     def test_unknown_model_and_stale_month_block(self):
         openai_budget.initialize_openai_budget()
         with self.assertRaises(openai_budget.OpenAIBudgetExceeded):

@@ -129,6 +129,25 @@ def reserve_openai_speech(model: str, text: str, *, source_url: str | None = Non
     return _reserve(model, Decimal(len(text)) * _SPEECH_PRICES[model] / 1_000_000, source_url)
 
 
+def check_openai_speech_budget(model: str, texts: list[str], attempts: int) -> None:
+    """Check the whole narration's possible requests without reserving them."""
+    if _configured_period() is None:
+        return
+    if (model not in _SPEECH_PRICES or type(attempts) is not int or attempts < 1
+            or any(not isinstance(value, str) or not value for value in texts)):
+        raise OpenAIBudgetExceeded("OPENAI_BUDGET_EXCEEDED: 내레이션 비용을 계산할 수 없습니다.")
+    needed = attempts * sum(
+        _micro_usd(Decimal(len(value)) * _SPEECH_PRICES[model] / 1_000_000)
+        for value in texts
+    )
+    remaining = int(Decimal(str(budget_status()["remaining_usd"])) * 1_000_000)
+    if needed > remaining:
+        raise OpenAIBudgetExceeded(
+            f"OPENAI_BUDGET_EXCEEDED: 내레이션 최대 예약액 ${needed / 1_000_000:.6f}이 "
+            f"월 잔액 ${remaining / 1_000_000:.6f}을 초과합니다."
+        )
+
+
 def budget_status() -> dict:
     """Return local reserves, not the provider's billed usage."""
     period = _configured_period()
