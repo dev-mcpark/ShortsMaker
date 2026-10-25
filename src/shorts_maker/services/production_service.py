@@ -975,6 +975,11 @@ class ProductionService:
             or not isinstance(upload_metadata.get("contains_synthetic_media"), bool)
         ):
             return self._failed_result("승인된 대본의 자동 업로드에는 검토한 제목·설명·AI 공개 선택이 필요합니다.")
+        if auto_upload and upload_metadata:
+            try:
+                YouTubeUploader.build_upload_body(upload_metadata)
+            except (TypeError, ValueError) as error:
+                return self._failed_result(f"업로드 메타데이터 확인 실패: {error}")
 
         if auto_upload:
             try:
@@ -1035,6 +1040,23 @@ class ProductionService:
                 reason = "스크립트 생성 실패"
             return self._failed_result(reason)
 
+        metadata = None
+        if auto_upload:
+            metadata = upload_metadata or {
+                "title": script.title,
+                "description": source_credited_description(
+                    script.description, getattr(script, "source_url", "")),
+                "tags": script.tags,
+                "contains_synthetic_media": True,
+            }
+            try:
+                description = YouTubeUploader.build_upload_body(metadata)["snippet"]["description"]
+                source_url = getattr(script, "source_url", "")
+                if source_url and source_url not in description:
+                    return self._failed_result("설명에 대본의 출처 URL을 포함하세요.")
+            except (TypeError, ValueError) as error:
+                return self._failed_result(f"업로드 메타데이터 확인 실패: {error}")
+
         # Step 2: Video Production
         production_options = {}
         if manual_clip_paths is not None:
@@ -1050,13 +1072,6 @@ class ProductionService:
 
         # Step 3: Upload (optional)
         if auto_upload and result.video_path:
-            metadata = upload_metadata or {
-                "title": script.title,
-                "description": source_credited_description(
-                    script.description, getattr(script, "source_url", "")),
-                "tags": script.tags,
-                "contains_synthetic_media": True,
-            }
             upload_result = await self.upload_to_youtube(result.video_path, metadata)
             result.success = upload_result.success
             result.youtube_id = upload_result.youtube_id

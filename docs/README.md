@@ -34,7 +34,7 @@ NiceGUI / scheduler
   -> rendered-file quality check + local production sidecar -> optional YouTube upload
 ```
 
-The app is a Python modular monolith. `ProductionService` owns orchestration, progress, cancellation, scene routing, and upload readiness, including the check that a new upload description contains the production record's primary source URL when one is recorded. `YouTubeUploader.build_upload_body` owns the exact private request fields; `ProductionService` records that prepared body in ignored pending and successful sidecars. External API and media details stay in their own modules. The scheduler invokes the same service without browser state.
+The app is a Python modular monolith. `ProductionService` owns orchestration, progress, cancellation, scene routing, and upload readiness, including pre-render metadata/source-credit checks for automatic uploads and a final check against the production record before submission. `YouTubeUploader.build_upload_body` owns the exact private request fields; `ProductionService` records that prepared body in ignored pending and successful sidecars. External API and media details stay in their own modules. The scheduler invokes the same service without browser state.
 For a reviewed story with retained assets, `ProductionService.full_pipeline` also accepts `approved_script`, `manual_clip_paths`, and `prepared_audio_paths`. That route skips new planning and narration, reuses the normal editor and quality gate, and can continue to the same private upload path with `auto_upload=True`. The caller supplies complete scene assets and reviewed upload metadata; the ordinary topic/URL path is unchanged.
 
 ## Find the owner

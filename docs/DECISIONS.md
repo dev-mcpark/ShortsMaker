@@ -639,3 +639,7 @@ The approved Sillim narration draft still contains an older description of a dia
 ## 2026-10-26 — Require primary source credit for new private uploads
 
 The earlier source-link prefill could be erased in Studio or omitted from a caller-supplied approved-script description. At the shared `ProductionService.upload_to_youtube` boundary, require the exact primary `source_url` from a production record in the prepared description before claiming or sending a new upload. Leave the editor's wording intact and return a clear error so it can be corrected. Reusing an existing recorded YouTube ID remains idempotent without rechecking proposed metadata. Legacy records with no source URL remain uploadable; this gate proves a link was submitted, not that the claims or rights are valid.
+
+## 2026-10-26 — Preflight automatic upload metadata before paid work
+
+The final upload gate alone can discover a missing source URL or malformed caller metadata after planning or rendering. Validate supplied request fields before automatic planning, then check the selected script's source URL against the chosen description before narration or visuals. Keep the final sidecar-based upload gate because a manually changed description or record can still arrive through Studio. A generated script's source cannot be checked before the planning that discovers it; this preflight only prevents avoidable downstream work.

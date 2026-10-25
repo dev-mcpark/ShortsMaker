@@ -483,6 +483,38 @@ class WorkflowTests(unittest.TestCase):
                 service.produce_video.assert_not_awaited()
                 service.upload_to_youtube.assert_not_awaited()
 
+    def test_approved_script_upload_checks_source_credit_before_render(self):
+        service = ProductionService()
+        service._uploader = SimpleNamespace(get_authenticated_service=Mock(return_value=object()))
+        service.produce_video = AsyncMock()
+        service.upload_to_youtube = AsyncMock()
+
+        result = asyncio.run(service.full_pipeline(
+            approved_script=SimpleNamespace(source_url="https://example.com/article"),
+            auto_upload=True,
+            upload_metadata={"title": "Reviewed", "description": "출처 없음",
+                             "contains_synthetic_media": True},
+        ))
+
+        self.assertFalse(result.success)
+        self.assertIn("출처 URL", result.error)
+        service.produce_video.assert_not_awaited()
+        service.upload_to_youtube.assert_not_awaited()
+
+    def test_auto_upload_rejects_invalid_metadata_before_planning(self):
+        service = ProductionService()
+        service.generate_script = AsyncMock()
+        service.produce_video = AsyncMock()
+
+        result = asyncio.run(service.full_pipeline(
+            auto_upload=True, upload_metadata={"title": "Ready", "tags": [object()]},
+        ))
+
+        self.assertFalse(result.success)
+        self.assertIn("메타데이터 확인 실패", result.error)
+        service.generate_script.assert_not_awaited()
+        service.produce_video.assert_not_awaited()
+
     def test_full_pipeline_rejects_conflicting_approved_inputs(self):
         service = ProductionService()
         service.generate_script = AsyncMock()
