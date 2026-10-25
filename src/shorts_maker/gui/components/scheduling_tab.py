@@ -34,6 +34,27 @@ def _reviewable_video_path(path: object) -> str | None:
     return None
 
 
+def _schedule_readiness_messages() -> list[str]:
+    from shorts_maker.services.google_budget import budget_status as google_budget_status
+    from shorts_maker.services.openai_budget import budget_status as openai_budget_status
+
+    messages = []
+    if not settings.paid_production_enabled:
+        messages.append('유료 제작 스위치 꺼짐')
+    for status, remaining, label in (
+        (google_budget_status, 'remaining_krw', 'Google 월 장부 확인 필요'),
+        (openai_budget_status, 'remaining_usd', 'OpenAI 월 장부 확인 필요'),
+    ):
+        try:
+            snapshot = status()
+            if snapshot.get('enabled') and snapshot.get(remaining, 0) > 0:
+                continue
+        except (RuntimeError, ValueError, OSError):
+            pass
+        messages.append(label)
+    return messages
+
+
 def render_scheduling_tab(state: 'AppState') -> None:
     """Schedule Management 탭 렌더링"""
 
@@ -56,6 +77,15 @@ def render_scheduling_tab(state: 'AppState') -> None:
                         with ui.row().classes('gap-2'):
                             start_btn = ui.button(icon='play_arrow').props('round color=white text-color=green-600 size=md aria-label="스케줄러 시작"')
                             stop_btn = ui.button(icon='stop').props('round color=white text-color=red-600 size=md aria-label="스케줄러 중지"')
+
+                @ui.refreshable
+                def readiness_notice():
+                    messages = _schedule_readiness_messages()
+                    if messages:
+                        ui.label('예약 제작 준비 필요: ' + ' · '.join(messages)).classes(
+                            'px-4 py-3 text-sm text-amber-300')
+
+                readiness_notice()
 
                 def update_status():
                     try:
@@ -420,4 +450,5 @@ def render_scheduling_tab(state: 'AppState') -> None:
                 history_list()
 
             # Auto-refresh every 30 seconds
-            ui.timer(30.0, lambda: (safe_refresh(schedule_list), safe_refresh(history_list)))
+            ui.timer(30.0, lambda: (safe_refresh(schedule_list), safe_refresh(history_list),
+                                    safe_refresh(readiness_notice)))

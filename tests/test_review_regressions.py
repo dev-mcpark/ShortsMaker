@@ -17,7 +17,7 @@ from PIL import Image
 from moviepy import ColorClip, VideoFileClip
 
 from shorts_maker.generator.video_generator import VideoGenerator
-from shorts_maker.gui.components.scheduling_tab import _reviewable_video_path
+from shorts_maker.gui.components.scheduling_tab import _reviewable_video_path, _schedule_readiness_messages
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.content_enricher import ContentEnricher
 from shorts_maker.planner.content_analyzer import ContentAnalyzer
@@ -128,6 +128,19 @@ class ReviewRegressions(unittest.TestCase):
                 manager.stop_scheduler()
 
         asyncio.run(exercise())
+
+    def test_schedule_status_shows_missing_paid_prerequisites(self):
+        self.assertEqual(_schedule_readiness_messages(), [])
+        with patch.object(settings, "paid_production_enabled", False), patch(
+            "shorts_maker.services.google_budget.budget_status",
+            return_value={"enabled": True, "remaining_krw": 0},
+        ), patch(
+            "shorts_maker.services.openai_budget.budget_status",
+            side_effect=RuntimeError("missing ledger"),
+        ):
+            self.assertEqual(_schedule_readiness_messages(), [
+                "유료 제작 스위치 꺼짐", "Google 월 장부 확인 필요", "OpenAI 월 장부 확인 필요",
+            ])
 
     def test_corrupt_schedule_does_not_leave_scheduler_running(self):
         async def exercise():
