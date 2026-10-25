@@ -1,6 +1,6 @@
 # Visual prompt practice
 
-Reviewed: 2026-10-14. This guide records public techniques selected for ShortsMaker's source-grounded, low-cost workflow. [STATUS.md](STATUS.md) owns current production evidence; [DECISIONS.md](DECISIONS.md) owns durable choices. A well-written prompt improves direction but cannot prove that a generated frame is accurate.
+Reviewed: 2026-10-26. This guide records public techniques selected for ShortsMaker's source-grounded, low-cost workflow. [STATUS.md](STATUS.md) owns current production evidence; [DECISIONS.md](DECISIONS.md) owns durable choices. A well-written prompt improves direction but cannot prove that a generated frame is accurate.
 
 ## Evidence and application
 
@@ -9,7 +9,7 @@ Reviewed: 2026-10-14. This guide records public techniques selected for ShortsMa
 | [Google's Veo 3.1 guide](https://cloud.google.com/blog/products/ai-machine-learning/ultimate-prompting-guide-for-veo-3-1/) structures a prompt around camera, subject, action, context, and style. | Ask for those concrete parts, with one motion instruction for a short hook. | Gives the model a clear shot without boilerplate cinematic effects. |
 | [Google's video best practices](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/video/best-practice) recommend a single focused moment in short clips and clear, direct language. | One scene per paid clip; one camera or subject movement. Keep audio off because narration is added by the editor. | Reduces conflicting requests and expensive unusable output. |
 | [Gemini image prompting guidance](https://ai.google.dev/gemini-api/docs/image-generation#best-practices) recommends specific context, composition, and positive descriptions of the intended scene. | Use a static subject, setting, and layout. Reserve the lower third for editor captions; avoid asking the image model to render exact labels. | The first pilot produced invented robot labels despite a `no text` instruction. |
-| [Google's image-to-video guidance](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/video/best-practice) says the starting image supplies subject and style, so the prompt should focus on motion. [Veo 3.1 Lite supports a first-frame image](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/video/generate-videos-from-an-image). | Keep a source-safe, unlettered still as one opening test candidate; use a short movement instruction and inspect the raw clip before editing. | A controlled first frame may reduce style drift, but no Sillim image-to-video result exists yet and the earlier text-to-video output had invented writing. |
+| [Google's image-to-video guidance](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/video/best-practice) says the starting image supplies subject and style, so the prompt should focus on motion. [Veo 3.1 Lite supports a first-frame image](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/video/generate-videos-from-an-image). | Review a source-safe, unlettered first frame, then request one bounded motion and inspect the raw clip before editing. | The Sillim scene-3 cutaway and separate scene-2 depot and stream image-to-video clips passed their specific owner raw-meaning checks. The earlier combined scene-2 frame failed because it implied the two places adjoined; a seed does not guarantee a truthful scene or an accepted full cut. |
 | [YouTube's AI disclosure guidance](https://support.google.com/youtube/answer/14328491) requires disclosure for realistic AI-generated scenes that did not occur. [Its monetization rules](https://support.google.com/youtube/answer/1311392) emphasize original, varied value over generic mass production. | Keep source photos, stylized explanation, and realistic reconstruction distinct in review. Check upload disclosure and the video's original explanation before publishing. | Prompt quality alone does not satisfy publication or monetization review. |
 
 ## Prompt brief before a paid request
@@ -26,7 +26,7 @@ Example for the NASA pilot: `A clearly stylized top-down diagram of one scouting
 
 ## Deferred techniques
 
-- A first-frame image-to-video trial now has one rights-safe Sillim candidate in [the cut plan](SILLIM_VEO_CUT_PLAN.md). Its quality gain is unmeasured; use only one separately budgeted request after billing review before considering it for the automatic path.
+- Automatic first-frame generation for every scene remains unproven. The Sillim results support reviewed, scene-specific seeds, not a blanket quality gain or removal of raw-clip and whole-cut review.
 - Automatic prompt enhancement or paid multi-variant retries add calls before there is evidence that they raise acceptance rate. Keep one planned prompt and repair only rejected scenes.
 - Timed multi-shot prompts may be useful for longer video, but the current six-second hook benefits from the provider's single-moment guidance.
 
