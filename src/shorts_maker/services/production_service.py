@@ -395,19 +395,20 @@ class ProductionService:
             return hashlib.file_digest(video, "sha256").hexdigest()
 
     @staticmethod
-    def _claim_upload(video_path: str, video_sha256: str) -> Path:
+    def _claim_upload(video_path: str, video_sha256: str, upload_body: dict) -> Path:
         path = Path(video_path).with_suffix(".upload-pending.json")
         with path.open("x", encoding="utf-8") as file:
             json.dump({
                 "video_path": video_path,
                 "video_sha256": video_sha256,
+                "youtube_upload_request": upload_body,
                 "started_at_utc": datetime.now(timezone.utc).isoformat(),
             }, file)
             file.flush()
             os.fsync(file.fileno())
         return path
 
-    def _record_upload(self, video_path: str, video_id: str, contains_synthetic_media: bool) -> Optional[str]:
+    def _record_upload(self, video_path: str, video_id: str, upload_body: dict) -> Optional[str]:
         path = Path(video_path).with_suffix(".production.json")
         if not path.is_file():
             return None
@@ -419,7 +420,8 @@ class ProductionService:
             self.logger.warning(f"제작 기록을 갱신할 수 없습니다: {error}")
             return None
         report["youtube_id"] = video_id
-        report["contains_synthetic_media"] = contains_synthetic_media
+        report["contains_synthetic_media"] = upload_body["status"]["containsSyntheticMedia"]
+        report["youtube_upload_request"] = upload_body
         report["uploaded_at_utc"] = datetime.now(timezone.utc).isoformat()
         return self._write_report(video_path, report)
 
@@ -872,6 +874,7 @@ class ProductionService:
                     ready_for_upload=True, report_path=str(report_path),
                 )
 
+            upload_body = YouTubeUploader.build_upload_body(metadata)
             if not recorded_hash:
                 report["video_sha256"] = current_hash
                 if not await asyncio.to_thread(self._write_report, video_path, report):
@@ -879,7 +882,9 @@ class ProductionService:
                                                video_path=video_path)
 
             try:
-                pending_path = await asyncio.to_thread(self._claim_upload, video_path, current_hash)
+                pending_path = await asyncio.to_thread(
+                    self._claim_upload, video_path, current_hash, upload_body,
+                )
             except FileExistsError:
                 return self._failed_result("이전 업로드 결과가 확인되지 않았습니다. YouTube Studio에서 확인하세요.",
                                            video_path=video_path)
@@ -898,8 +903,7 @@ class ProductionService:
 
             if video_id:
                 report_path = await asyncio.to_thread(
-                    self._record_upload, video_path, video_id,
-                    metadata.get("contains_synthetic_media", True),
+                    self._record_upload, video_path, video_id, upload_body,
                 )
                 if not report_path:
                     return self._failed_result(

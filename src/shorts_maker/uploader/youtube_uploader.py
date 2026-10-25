@@ -63,30 +63,38 @@ class YouTubeUploader:
         """Run the blocking Google client without freezing the UI loop."""
         return await asyncio.to_thread(self._upload_sync, video_path, metadata)
 
+    @staticmethod
+    def build_upload_body(metadata: dict) -> dict:
+        """Prepare the exact private request fields for submission and local audit."""
+        if not isinstance(metadata, dict):
+            raise ValueError("metadata must be a dictionary")
+        title = metadata.get("title", "AI Generated Shorts")
+        description = metadata.get("description", "Created by ShortsMaker")
+        tags = metadata.get("tags", ["shorts", "ai"])
+        synthetic_media = metadata.get("contains_synthetic_media", True)
+        if not isinstance(title, str) or not title.strip():
+            raise ValueError("title must be a non-empty string")
+        if not isinstance(description, str):
+            raise ValueError("description must be a string")
+        if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
+            raise ValueError("tags must be a list of strings")
+        if not isinstance(synthetic_media, bool):
+            raise ValueError("contains_synthetic_media must be a boolean")
+        return {
+            "snippet": {"title": title, "description": description,
+                        "tags": list(tags), "categoryId": "22"},
+            "status": {"privacyStatus": "private", "selfDeclaredMadeForKids": False,
+                       "containsSyntheticMedia": synthetic_media},
+        }
+
     def _upload_sync(self, video_path: str, metadata: dict):
         self.logger.info(f"Starting upload to YouTube: {video_path}")
         try:
-            synthetic_media = metadata.get("contains_synthetic_media", True)
-            if not isinstance(synthetic_media, bool):
-                raise ValueError("contains_synthetic_media must be a boolean")
+            body = self.build_upload_body(metadata)
             try:
                 youtube = self.get_authenticated_service()
             except Exception as error:
                 raise YouTubeAuthRequired("YOUTUBE_AUTH_REQUIRED: YouTube 업로드 계정을 다시 연결하세요.") from error
-            
-            body = {
-                "snippet": {
-                    "title": metadata.get("title", "AI Generated Shorts"),
-                    "description": metadata.get("description", "Created by ShortsMaker"),
-                    "tags": metadata.get("tags", ["shorts", "ai"]),
-                    "categoryId": "22" # People & Blogs
-                },
-                "status": {
-                    "privacyStatus": "private", # 처음에는 안전하게 비공개로 업로드
-                    "selfDeclaredMadeForKids": False,
-                    "containsSyntheticMedia": synthetic_media,
-                }
-            }
 
             media = MediaFileUpload(video_path, chunksize=-1, resumable=True)
             request = youtube.videos().insert(

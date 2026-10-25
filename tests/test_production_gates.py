@@ -814,7 +814,9 @@ class ProductionGateTests(unittest.TestCase):
             self.assertFalse(changed_before.success)
             service._uploader.upload.assert_not_awaited()
             output.write_bytes(b"")
-            uploaded = asyncio.run(service.upload_to_youtube(str(output), {"title": script.title}))
+            metadata = {"title": script.title, "description": "출처: https://example.com",
+                        "tags": ["Shorts", "자료"], "contains_synthetic_media": False}
+            uploaded = asyncio.run(service.upload_to_youtube(str(output), metadata))
             repeated = asyncio.run(service.upload_to_youtube(str(output), {"title": "changed"}))
 
             self.assertTrue(produced.success)
@@ -827,7 +829,9 @@ class ProductionGateTests(unittest.TestCase):
             self.assertFalse(report["paired_comparison_eligible"])
             self.assertEqual(report["estimated_visual_output_cost_usd"], 0)
             self.assertEqual(report["youtube_id"], "video-id")
-            self.assertIs(report["contains_synthetic_media"], True)
+            self.assertIs(report["contains_synthetic_media"], False)
+            self.assertEqual(report["youtube_upload_request"],
+                             YouTubeUploader.build_upload_body(metadata))
             self.assertIn("uploaded_at_utc", report)
             self.assertFalse(output.with_suffix(".upload-pending.json").exists())
 
@@ -836,6 +840,27 @@ class ProductionGateTests(unittest.TestCase):
             self.assertFalse(changed.success)
             self.assertIn("변경", changed.error)
             service._uploader.upload.assert_awaited_once()
+
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_invalid_upload_metadata_stops_before_claim_or_provider(self, _check):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output.mp4"
+            output.write_bytes(b"reviewed video")
+            output.with_suffix(".production.json").write_text(json.dumps({
+                "video_path": str(output), "quality_passed": True,
+                "video_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
+                "youtube_id": None,
+            }), encoding="utf-8")
+            service = ProductionService()
+            service._uploader = SimpleNamespace(upload=AsyncMock(return_value="video-id"))
+
+            result = asyncio.run(service.upload_to_youtube(
+                str(output), {"title": "Example", "tags": ["okay", object()]},
+            ))
+
+            self.assertFalse(result.success)
+            self.assertFalse(output.with_suffix(".upload-pending.json").exists())
+            service._uploader.upload.assert_not_awaited()
 
     @patch("shorts_maker.services.production_service.check_video_quality")
     def test_auth_failure_clears_upload_claim_for_retry(self, _check):
@@ -880,8 +905,10 @@ class ProductionGateTests(unittest.TestCase):
             pending = output.with_suffix(".upload-pending.json")
             self.assertFalse(first.success)
             self.assertTrue(pending.exists())
-            self.assertEqual(json.loads(pending.read_text(encoding="utf-8"))["video_sha256"],
-                             hashlib.sha256(output.read_bytes()).hexdigest())
+            claim = json.loads(pending.read_text(encoding="utf-8"))
+            self.assertEqual(claim["video_sha256"], hashlib.sha256(output.read_bytes()).hexdigest())
+            self.assertEqual(claim["youtube_upload_request"]["snippet"]["title"], "Example")
+            self.assertEqual(claim["youtube_upload_request"]["status"]["privacyStatus"], "private")
 
             second = asyncio.run(service.upload_to_youtube(str(output), {"title": "Example"}))
             self.assertFalse(second.success)
