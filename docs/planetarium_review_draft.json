@@ -1,0 +1,48 @@
+{
+  "title": "라이트의 천문관은 왜 20년 넘게 조용했을까?",
+  "description": "플로리다 서던 칼리지의 2026년 복원·재개장 발표를 바탕으로 한 미승인 이야기 초안입니다. 2004년 투영 장비가 고장 난 뒤 공간의 이용이 제한됐고, 건물 복원과 새 투영·음향 장비 설치 후 일반 상영이 재개됐습니다. 원래 건물이나 장비의 정확한 외관은 재현하지 않으며, 추후 화면은 자체 제작 설명용 개념도로 검토합니다. 발표: https://www.flsouthern.edu/news/2026/fsc-reopens-restored-fllw-planetarium.html ; 현재 상영 안내: https://flsouthern.edu/fllw-visitor-center/tours.html",
+  "tags": ["건축", "천문관", "프랭크로이드라이트", "복원"],
+  "mood": "curious",
+  "style": "source-grounded architecture restoration story",
+  "music_direction": "조용한 호기심에서 상영 재개 때만 약하게 밝아지는 기악곡. 과장된 우주 효과음이나 승리감은 피하고 설명 밑에 낮게 둔다. 첫 이야기 검토는 음악 없이 진행한다.",
+  "source_name": "Florida Southern College — Miller Planetarium 복원 발표 (2026-09-23)",
+  "source_url": "https://www.flsouthern.edu/news/2026/fsc-reopens-restored-fllw-planetarium.html",
+  "generation_mode": "image",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "visual_mode": "image",
+      "duration_seconds": 6,
+      "visual_description": "Original stylized dome interior with seats but no projected stars. Conceptual, not an image of Wright's building or a claim that it was always closed.",
+      "script_text": "건축가 프랭크 로이드 라이트의 설계로 지어진 유일한 천문관이 20년 넘게 제한적으로 쓰였습니다. 무엇이 멈췄을까요?"
+    },
+    {
+      "scene_number": 2,
+      "visual_mode": "image",
+      "duration_seconds": 6,
+      "visual_description": "Simple original two-state projection diagram: a lit dome for the first shows, then an unlit projection path. Add 1960 and 2004 dates locally; do not invent an exact historical machine or failure footage.",
+      "script_text": "1960년 첫 상영을 한 이곳은 2004년 투영 장비가 고장 나면서 이용이 크게 줄었습니다."
+    },
+    {
+      "scene_number": 3,
+      "visual_mode": "image",
+      "duration_seconds": 6,
+      "visual_description": "Original abstract restoration layers for a dome exterior and interior, leaving the projection path dark. Do not copy campus photos or assert an undocumented repair sequence.",
+      "script_text": "학교는 건물 안팎을 복원했습니다. 하지만 별을 비추려면 장비도 다시 필요했죠."
+    },
+    {
+      "scene_number": 4,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Generic new projector and sound system in a conceptual dome; stars visibly return to the projection surface. No brand marks, exact device shape, or claim of original Wright equipment.",
+      "script_text": "새 투영 시스템과 음향 시설을 들여놓자 옛 공간에서 다시 상영할 수 있게 됐습니다."
+    },
+    {
+      "scene_number": 5,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Original conceptual audience-view dome, with both preserved historic room and renewed star projection evident. Add the 2026 reopening attribution locally; not footage of an actual public show.",
+      "script_text": "2026년 9월 일반 상영을 재개했습니다. 이 복원은 건물의 모습과 원래 쓰임을 함께 되찾았습니다."
+    }
+  ]
+}
