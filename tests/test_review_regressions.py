@@ -418,6 +418,34 @@ class ReviewRegressions(unittest.TestCase):
             self.assertEqual(stored["run_count"], 1)
             self.assertFalse(stored["enabled"])
 
+    def test_unreadable_rss_sources_retry_without_treating_them_as_no_story(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("RSS", "09:00")
+            failure = ProductionService()._failed_result(
+                "PLANNING_UNVERIFIED: RSS_SOURCE_UNVERIFIED: no readable feeds")
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, return_value=failure,
+            ) as pipeline:
+                asyncio.run(manager._execute_pipeline(schedule))
+                asyncio.run(manager._execute_pipeline(schedule))
+
+            self.assertEqual(pipeline.await_count, 2)
+            stored = manager.get_schedule(schedule["id"])
+            self.assertEqual(stored["last_result"], "source_unavailable")
+            self.assertEqual(stored["run_count"], 2)
+            self.assertTrue(stored["enabled"])
+
+            direct = manager.create_schedule("Direct", "10:00",
+                                             direct_url="https://example.com/article")
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, return_value=failure,
+            ):
+                asyncio.run(manager._execute_pipeline(direct))
+            self.assertFalse(manager.get_schedule(direct["id"])["enabled"])
+
     def test_corrupt_schedule_lock_stops_before_paid_run(self):
         with tempfile.TemporaryDirectory() as directory:
             manager = ScheduleManager(str(Path(directory) / "schedules.json"))

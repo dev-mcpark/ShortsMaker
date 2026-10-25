@@ -478,8 +478,13 @@ class ScheduleManager:
             analysis_unverified = not result.success and _ARTICLE_ANALYSIS_UNVERIFIED in (result.error or "")
             scoring_unverified = not result.success and _TOPIC_SCORING_UNVERIFIED in (result.error or "")
             planning_unverified = not result.success and _PLANNING_UNVERIFIED in (result.error or "")
+            # This exact collector error occurs before the paid topic-scoring request.
+            source_unavailable = (not schedule.get('direct_url') and not result.success
+                                  and not result.video_path
+                                  and (result.error or "").startswith(
+                                      "PLANNING_UNVERIFIED: RSS_SOURCE_UNVERIFIED:"))
             rendered_failed = not result.success and bool(result.video_path)
-            # Only an ordinary no-story result waits for the next source window.
+            # Other failures pause before another scheduled paid round.
             # 공급자 제한 뒤의 다음 일정이 계획·내레이션 비용을 다시 쓰지 않도록 멈춘다.
             last_result = 'success' if result.success else 'failed'
             if billing_disabled:
@@ -502,6 +507,8 @@ class ScheduleManager:
                 last_result = 'analysis_failed'
             elif scoring_unverified:
                 last_result = 'scoring_failed'
+            elif source_unavailable:
+                last_result = 'source_unavailable'
             elif planning_unverified:
                 last_result = 'planning_failed'
             elif rendered_failed:
@@ -510,7 +517,8 @@ class ScheduleManager:
                 'last_run': datetime.now().isoformat(),
                 'run_count': schedule.get('run_count', 0) + 1,
                 'last_result': last_result,
-                'enabled': not result.success and result.error == "스크립트 생성 실패" and not result.video_path,
+                'enabled': source_unavailable or (
+                    not result.success and result.error == "스크립트 생성 실패" and not result.video_path),
             }
             if result.video_path:
                 updates['last_video_path'] = str(result.video_path)

@@ -308,6 +308,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 ui.label(message).classes('text-xs text-amber-300')
                                             elif not enabled and schedule.get('last_result') == 'run_in_progress':
                                                 ui.label('제작 완료 미확인 · 출력과 청구 내역 확인 후 일정 재개').classes('text-xs text-amber-300')
+                                            elif enabled and schedule.get('last_result') == 'source_unavailable':
+                                                ui.label('RSS 피드 읽기 실패 · 다음 예약에 다시 확인').classes('text-xs text-amber-300')
                                             if review_path:
                                                 with ui.dialog() as review_dialog, ui.card():
                                                     ui.label('최근 제작 영상').classes('text-lg font-medium')
