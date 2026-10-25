@@ -133,7 +133,9 @@ async def prepare(script_path: Path, output_dir: Path, voice: str, max_cost_usd:
                 manifest["scenes"][key] = {"text_sha256": text_sha256, "status": "pending"}
                 manifest["reserved_usd_total"] += scene_reserve(scene)
                 _save_manifest(output_dir / "narration.json", manifest)
-                generated = await editor._generate_tts(scene.script_text, scene.scene_number, voice)
+                generated = await editor._generate_tts(
+                    scene.script_text, scene.scene_number, voice, source_url=script.source_url,
+                )
                 partial = output_dir / f"scene_{key}.part.mp3"
                 try:
                     shutil.copyfile(generated, partial)

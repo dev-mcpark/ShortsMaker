@@ -771,12 +771,15 @@ class ReviewRegressions(unittest.TestCase):
         ]))
         analyzer.client = SimpleNamespace(chat=SimpleNamespace(
             completions=SimpleNamespace(create=create)))
-        article = SimpleNamespace(title="Launch", main_text="Service starts next week.",
+        article = SimpleNamespace(url="https://example.com/launch", title="Launch",
+                                  main_text="Service starts next week.",
                                   quotes=[], headings=[], captions=[])
 
-        analysis = asyncio.run(analyzer.analyze_content(article))
+        with patch("shorts_maker.planner.content_analyzer.reserve_openai_chat") as reserve:
+            analysis = asyncio.run(analyzer.analyze_content(article))
 
         self.assertFalse(analysis.story_fit)
+        self.assertEqual(reserve.call_args.kwargs["source_url"], article.url)
         prompt = create.await_args.kwargs["messages"][0]["content"]
         self.assertIn("future service launch", prompt)
         self.assertIn("completed project has only expected benefits", prompt)
@@ -820,7 +823,8 @@ class ReviewRegressions(unittest.TestCase):
         analyzer.logger = Mock()
         analyzer.model = "gpt-4o"
         analyzer.client = client
-        article = SimpleNamespace(title="Topic", main_text="Source", quotes=[], headings=[], captions=[])
+        article = SimpleNamespace(url="https://example.com/article", title="Topic",
+                                  main_text="Source", quotes=[], headings=[], captions=[])
         with self.assertRaises(RateLimitError):
             asyncio.run(analyzer.analyze_content(article))
 
@@ -847,8 +851,10 @@ class ReviewRegressions(unittest.TestCase):
         enricher.client = SimpleNamespace(chat=SimpleNamespace(
             completions=SimpleNamespace(create=create)))
 
-        self.assertEqual(asyncio.run(enricher._generate_search_query(
-            "Depot", "Rainwater storage", [])), "depot flood")
+        with patch("shorts_maker.planner.content_enricher.reserve_openai_chat") as reserve:
+            self.assertEqual(asyncio.run(enricher._generate_search_query(
+                "Depot", "Rainwater storage", [], "https://example.com/depot")), "depot flood")
+        self.assertEqual(reserve.call_args.kwargs["source_url"], "https://example.com/depot")
         self.assertEqual(create.await_args.kwargs["max_completion_tokens"], 128)
         choice.finish_reason = "length"
         with self.assertRaisesRegex(ValueError, "output-token limit"):
@@ -857,8 +863,10 @@ class ReviewRegressions(unittest.TestCase):
         choice.finish_reason = "stop"
         choice.message.content = '{"points": ["source lead"]}'
         result = [{"title": "T" * 1000, "description": "D" * 2000}]
-        self.assertEqual(asyncio.run(enricher._summarize_search_results(
-            "depot flood", result)), ["source lead"])
+        with patch("shorts_maker.planner.content_enricher.reserve_openai_chat") as reserve:
+            self.assertEqual(asyncio.run(enricher._summarize_search_results(
+                "depot flood", result, "https://example.com/depot")), ["source lead"])
+        self.assertEqual(reserve.call_args.kwargs["source_url"], "https://example.com/depot")
         request = create.await_args.kwargs
         self.assertEqual(request["max_completion_tokens"], 1000)
         self.assertNotIn("T" * 161, request["messages"][0]["content"])
@@ -1294,21 +1302,23 @@ class ReviewRegressions(unittest.TestCase):
         ))
 
         source_text = "  Three robots were tested in Virginia. " + "A" * 5000 + "UNVERIFIED_TAIL"
-        result = asyncio.run(planner._write_script({
-            "category": "Tech", "title": "ASTRA field test",
-            "content": source_text,
-            "source": "NASA", "url": "https://example.com/source",
-            "analysis": SimpleNamespace(
-                core_message="Mars landing", hook="Mars landing", secret_mechanism="unverified",
-                context_background="unverified", numbers_data=["unverified estimate"], expert_insights=[],
-                future_impact="UNSUPPORTED_FLOOD_RESULT", visual_keywords=[],
-                story_structure={"opening": "Mars", "mystery": "Mars", "secret": "Mars",
-                                 "impact": "UNSUPPORTED_FLOOD_RESULT"},
-            ),
-            "enriched_info": ["Unverified search claim"],
-        }))
+        with patch("shorts_maker.planner.script_planner.reserve_openai_chat") as reserve:
+            result = asyncio.run(planner._write_script({
+                "category": "Tech", "title": "ASTRA field test",
+                "content": source_text,
+                "source": "NASA", "url": "https://example.com/source",
+                "analysis": SimpleNamespace(
+                    core_message="Mars landing", hook="Mars landing", secret_mechanism="unverified",
+                    context_background="unverified", numbers_data=["unverified estimate"], expert_insights=[],
+                    future_impact="UNSUPPORTED_FLOOD_RESULT", visual_keywords=[],
+                    story_structure={"opening": "Mars", "mystery": "Mars", "secret": "Mars",
+                                     "impact": "UNSUPPORTED_FLOOD_RESULT"},
+                ),
+                "enriched_info": ["Unverified search claim"],
+            }))
 
         self.assertEqual(result.scenes[0].visual_mode, "image")
+        self.assertEqual(reserve.call_args.kwargs["source_url"], "https://example.com/source")
         self.assertEqual(len(result.scenes), 5)
         self.assertEqual(result.music_direction, "조용한 호기심, 강한 드럼은 피함")
         prompt = completion.await_args.kwargs["messages"][0]["content"]

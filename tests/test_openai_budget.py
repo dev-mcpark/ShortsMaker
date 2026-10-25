@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -49,6 +50,31 @@ class OpenAIBudgetTests(unittest.TestCase):
         with self.assertRaisesRegex(openai_budget.OpenAIBudgetExceeded, "OPENAI_BUDGET_EXCEEDED"):
             openai_budget.reserve_openai_speech("tts-1", "가" * 400)
         self.assertEqual(openai_budget.budget_status()["reserved_by_model_usd"]["tts-1"], 0.006)
+
+    def test_old_ledger_keeps_shared_cost_when_source_column_is_added(self):
+        openai_budget.initialize_openai_budget()
+        ledger = openai_budget._database_path()
+        with sqlite3.connect(ledger) as db:
+            db.execute("DROP TABLE requests")
+            db.execute("""CREATE TABLE requests (
+                id TEXT PRIMARY KEY, period TEXT NOT NULL, model TEXT NOT NULL,
+                reserved_micro_usd INTEGER NOT NULL, created_utc TEXT NOT NULL
+            )""")
+            db.execute("INSERT INTO requests VALUES (?, ?, ?, ?, ?)",
+                       ("old", openai_budget._period(), "gpt-4o-mini", 200,
+                        "2026-10-01T00:00:00+00:00"))
+        self.assertEqual(openai_budget.budget_status()["unattributed_reserved_usd"], 0.0002)
+
+        source = "https://example.com/story"
+        request_id = openai_budget.reserve_openai_speech("tts-1", "가" * 100,
+                                                         source_url=source)
+        with sqlite3.connect(ledger) as db:
+            rows = db.execute("SELECT id, source_url FROM requests ORDER BY created_utc").fetchall()
+        self.assertEqual(rows, [("old", None), (request_id, source)])
+        status = openai_budget.budget_status()
+        self.assertEqual(status["reserved_by_source_usd"], {source: 0.0015})
+        self.assertEqual(status["unattributed_reserved_usd"], 0.0002)
+        self.assertEqual(status["local_reserved_usd"], 0.0017)
 
     def test_unknown_model_and_stale_month_block(self):
         openai_budget.initialize_openai_budget()

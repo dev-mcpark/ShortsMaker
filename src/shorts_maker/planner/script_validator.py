@@ -126,7 +126,7 @@ class ScriptValidator:
                     "source_excerpt": source_excerpt,
                 }, ensure_ascii=False)},
             ]
-            reserve_openai_chat("gpt-4o", messages, 1500)
+            reserve_openai_chat("gpt-4o", messages, 1500, source_url=getattr(script, "source_url", None))
             response = await self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=messages,

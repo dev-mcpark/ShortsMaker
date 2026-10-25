@@ -28,7 +28,8 @@ class ContentEnricher:
         # 제한적인 무료 검색 방식을 시도할 수 있도록 설계했습니다.
         self.search_api_key = os.getenv("BRAVE_SEARCH_API_KEY", "")
 
-    async def enrich_content(self, topic: str, core_message: str, visual_keywords: List[str]) -> List[str]:
+    async def enrich_content(self, topic: str, core_message: str, visual_keywords: List[str],
+                             source_url: str | None = None) -> List[str]:
         """외부 검색을 통해 관련 정보를 수집하고 요약함
         
         Args:
@@ -45,7 +46,7 @@ class ContentEnricher:
             return []
         
         # 1. 검색 쿼리 생성
-        search_query = await self._generate_search_query(topic, core_message, visual_keywords)
+        search_query = await self._generate_search_query(topic, core_message, visual_keywords, source_url)
         self.logger.info(f"🔍 Search Query: {search_query}")
         
         # 2. 웹 검색 수행
@@ -56,12 +57,13 @@ class ContentEnricher:
             return []
             
         # 3. 정보 요약
-        enriched_points = await self._summarize_search_results(search_query, search_results)
+        enriched_points = await self._summarize_search_results(search_query, search_results, source_url)
         
         self.logger.info(f"✅ Enrichment complete: {len(enriched_points)} points added.")
         return enriched_points
 
-    async def _generate_search_query(self, topic: str, core_message: str, keywords: List[str]) -> str:
+    async def _generate_search_query(self, topic: str, core_message: str, keywords: List[str],
+                                     source_url: str | None = None) -> str:
         """분석된 정보를 바탕으로 보강을 위한 최적의 검색 쿼리 생성"""
         prompt = f"""
         Create a single, highly effective search query to find deep technical details, historical context, or recent data points about this topic.
@@ -76,7 +78,7 @@ class ContentEnricher:
         
         require_paid_production_enabled()
         messages = [{"role": "user", "content": prompt}]
-        reserve_openai_chat("gpt-4o-mini", messages, 128)
+        reserve_openai_chat("gpt-4o-mini", messages, 128, source_url=source_url)
         response = await self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
@@ -129,7 +131,8 @@ class ContentEnricher:
             self.logger.error(f"Error during search: {e}")
             return []
 
-    async def _summarize_search_results(self, query: str, results: List[Dict]) -> List[str]:
+    async def _summarize_search_results(self, query: str, results: List[Dict],
+                                        source_url: str | None = None) -> List[str]:
         """검색 결과 스니펫을 바탕으로 씬 보강용 포인트 추출"""
         
         results_text = ""
@@ -154,7 +157,7 @@ class ContentEnricher:
         try:
             require_paid_production_enabled()
             messages = [{"role": "user", "content": prompt}]
-            reserve_openai_chat("gpt-4o-mini", messages, 1000)
+            reserve_openai_chat("gpt-4o-mini", messages, 1000, source_url=source_url)
             response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,

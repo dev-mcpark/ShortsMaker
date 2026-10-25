@@ -448,7 +448,8 @@ class ScriptPlanner:
                 enriched_info = await self.content_enricher.enrich_content(
                     topic=article_content.title,
                     core_message=analysis.core_message,
-                    visual_keywords=analysis.visual_keywords
+                    visual_keywords=analysis.visual_keywords,
+                    source_url=direct_url,
                 )
 
             # Create a synthetic candidate item with enhanced info & analysis & enrichment
@@ -536,7 +537,8 @@ class ScriptPlanner:
             enriched_info = await self.content_enricher.enrich_content(
                 topic=article_content.title,
                 core_message=analysis.core_message,
-                visual_keywords=analysis.visual_keywords
+                visual_keywords=analysis.visual_keywords,
+                source_url=selection['url'],
             )
 
             selection['content'] = source_text[excerpt_start:excerpt_start + 5000]
@@ -770,7 +772,7 @@ class ScriptPlanner:
 
         require_paid_production_enabled()
         messages = [{"role": "user", "content": prompt}]
-        reserve_openai_chat("gpt-4o", messages, 4000)
+        reserve_openai_chat("gpt-4o", messages, 4000, source_url=item.get('url'))
         response = await self.client.chat.completions.create(
             model="gpt-4o",
             messages=messages,

@@ -85,6 +85,7 @@ class WorkflowTests(unittest.TestCase):
 
         self.assertTrue(result[0].selected)
         self.assertEqual(reserve.call_args.args[2], 4000)
+        self.assertNotIn("source_url", reserve.call_args.kwargs)
         self.assertEqual(create.await_args.kwargs["max_completion_tokens"], 4000)
         prompt = create.await_args.kwargs["messages"][0]["content"]
         self.assertIn("Concrete stakes", prompt)
@@ -713,6 +714,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(planner.content_extractor.fetch_enhanced_article.call_count, 3)
         planner._write_script.assert_awaited_once()
         self.assertEqual(planner._write_script.await_args.args[0]["url"],
+                         "https://example.com/usable")
+        self.assertEqual(planner.content_enricher.enrich_content.await_args.kwargs["source_url"],
                          "https://example.com/usable")
         planner._save_history.assert_called_once_with("usable", "https://example.com/usable")
         self.assertEqual([call.args[0] for call in planner._remember_rss_urls.call_args_list],

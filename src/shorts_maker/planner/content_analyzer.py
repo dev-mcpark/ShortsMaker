@@ -81,7 +81,7 @@ class ContentAnalyzer:
         try:
             require_paid_production_enabled()
             messages = [{"role": "user", "content": prompt}]
-            reserve_openai_chat(self.model, messages, 1500)
+            reserve_openai_chat(self.model, messages, 1500, source_url=content.url)
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,

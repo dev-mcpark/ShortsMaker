@@ -937,6 +937,8 @@ class ProductionGateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "내레이션"):
                 asyncio.run(editor.prepare_narration(sample_script()))
         editor.cleanup_temp_files.assert_called_once()
+        self.assertEqual([call.kwargs["source_url"] for call in editor._generate_tts.await_args_list],
+                         ["https://example.com"] * 2)
 
         editor._generate_tts.reset_mock()
         editor.cleanup_old_temp_files = Mock()

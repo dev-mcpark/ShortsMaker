@@ -184,7 +184,8 @@ class VideoEditor:
         voice = self._get_voice_for_mood(getattr(script, 'mood', 'cinematic'))
         try:
             for index, scene in enumerate(script.scenes):
-                path = await self._generate_tts(scene.script_text, index, voice)
+                path = await self._generate_tts(scene.script_text, index, voice,
+                                                source_url=getattr(script, "source_url", None))
                 audio_paths.append(path)
             self.validate_narration(audio_paths)
             return audio_paths
@@ -258,7 +259,9 @@ class VideoEditor:
                     progress_callback(5 + 65 * i / len(script.scenes), f"씬 {i + 1}/{len(script.scenes)} TTS 생성 중...")
 
                 # 1. TTS
-                audio_path = audio_paths[i] if audio_paths is not None else await self._generate_tts(scene.script_text, i, voice_name)
+                audio_path = audio_paths[i] if audio_paths is not None else await self._generate_tts(
+                    scene.script_text, i, voice_name, source_url=getattr(script, "source_url", None),
+                )
                 if is_cancelled and is_cancelled():
                     raise RuntimeError("사용자에 의해 취소됨")
                 normalized_audio_path = await asyncio.to_thread(
@@ -628,7 +631,8 @@ class VideoEditor:
                 self.logger.error(f"자막 폴백도 실패: {fallback_error}")
                 raise
 
-    async def _generate_tts(self, text: str, scene_idx: int, voice: str) -> str:
+    async def _generate_tts(self, text: str, scene_idx: int, voice: str,
+                            *, source_url: str | None = None) -> str:
         require_paid_production_enabled()
         if self.client is None:
             if not settings.openai_api_key:
@@ -641,7 +645,7 @@ class VideoEditor:
 
         for attempt in range(self.TTS_MAX_ATTEMPTS):
             try:
-                reserve_openai_speech(self.TTS_MODEL, text)
+                reserve_openai_speech(self.TTS_MODEL, text, source_url=source_url)
                 response = await self.client.audio.speech.create(
                     model=self.TTS_MODEL,
                     voice=voice,

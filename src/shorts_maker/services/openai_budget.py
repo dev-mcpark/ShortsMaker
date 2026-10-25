@@ -20,7 +20,7 @@ _CHAT_PRICES = {
 _SPEECH_PRICES = {"tts-1": Decimal("15.00")}
 _SCHEMA = """CREATE TABLE IF NOT EXISTS requests (
     id TEXT PRIMARY KEY, period TEXT NOT NULL, model TEXT NOT NULL,
-    reserved_micro_usd INTEGER NOT NULL, created_utc TEXT NOT NULL
+    reserved_micro_usd INTEGER NOT NULL, created_utc TEXT NOT NULL, source_url TEXT
 )"""
 
 
@@ -69,10 +69,14 @@ def initialize_openai_budget() -> dict:
     return budget_status()
 
 
-def _reserve(model: str, amount: Decimal) -> str | None:
+def _reserve(model: str, amount: Decimal, source_url: str | None = None) -> str | None:
     period = _configured_period()
     if period is None:
         return None
+    if source_url is not None and not isinstance(source_url, str):
+        raise ValueError("OpenAI 요청 출처는 URL 문자열이어야 합니다.")
+    if source_url is not None:
+        source_url = source_url.strip() or None
     reserve = _micro_usd(amount)
     ceiling = int(Decimal(str(settings.openai_monthly_budget_usd)) * 1_000_000)
     opening = _micro_usd(Decimal(str(settings.openai_budget_opening_usd)))
@@ -89,16 +93,20 @@ def _reserve(model: str, amount: Decimal) -> str | None:
                     f"${(opening + used + reserve) / 1_000_000:.6f}이 "
                     f"프로그램 상한 ${ceiling / 1_000_000:.6f}을 초과합니다."
                 )
+            if "source_url" not in {column[1] for column in db.execute("PRAGMA table_info(requests)")}:
+                db.execute("ALTER TABLE requests ADD COLUMN source_url TEXT")
             db.execute(
-                "INSERT INTO requests VALUES (?, ?, ?, ?, ?)",
-                (request_id, period, model, reserve, datetime.now(timezone.utc).isoformat()),
+                "INSERT INTO requests (id, period, model, reserved_micro_usd, created_utc, source_url) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (request_id, period, model, reserve, datetime.now(timezone.utc).isoformat(), source_url),
             )
     except (OSError, sqlite3.Error) as error:
         raise OpenAIBudgetExceeded("OPENAI_BUDGET_EXCEEDED: 비용 장부에 접근할 수 없습니다.") from error
     return request_id
 
 
-def reserve_openai_chat(model: str, messages: list[dict], max_completion_tokens: int) -> str | None:
+def reserve_openai_chat(model: str, messages: list[dict], max_completion_tokens: int,
+                        *, source_url: str | None = None) -> str | None:
     """Reserve a text request before submission, including its full output-token ceiling."""
     if _configured_period() is None:
         return None
@@ -109,16 +117,16 @@ def reserve_openai_chat(model: str, messages: list[dict], max_completion_tokens:
     input_bound = len(json.dumps(messages, ensure_ascii=False).encode("utf-8")) + 1024
     estimate = (Decimal(input_bound) * input_price
                 + Decimal(max_completion_tokens) * output_price) / 1_000_000
-    return _reserve(model, estimate)
+    return _reserve(model, estimate, source_url)
 
 
-def reserve_openai_speech(model: str, text: str) -> str | None:
+def reserve_openai_speech(model: str, text: str, *, source_url: str | None = None) -> str | None:
     """Reserve each speech attempt separately; failures continue to count."""
     if _configured_period() is None:
         return None
     if model not in _SPEECH_PRICES or not isinstance(text, str) or not text:
         raise OpenAIBudgetExceeded("OPENAI_BUDGET_EXCEEDED: 확인되지 않은 음성 모델 또는 빈 대본입니다.")
-    return _reserve(model, Decimal(len(text)) * _SPEECH_PRICES[model] / 1_000_000)
+    return _reserve(model, Decimal(len(text)) * _SPEECH_PRICES[model] / 1_000_000, source_url)
 
 
 def budget_status() -> dict:
@@ -135,6 +143,10 @@ def budget_status() -> dict:
                 "SELECT model, SUM(reserved_micro_usd) FROM requests "
                 "WHERE period = ? GROUP BY model", (period,)
             ).fetchall())
+            by_source = dict(db.execute(
+                "SELECT source_url, SUM(reserved_micro_usd) FROM requests "
+                "WHERE period = ? AND source_url IS NOT NULL GROUP BY source_url", (period,),
+            )) if "source_url" in {column[1] for column in db.execute("PRAGMA table_info(requests)")} else {}
     except (OSError, sqlite3.Error) as error:
         raise OpenAIBudgetExceeded("OPENAI_BUDGET_EXCEEDED: 비용 장부에 접근할 수 없습니다. --init으로 최초 생성해야 합니다.") from error
     opening = _micro_usd(Decimal(str(settings.openai_budget_opening_usd)))
@@ -144,6 +156,8 @@ def budget_status() -> dict:
             "opening_usd": opening / 1_000_000,
             "local_reserved_usd": local / 1_000_000,
             "reserved_by_model_usd": {model: value / 1_000_000 for model, value in by_model.items()},
+            "reserved_by_source_usd": {source: value / 1_000_000 for source, value in by_source.items()},
+            "unattributed_reserved_usd": (local - sum(by_source.values())) / 1_000_000,
             "remaining_usd": max(0, ceiling - opening - local) / 1_000_000}
 
 

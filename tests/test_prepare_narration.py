@@ -37,7 +37,8 @@ class PrepareNarrationTests(unittest.TestCase):
             output = root / "narration"
             calls = []
 
-            async def first_attempt(_editor, text, scene_number, _voice):
+            async def first_attempt(_editor, text, scene_number, _voice, *, source_url):
+                self.assertEqual(source_url, "https://example.com")
                 calls.append(scene_number)
                 if scene_number == 2:
                     raise RuntimeError("provider stopped")
@@ -45,7 +46,8 @@ class PrepareNarrationTests(unittest.TestCase):
                 source.write_bytes(b"scene one audio")
                 return str(source)
 
-            async def resumed_attempt(_editor, text, scene_number, _voice):
+            async def resumed_attempt(_editor, text, scene_number, _voice, *, source_url):
+                self.assertEqual(source_url, "https://example.com")
                 calls.append(scene_number)
                 source = root / f"source_{scene_number}.mp3"
                 source.write_bytes(b"scene two audio")
