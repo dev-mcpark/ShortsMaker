@@ -35,6 +35,9 @@ class WorkflowTests(unittest.TestCase):
         budget = patch.object(settings, "google_monthly_budget_krw", None)
         budget.start()
         self.addCleanup(budget.stop)
+        openai_budget = patch.object(settings, "openai_monthly_budget_usd", None)
+        openai_budget.start()
+        self.addCleanup(openai_budget.stop)
 
     def test_rss_recency_requires_a_valid_utc_date_within_fourteen_days(self):
         planner = object.__new__(ScriptPlanner)

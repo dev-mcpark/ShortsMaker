@@ -56,6 +56,9 @@ class ProductionGateTests(unittest.TestCase):
         budget = patch.object(settings, "google_monthly_budget_krw", None)
         budget.start()
         self.addCleanup(budget.stop)
+        openai_budget = patch.object(settings, "openai_monthly_budget_usd", None)
+        openai_budget.start()
+        self.addCleanup(openai_budget.stop)
 
     def test_prepared_narration_manifest_rejects_wrong_script_or_file(self):
         script = sample_script()

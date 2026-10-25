@@ -41,6 +41,9 @@ class ReviewRegressions(unittest.TestCase):
         budget = patch.object(settings, "google_monthly_budget_krw", None)
         budget.start()
         self.addCleanup(budget.stop)
+        openai_budget = patch.object(settings, "openai_monthly_budget_usd", None)
+        openai_budget.start()
+        self.addCleanup(openai_budget.stop)
         for target, balance in (
             ("shorts_maker.services.google_budget.budget_status",
              {"enabled": True, "remaining_krw": 10000}),
