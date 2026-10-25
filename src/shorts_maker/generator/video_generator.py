@@ -116,7 +116,8 @@ class VideoGenerator:
                 f"${settings.max_visual_cost_usd:.2f}를 초과합니다."
             )
 
-    async def generate_scene_clip(self, scene, mode_override: Optional[str] = None) -> str:
+    async def generate_scene_clip(self, scene, mode_override: Optional[str] = None,
+                                  *, source_url: str | None = None) -> str:
         """현재 생성 모드에 맞는 단일 씬 클립을 만듭니다."""
         mode = mode_override or self.mode
         reserve = self._scene_output_reserve(mode)
@@ -124,15 +125,15 @@ class VideoGenerator:
         check_google_budget(reserve, self.max_veo_attempts if mode == "video" else 1)
         if mode == "video":
             path = (await self._generate_background_video(
-                scene, settings.hybrid_veo_duration_seconds,
-            ) if self.mode == "hybrid" else await self._generate_background_video(scene))
+                scene, settings.hybrid_veo_duration_seconds, source_url,
+            ) if self.mode == "hybrid" else await self._generate_background_video(scene, source_url=source_url))
             if self.character_overlay:
                 return await self._composite_character_on_video(path, scene)
             return path
         if mode != "image":
             raise ValueError(f"지원하지 않는 생성 모드: {mode}")
 
-        path = await self._generate_image_gemini(scene)
+        path = await self._generate_image_gemini(scene, source_url)
         if self.character_overlay:
             return await asyncio.to_thread(
                 self.character_overlay.composite_on_image,
@@ -148,7 +149,10 @@ class VideoGenerator:
         for index, scene in enumerate(script.scenes):
             path = await self.generate_scene_clip(
                 scene, mode_override=scene_mode(self.mode, scene, index),
-            ) if self.mode == "hybrid" else await self.generate_scene_clip(scene)
+                source_url=getattr(script, "source_url", None),
+            ) if self.mode == "hybrid" else await self.generate_scene_clip(
+                scene, source_url=getattr(script, "source_url", None),
+            )
             clips_paths.append(path)
             if index < len(script.scenes) - 1:
                 await asyncio.sleep(settings.scene_buffer_seconds)
@@ -164,7 +168,7 @@ class VideoGenerator:
         async def generate_with_semaphore(scene):
             async with semaphore:
                 self.logger.info(f"🎨 Processing Scene {scene.scene_number}...")
-                path = await self.generate_scene_clip(scene)
+                path = await self.generate_scene_clip(scene, source_url=getattr(script, "source_url", None))
                 await asyncio.sleep(2)
                 return path
 
@@ -183,7 +187,8 @@ class VideoGenerator:
 
     # ── Current Pipeline: Background Video + Character Composite ─────────
 
-    async def _generate_background_video(self, scene, duration_seconds: Optional[int] = None) -> str:
+    async def _generate_background_video(self, scene, duration_seconds: Optional[int] = None,
+                                         source_url: str | None = None) -> str:
         """Stage 1: 배경 영상만 생성 (캐릭터 없이)."""
         output_path = str(settings.temp_dir / f"bg_scene_{scene.scene_number}_{uuid.uuid4().hex}.mp4")
 
@@ -199,7 +204,8 @@ class VideoGenerator:
         try:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
-                None, self._run_veo_background_only, model_id, scene, output_path, duration_seconds
+                None, self._run_veo_background_only, model_id, scene, output_path, duration_seconds,
+                source_url,
             )
             if os.path.exists(output_path):
                 self.logger.info(f"    ✅ Background video generated: {output_path}")
@@ -247,6 +253,7 @@ class VideoGenerator:
         scene_number: Optional[int] = None,
         first_frame_path: Optional[str] = None,
         request_budget_usd: Optional[float] = None,
+        source_url: str | None = None,
     ) -> None:
         """Veo API 호출을 재시도 로직과 함께 실행.
 
@@ -307,6 +314,7 @@ class VideoGenerator:
                 "request_budget_usd": request_budget_usd,
                 "input_type": "image_first_frame" if first_frame is not None else "text",
                 "input_image_sha256": image_sha256,
+                "source_url": source_url,
                 "actual_billed_usd": None,
                 "status": "submitted_or_pending",
             }
@@ -314,7 +322,9 @@ class VideoGenerator:
             operation = None
             budget_request_id = None
             try:
-                budget_request_id = reserve_google_output("video", model_id, requested_seconds)
+                budget_request_id = reserve_google_output(
+                    "video", model_id, requested_seconds, source_url=source_url,
+                )
                 record["budget_request_id"] = budget_request_id
                 self.logger.info(f"    Generating (Attempt {attempt + 1}/{max_attempts})...")
 
@@ -404,6 +414,7 @@ class VideoGenerator:
 
     def _run_veo_background_only(
         self, model_id: str, scene, output_path: str, duration_seconds: Optional[int] = None,
+        source_url: str | None = None,
     ) -> None:
         """Veo로 배경 영상만 생성 (캐릭터 언급 없음)."""
         self.logger.info(
@@ -432,11 +443,12 @@ class VideoGenerator:
             duration_seconds=duration_seconds,
             scene_number=scene.scene_number,
             request_budget_usd=settings.max_visual_cost_usd,
+            source_url=source_url,
         )
 
     # ── Image Helper ──────────────────────────────────────────────────────
 
-    async def _generate_image_gemini(self, scene) -> str:
+    async def _generate_image_gemini(self, scene, source_url: str | None = None) -> str:
         """Generate a vertical still with the supported Gemini image model."""
         output_path = str(settings.temp_dir / f"scene_{scene.scene_number}_{uuid.uuid4().hex}.png")
 
@@ -449,6 +461,7 @@ class VideoGenerator:
                 settings.image_model_id,
                 scene,
                 output_path,
+                source_url,
             )
             if not os.path.isfile(output_path):
                 raise RuntimeError("Gemini returned no image file")
@@ -457,9 +470,10 @@ class VideoGenerator:
             self.logger.error(f"❌ Gemini Image Generation Error: {e}")
             raise
 
-    def _run_image_generation(self, model_id: str, scene, output_path: str) -> None:
+    def _run_image_generation(self, model_id: str, scene, output_path: str,
+                              source_url: str | None = None) -> None:
         require_paid_production_enabled()
-        budget_request_id = reserve_google_output("image", model_id)
+        budget_request_id = reserve_google_output("image", model_id, source_url=source_url)
         if self.image_client is None:
             self.image_client = genai.Client(
                 vertexai=True, project=self.project_id, location="global",

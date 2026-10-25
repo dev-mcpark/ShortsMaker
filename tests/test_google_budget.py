@@ -62,6 +62,35 @@ class GoogleBudgetTests(unittest.TestCase):
             initialize_google_budget()
         self.assertEqual(budget_status()["local_reserved_krw"], 68)
 
+    def test_existing_ledger_keeps_reservations_when_source_column_is_added(self):
+        ledger = Path(self.directory.name) / "evaluation" / "google_budget.sqlite3"
+        with sqlite3.connect(ledger) as db:
+            db.execute("DROP TABLE requests")
+            db.execute("""CREATE TABLE requests (
+                id TEXT PRIMARY KEY, period TEXT NOT NULL, model TEXT NOT NULL,
+                estimated_usd TEXT NOT NULL, reserved_krw INTEGER NOT NULL,
+                status TEXT NOT NULL, created_utc TEXT NOT NULL
+            )""")
+            db.execute("INSERT INTO requests VALUES (?, ?, ?, ?, ?, ?, ?)",
+                       ("old", "2026-10", settings.image_model_id, "0.034", 68,
+                        "failed_or_unknown", "2026-10-01T00:00:00+00:00"))
+        self.assertEqual(budget_status()["unattributed_reserved_krw"], 68)
+
+        request_id = reserve_google_output("image", settings.image_model_id,
+                                           source_url="https://example.com/story")
+        self.assertTrue(mark_google_result(request_id, "failed_or_unknown"))
+        with sqlite3.connect(ledger) as db:
+            rows = db.execute("SELECT id, source_url, status FROM requests ORDER BY created_utc").fetchall()
+        self.assertEqual(rows, [
+            ("old", None, "failed_or_unknown"),
+            (request_id, "https://example.com/story", "failed_or_unknown"),
+        ])
+        self.assertEqual(budget_status()["local_reserved_krw"], 136)
+        self.assertEqual(budget_status()["reserved_by_source_krw"], {
+            "https://example.com/story": 68,
+        })
+        self.assertEqual(budget_status()["unattributed_reserved_krw"], 68)
+
     def test_batch_preflight_includes_each_request_rounding(self):
         with patch.object(settings, "google_usd_krw_rate", 1501), patch.object(
             settings, "google_monthly_budget_krw", 1103

@@ -968,9 +968,16 @@ class ReviewRegressions(unittest.TestCase):
             ])),
         ))
         scene = SimpleNamespace(visual_description="A vertical landscape")
-        generator._run_image_generation("gemini-3.1-flash-lite-image", scene, "scene.png")
+        with patch("shorts_maker.generator.video_generator.reserve_google_output",
+                   return_value="request") as reserve, patch(
+            "shorts_maker.generator.video_generator.mark_google_result", return_value=True,
+        ):
+            generator._run_image_generation("gemini-3.1-flash-lite-image", scene, "scene.png",
+                                            "https://example.com/story")
 
         image.save.assert_called_once_with("scene.png")
+        reserve.assert_called_once_with("image", "gemini-3.1-flash-lite-image",
+                                        source_url="https://example.com/story")
         request = generator.image_client.models.generate_content.call_args.kwargs
         self.assertEqual(request["contents"], scene.visual_description)
         self.assertEqual(request["config"].image_config.aspect_ratio, "9:16")
@@ -1135,7 +1142,7 @@ class ReviewRegressions(unittest.TestCase):
             generator._retry_veo_call(
                 "veo-3.1-lite-generate-001", "motion only", output, "fallback",
                 duration_seconds=8, scene_number=1, first_frame_path=str(frame),
-                request_budget_usd=0.30,
+                request_budget_usd=0.30, source_url="https://example.com/story",
             )
             record = json.loads(next((Path(directory) / "evaluation/visual_attempts").glob(
                 "*.json")).read_text(encoding="utf-8"))
@@ -1147,6 +1154,7 @@ class ReviewRegressions(unittest.TestCase):
             self.assertEqual(record["input_type"], "image_first_frame")
             self.assertEqual(record["estimated_output_usd"], 0.24)
             self.assertEqual(record["request_budget_usd"], 0.30)
+            self.assertEqual(record["source_url"], "https://example.com/story")
             self.assertEqual(record["status"], "saved")
             self.assertEqual(len(record["input_image_sha256"]), 64)
             self.assertNotIn("motion only", json.dumps(record))
@@ -1246,7 +1254,8 @@ class ReviewRegressions(unittest.TestCase):
             motion_instruction="The camera slowly pushes toward the fleet",
         )
 
-        generator._run_veo_background_only("model", scene, "clip.mp4", 6)
+        generator._run_veo_background_only("model", scene, "clip.mp4", 6,
+                                           "https://example.com/story")
 
         prompt = generator._retry_veo_call.call_args.args[1]
         self.assertIn("One continuous vertical shot", prompt)
@@ -1258,6 +1267,8 @@ class ReviewRegressions(unittest.TestCase):
         self.assertNotIn("no people", prompt)
         fallback = generator._retry_veo_call.call_args.args[3]
         self.assertIn(scene.visual_description, fallback)
+        self.assertEqual(generator._retry_veo_call.call_args.kwargs["source_url"],
+                         "https://example.com/story")
         self.assertIn(scene.motion_instruction, fallback)
 
     def test_planner_visual_brief_requires_source_matched_setting(self):

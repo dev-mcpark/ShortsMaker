@@ -656,7 +656,10 @@ class ProductionService:
                         generator = self._get_generator()
                         path = await generator.generate_scene_clip(
                             scene, mode_override=visual_modes[index],
-                        ) if self.mode == "hybrid" else await generator.generate_scene_clip(scene)
+                            source_url=getattr(script, "source_url", None),
+                        ) if self.mode == "hybrid" else await generator.generate_scene_clip(
+                            scene, source_url=getattr(script, "source_url", None),
+                        )
                         if cache_dirs[index]:
                             path = await asyncio.to_thread(
                                 self._save_clip, cache_dirs[index], visual_modes[index], path,

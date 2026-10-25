@@ -555,7 +555,9 @@ class ProductionGateTests(unittest.TestCase):
 
             self.assertTrue(result.success)
             self.assertTrue(result.ready_for_upload)
-            retry._generator.generate_scene_clip.assert_awaited_once_with(script.scenes[1])
+            retry._generator.generate_scene_clip.assert_awaited_once_with(
+                script.scenes[1], source_url=script.source_url,
+            )
             self.assertEqual(Path(result.clips[0]).read_bytes(), source1.read_bytes())
             self.assertEqual(Path(result.clips[1]).read_bytes(), source2.read_bytes())
             self.assertEqual(retry._editor.compose_video.await_args.kwargs["audio_paths"], ["one.mp3", "two.mp3"])
@@ -682,6 +684,7 @@ class ProductionGateTests(unittest.TestCase):
             self.assertAlmostEqual(result.estimated_visual_cost_usd, 0.514)
             calls = service._generator.generate_scene_clip.await_args_list
             self.assertEqual([call.kwargs["mode_override"] for call in calls], ["video", "image"])
+            self.assertEqual([call.kwargs["source_url"] for call in calls], [script.source_url] * 2)
             report = json.loads(Path(result.report_path).read_text(encoding="utf-8"))
             self.assertTrue(report["quality_passed"])
             self.assertEqual(report["video_sha256"], hashlib.sha256(output.read_bytes()).hexdigest())
@@ -706,7 +709,7 @@ class ProductionGateTests(unittest.TestCase):
             output.touch()
             script = sample_script()
 
-            async def generate(scene):
+            async def generate(scene, **_kwargs):
                 if scene.scene_number == 2:
                     raise RuntimeError("API failed")
                 return str(source)
@@ -723,7 +726,9 @@ class ProductionGateTests(unittest.TestCase):
             second._generator = SimpleNamespace(generate_scene_clip=AsyncMock(return_value=str(source)))
             result = asyncio.run(second.produce_video(script))
             self.assertTrue(result.success)
-            second._generator.generate_scene_clip.assert_awaited_once_with(script.scenes[1])
+            second._generator.generate_scene_clip.assert_awaited_once_with(
+                script.scenes[1], source_url=script.source_url,
+            )
 
     def test_narration_failure_stops_before_paid_visual_generation(self):
         service = ProductionService()

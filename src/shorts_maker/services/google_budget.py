@@ -20,7 +20,7 @@ _BUDGET_TIMEZONE = ZoneInfo("America/Los_Angeles")  # Cloud Billing calendar per
 _SCHEMA = """CREATE TABLE IF NOT EXISTS requests (
     id TEXT PRIMARY KEY, period TEXT NOT NULL, model TEXT NOT NULL,
     estimated_usd TEXT NOT NULL, reserved_krw INTEGER NOT NULL,
-    status TEXT NOT NULL, created_utc TEXT NOT NULL
+    status TEXT NOT NULL, created_utc TEXT NOT NULL, source_url TEXT
 )"""
 
 
@@ -103,8 +103,13 @@ def check_google_budget(estimated_usd: float, request_count: int = 1) -> None:
         raise RuntimeError("GOOGLE_BUDGET_EXCEEDED: 비용 장부에 접근할 수 없습니다.") from error
 
 
-def reserve_google_output(mode: str, model: str, duration_seconds: int = 0) -> str | None:
+def reserve_google_output(mode: str, model: str, duration_seconds: int = 0,
+                          *, source_url: str | None = None) -> str | None:
     """Persist one model-priced request before sending it; failed calls stay reserved."""
+    if source_url is not None and not isinstance(source_url, str):
+        raise ValueError("Google 요청 출처는 URL 문자열이어야 합니다.")
+    if source_url is not None:
+        source_url = source_url.strip() or None
     estimate = estimated_scene_cost(mode, model, duration_seconds)
     period = _budget_period()
     if period is None:
@@ -115,10 +120,13 @@ def reserve_google_output(mode: str, model: str, duration_seconds: int = 0) -> s
         with closing(_connect_existing()) as db, db:
             db.execute("BEGIN IMMEDIATE")
             _check(db, period, amount)
+            if "source_url" not in {column[1] for column in db.execute("PRAGMA table_info(requests)")}:
+                db.execute("ALTER TABLE requests ADD COLUMN source_url TEXT")
             db.execute(
-                "INSERT INTO requests VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO requests (id, period, model, estimated_usd, reserved_krw, status, created_utc, source_url) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (request_id, period, model, str(estimate), amount, "reserved",
-                 datetime.now(timezone.utc).isoformat()),
+                 datetime.now(timezone.utc).isoformat(), source_url),
             )
     except (OSError, sqlite3.Error) as error:
         raise RuntimeError("GOOGLE_BUDGET_EXCEEDED: 비용 장부에 접근할 수 없습니다.") from error
@@ -151,6 +159,10 @@ def budget_status() -> dict:
                              "SELECT status, COUNT(*), SUM(reserved_krw) FROM requests "
                              "WHERE period = ? GROUP BY status", (period,),
                          )}
+            by_source = dict(db.execute(
+                "SELECT source_url, SUM(reserved_krw) FROM requests "
+                "WHERE period = ? AND source_url IS NOT NULL GROUP BY source_url", (period,),
+            )) if "source_url" in {column[1] for column in db.execute("PRAGMA table_info(requests)")} else {}
     except (OSError, sqlite3.Error) as error:
         raise RuntimeError("GOOGLE_BUDGET_EXCEEDED: 비용 장부에 접근할 수 없습니다. --init으로 최초 생성해야 합니다.") from error
     used = settings.google_budget_opening_krw + local
@@ -159,6 +171,8 @@ def budget_status() -> dict:
             "opening_krw": settings.google_budget_opening_krw,
             "local_reserved_krw": local,
             "reserved_by_model_krw": by_model,
+            "reserved_by_source_krw": by_source,
+            "unattributed_reserved_krw": local - sum(by_source.values()),
             "requests_by_status": by_status,
             "remaining_krw": max(0, settings.google_monthly_budget_krw - used),
             "usd_krw_reserve_rate": settings.google_usd_krw_rate}

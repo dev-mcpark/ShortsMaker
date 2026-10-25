@@ -581,19 +581,22 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(asyncio.run(generator.generate_scene_clip(scene)), "background.mp4")
         generator.mode = "image"
         self.assertEqual(asyncio.run(generator.generate_scene_clip(scene)), "image.png")
-        generator._generate_background_video.assert_awaited_once_with(scene)
-        generator._generate_image_gemini.assert_awaited_once_with(scene)
+        generator._generate_background_video.assert_awaited_once_with(scene, source_url=None)
+        generator._generate_image_gemini.assert_awaited_once_with(scene, None)
 
     def test_sequential_generation_waits_only_between_scenes(self):
         generator = object.__new__(VideoGenerator)
         generator.mode = "image"
         generator.generate_scene_clip = AsyncMock(side_effect=["scene_1.png", "scene_2.png"])
-        script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=i) for i in (1, 2)])
+        script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=i) for i in (1, 2)],
+                                 source_url="https://example.com/story")
 
         with patch("shorts_maker.generator.video_generator.asyncio.sleep", new_callable=AsyncMock) as delay:
             result = asyncio.run(generator._generate_clips_sequential(script))
 
         self.assertEqual(result, ["scene_1.png", "scene_2.png"])
+        self.assertEqual([call.kwargs["source_url"] for call in generator.generate_scene_clip.await_args_list],
+                         [script.source_url] * 2)
         delay.assert_awaited_once_with(settings.scene_buffer_seconds)
 
     def test_parallel_failure_does_not_create_publishable_placeholder(self):
@@ -603,7 +606,8 @@ class WorkflowTests(unittest.TestCase):
         generator._create_mock_image = Mock()
         scenes = [SimpleNamespace(scene_number=1), SimpleNamespace(scene_number=2)]
 
-        async def generate(scene):
+        async def generate(scene, *, source_url):
+            self.assertEqual(source_url, "https://example.com/story")
             if scene.scene_number == 1:
                 raise RuntimeError("generation failed")
             return "scene_2.png"
@@ -611,7 +615,9 @@ class WorkflowTests(unittest.TestCase):
         generator.generate_scene_clip = generate
         with patch("shorts_maker.generator.video_generator.asyncio.sleep", new_callable=AsyncMock):
             with self.assertRaisesRegex(RuntimeError, "generation failed"):
-                asyncio.run(generator._generate_clips_parallel(SimpleNamespace(scenes=scenes)))
+                asyncio.run(generator._generate_clips_parallel(SimpleNamespace(
+                    scenes=scenes, source_url="https://example.com/story",
+                )))
 
         generator._create_mock_image.assert_not_called()
 
