@@ -22,7 +22,7 @@ from shorts_maker.planner.script_planner import ScriptPlanner, ShortsScript
 from shorts_maker.planner.models import ScriptGenerationContext
 from shorts_maker.generator.video_generator import VIDEO_PROMPT_VERSION, VideoGenerator
 from shorts_maker.editor.video_editor import VideoEditor
-from shorts_maker.uploader.youtube_uploader import YouTubeUploader
+from shorts_maker.uploader.youtube_uploader import YouTubeAuthRequired, YouTubeUploader
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
@@ -884,7 +884,17 @@ class ProductionService:
                 return self._failed_result("이전 업로드 결과가 확인되지 않았습니다. YouTube Studio에서 확인하세요.",
                                            video_path=video_path)
             uploader = self._get_uploader()
-            video_id = await uploader.upload(video_path, metadata)
+            try:
+                video_id = await uploader.upload(video_path, metadata)
+            except YouTubeAuthRequired as error:
+                try:
+                    pending_path.unlink()
+                except OSError:
+                    return self._failed_result(
+                        "YouTube 인증에 실패했고 업로드 보류 기록을 지우지 못했습니다. "
+                        "Studio에서 확인하세요.", video_path=video_path,
+                    )
+                return self._failed_result(str(error), video_path=video_path)
 
             if video_id:
                 report_path = await asyncio.to_thread(
@@ -954,6 +964,16 @@ class ProductionService:
             or not isinstance(upload_metadata.get("contains_synthetic_media"), bool)
         ):
             return self._failed_result("승인된 대본의 자동 업로드에는 검토한 제목·설명·AI 공개 선택이 필요합니다.")
+
+        if auto_upload:
+            try:
+                await asyncio.to_thread(self._get_uploader().get_authenticated_service,
+                                        interactive=False)
+            except Exception:
+                return self._failed_result(
+                    "YOUTUBE_AUTH_REQUIRED: 비공개 자동 업로드 인증을 확인할 수 없습니다. "
+                    "제작 전에 YouTube 계정을 다시 연결하세요."
+                )
 
         # Step 1: Script Generation, or a reviewed script supplied by the caller.
         script = approved_script

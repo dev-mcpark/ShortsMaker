@@ -134,6 +134,8 @@ Place your secrets in the `config/credentials/` directory:
 - `service_account.json`: Your Google Cloud Service Account key.
 - `client_secrets.json`: Your YouTube OAuth 2.0 Client Secret.
 
+If YouTube upload authorization expires, run `.venv/bin/python -m shorts_maker.uploader.youtube_uploader --auth-only` and finish the browser sign-in. This reconnects the upload account without creating or uploading a video. A full run with private auto-upload checks saved authorization before paid planning and stops with `YOUTUBE_AUTH_REQUIRED` if it cannot refresh without interaction. The ordinary publishing action can still prompt for sign-in when used manually; an authentication failure before the media request leaves the reviewed video retryable.
+
 Configure your API keys in `config/.env`:
 ```ini
 OPENAI_API_KEY=sk-...

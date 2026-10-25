@@ -23,7 +23,7 @@ from shorts_maker.planner.content_enricher import ContentEnricher
 from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.planner.script_planner import ScriptPlanner
 from shorts_maker.services.production_service import ProductionService
-from shorts_maker.uploader.youtube_uploader import YouTubeUploader
+from shorts_maker.uploader.youtube_uploader import YouTubeAuthRequired, YouTubeUploader
 from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.character_video_generator import CharacterVideoGenerator
 from shorts_maker.utils.config import settings
@@ -354,6 +354,37 @@ class ProductionGateTests(unittest.TestCase):
                         uploader.get_authenticated_service()
             self.assertEqual(token.read_text(encoding="utf-8"), "{}")
             login.assert_called_once()
+
+    def test_noninteractive_upload_auth_does_not_launch_login(self):
+        with tempfile.TemporaryDirectory() as directory:
+            token = Path(directory) / "token.json"
+            token.write_text("{}", encoding="utf-8")
+            uploader = object.__new__(YouTubeUploader)
+            uploader.token_file = str(token)
+            uploader.client_secrets_file = str(Path(directory) / "client_secrets.json")
+            uploader.scopes = ["https://www.googleapis.com/auth/youtube.upload"]
+            uploader.logger = Mock()
+            credentials = SimpleNamespace(
+                valid=False, expired=True, refresh_token="saved",
+                refresh=Mock(side_effect=OSError("invalid_grant")),
+            )
+            with patch("shorts_maker.uploader.youtube_uploader.Credentials.from_authorized_user_info",
+                       return_value=credentials), patch(
+                "shorts_maker.uploader.youtube_uploader.InstalledAppFlow.from_client_secrets_file",
+            ) as login:
+                with self.assertRaisesRegex(RuntimeError, "YOUTUBE_AUTH_REQUIRED"):
+                    uploader.get_authenticated_service(interactive=False)
+            login.assert_not_called()
+            self.assertEqual(token.read_text(encoding="utf-8"), "{}")
+
+    def test_upload_auth_failure_occurs_before_media_request(self):
+        uploader = object.__new__(YouTubeUploader)
+        uploader.logger = Mock()
+        uploader.get_authenticated_service = Mock(side_effect=OSError("offline"))
+        with patch("shorts_maker.uploader.youtube_uploader.MediaFileUpload") as media:
+            with self.assertRaisesRegex(YouTubeAuthRequired, "YOUTUBE_AUTH_REQUIRED"):
+                uploader._upload_sync("unused.mp4", {"contains_synthetic_media": True})
+        media.assert_not_called()
 
     def test_youtube_upload_sends_private_synthetic_disclosure(self):
         uploader = object.__new__(YouTubeUploader)
@@ -805,6 +836,31 @@ class ProductionGateTests(unittest.TestCase):
             self.assertFalse(changed.success)
             self.assertIn("변경", changed.error)
             service._uploader.upload.assert_awaited_once()
+
+    @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_auth_failure_clears_upload_claim_for_retry(self, _check):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output.mp4"
+            output.write_bytes(b"reviewed video")
+            output.with_suffix(".production.json").write_text(json.dumps({
+                "video_path": str(output), "quality_passed": True,
+                "video_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
+                "youtube_id": None,
+            }), encoding="utf-8")
+            service = ProductionService()
+            service._uploader = SimpleNamespace(upload=AsyncMock(
+                side_effect=YouTubeAuthRequired("YOUTUBE_AUTH_REQUIRED"),
+            ))
+
+            failed = asyncio.run(service.upload_to_youtube(str(output), {"title": "Example"}))
+            self.assertFalse(failed.success)
+            self.assertIn("YOUTUBE_AUTH_REQUIRED", failed.error)
+            self.assertFalse(output.with_suffix(".upload-pending.json").exists())
+
+            service._uploader.upload = AsyncMock(return_value="video-id")
+            retried = asyncio.run(service.upload_to_youtube(str(output), {"title": "Example"}))
+            self.assertTrue(retried.success)
+            self.assertEqual(retried.youtube_id, "video-id")
 
     @patch("shorts_maker.services.production_service.check_video_quality")
     def test_uncertain_upload_requires_studio_check_before_retry(self, _check):

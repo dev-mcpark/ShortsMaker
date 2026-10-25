@@ -389,6 +389,7 @@ class WorkflowTests(unittest.TestCase):
 
     def test_full_pipeline_retains_work_after_upload_failure(self):
         service = ProductionService()
+        service._uploader = SimpleNamespace(get_authenticated_service=Mock(return_value=object()))
         script = SimpleNamespace(title="Title", description="Description", tags=[],
                                  source_url="https://example.com/report")
         service.generate_script = AsyncMock(return_value=(script, None))
@@ -417,6 +418,7 @@ class WorkflowTests(unittest.TestCase):
 
     def test_full_pipeline_reuses_approved_script_and_assets_for_private_upload(self):
         service = ProductionService(mode="video")
+        service._uploader = SimpleNamespace(get_authenticated_service=Mock(return_value=object()))
         script = SimpleNamespace(title="Approved", description="Source", tags=["Shorts"])
         clips = {1: "scene.mp4"}
         audio = ["scene.mp3"]
@@ -442,6 +444,22 @@ class WorkflowTests(unittest.TestCase):
             script, finish_phase=False, manual_clip_paths=clips, prepared_audio_paths=audio,
         )
         service.upload_to_youtube.assert_awaited_once_with("render.mp4", metadata)
+
+    def test_auto_upload_checks_auth_before_paid_planning_or_render(self):
+        service = ProductionService()
+        service._uploader = SimpleNamespace(get_authenticated_service=Mock(
+            side_effect=RuntimeError("YOUTUBE_AUTH_REQUIRED"),
+        ))
+        service.generate_script = AsyncMock()
+        service.produce_video = AsyncMock()
+
+        result = asyncio.run(service.full_pipeline(auto_upload=True))
+
+        self.assertFalse(result.success)
+        self.assertIn("YOUTUBE_AUTH_REQUIRED", result.error)
+        service.generate_script.assert_not_awaited()
+        service.produce_video.assert_not_awaited()
+        service._uploader.get_authenticated_service.assert_called_once_with(interactive=False)
 
     def test_approved_script_upload_requires_explicit_reviewed_metadata_before_render(self):
         complete = {"title": "Approved", "description": "Source credit", "contains_synthetic_media": True}
@@ -493,7 +511,10 @@ class WorkflowTests(unittest.TestCase):
             service.generate_script = AsyncMock(return_value=(script, None))
             service._generator = SimpleNamespace(generate_scene_clip=AsyncMock(return_value=str(clip)))
             service._editor = SimpleNamespace(compose_video=AsyncMock(return_value=str(output)))
-            service._uploader = SimpleNamespace(upload=AsyncMock(return_value="video-id"))
+            service._uploader = SimpleNamespace(
+                get_authenticated_service=Mock(return_value=object()),
+                upload=AsyncMock(return_value="video-id"),
+            )
             phases = []
             service.set_progress_callback(lambda progress: phases.append(progress.phase))
 

@@ -10,6 +10,9 @@ from googleapiclient.errors import HttpError
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 
+class YouTubeAuthRequired(RuntimeError):
+    """Upload never started because its account could not be authenticated."""
+
 class YouTubeUploader:
     def __init__(self):
         self.logger = get_logger(__name__)
@@ -19,7 +22,7 @@ class YouTubeUploader:
         self.client_secrets_file = str(settings.client_secrets_path)
         self.token_file = str(settings.token_file_path)
 
-    def get_authenticated_service(self):
+    def get_authenticated_service(self, *, interactive: bool = True):
         creds = None
         # token.json 파일에 저장된 인증 정보가 있는지 확인 (보안: JSON 형식 사용)
         if os.path.exists(self.token_file):
@@ -41,6 +44,8 @@ class YouTubeUploader:
                     creds = None
 
             if not creds or not creds.valid:
+                if not interactive:
+                    raise RuntimeError("YOUTUBE_AUTH_REQUIRED: YouTube 업로드 계정을 다시 연결하세요.")
                 if not os.path.exists(self.client_secrets_file):
                     raise FileNotFoundError(f"{self.client_secrets_file} 파일이 없습니다. Google Console에서 다운로드해주세요.")
 
@@ -64,7 +69,10 @@ class YouTubeUploader:
             synthetic_media = metadata.get("contains_synthetic_media", True)
             if not isinstance(synthetic_media, bool):
                 raise ValueError("contains_synthetic_media must be a boolean")
-            youtube = self.get_authenticated_service()
+            try:
+                youtube = self.get_authenticated_service()
+            except Exception as error:
+                raise YouTubeAuthRequired("YOUTUBE_AUTH_REQUIRED: YouTube 업로드 계정을 다시 연결하세요.") from error
             
             body = {
                 "snippet": {
@@ -98,8 +106,18 @@ class YouTubeUploader:
             self.logger.info(f"Video URL: https://youtube.com/shorts/{response.get('id')}")
             return response.get('id')
 
+        except YouTubeAuthRequired:
+            raise
         except HttpError as e:
             self.logger.error(f"An HTTP error occurred: {e.resp.status} - {e.content}")
         except Exception as e:
             self.logger.error(f"An error occurred during upload: {e}")
         return None
+
+
+if __name__ == "__main__":
+    import sys
+    if sys.argv[1:] != ["--auth-only"]:
+        raise SystemExit("Usage: python -m shorts_maker.uploader.youtube_uploader --auth-only")
+    YouTubeUploader().get_authenticated_service()
+    print("YouTube upload authorization ready.")
