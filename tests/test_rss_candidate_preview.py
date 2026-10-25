@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.preview_rss_candidates import preview, render_html
+from scripts.preview_rss_candidates import main, preview, render_html
 from shorts_maker.planner.script_planner import ScriptPlanner
 from shorts_maker.utils.config import settings
 
@@ -86,6 +86,29 @@ class RSSCandidatePreviewTests(unittest.TestCase):
             self.assertTrue(output.exists())
             fetch.assert_called_once_with()
             openai.assert_not_called()
+
+    def test_command_preserves_previous_review_page(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(settings, "output_dir", Path(directory)), \
+                patch("scripts.preview_rss_candidates.ScriptPlanner") as planner_type, \
+                patch("sys.argv", ["preview_rss_candidates.py", "--category", "City"]), \
+                patch("builtins.print"):
+            planner = planner_type.for_rss_discovery.return_value
+            planner.rss_sources = {"City": ["https://example.com/feed"]}
+            planner._fetch_rss_feeds.side_effect = [
+                [{"category": "City", "source": "News", "title": "First",
+                  "content": "First lead", "url": "https://example.com/first"}],
+                [{"category": "City", "source": "News", "title": "Second",
+                  "content": "Second lead", "url": "https://example.com/second"}],
+            ]
+            main()
+            main()
+
+            pages = list((Path(directory) / "evaluation").glob("rss_candidate_preview_*.html"))
+            self.assertEqual(len(pages), 2)
+            contents = [page.read_text(encoding="utf-8") for page in pages]
+            self.assertTrue(any("First lead" in page for page in contents))
+            self.assertTrue(any("Second lead" in page for page in contents))
 
 
 if __name__ == "__main__":

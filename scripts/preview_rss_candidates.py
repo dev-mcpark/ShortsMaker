@@ -4,6 +4,7 @@ import argparse
 from datetime import datetime
 from html import escape
 from pathlib import Path
+from uuid import uuid4
 
 from bs4 import BeautifulSoup
 
@@ -62,7 +63,8 @@ def main() -> None:
     parser.add_argument("--category", action="append", required=True, help="Registered RSS category; repeat to combine")
     parser.add_argument("--all-recent", action="store_true", help="Show all recent leads passing collection filters for free editorial review")
     args = parser.parse_args()
-    filename = "rss_candidate_inventory.html" if args.all_recent else "rss_candidate_preview.html"
+    kind = "inventory" if args.all_recent else "preview"
+    filename = f"rss_candidate_{kind}_{datetime.now():%Y%m%d}_{uuid4().hex}.html"
     output = settings.output_dir / "evaluation" / filename
     print(preview(args.category, output, all_recent=args.all_recent))
 
