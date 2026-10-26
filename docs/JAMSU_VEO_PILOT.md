@@ -1,6 +1,6 @@
 # Jamsu Bridge visual pilot — unapproved
 
-Prepared: 2026-10-26. This is a shot brief for the selected story, not a Veo request or permission to spend. [STATUS.md](STATUS.md) owns the current gate and budget snapshot; [jamsu_bridge_review_draft.json](jamsu_bridge_review_draft.json) owns the provisional narration.
+Prepared: 2026-10-26; updated 2026-10-27. This is a shot brief for the selected story, not a Veo request or permission to spend. [STATUS.md](STATUS.md) owns the current gate and budget snapshot; [jamsu_bridge_review_draft.json](jamsu_bridge_review_draft.json) owns the provisional narration.
 
 ## Source boundary
 
@@ -11,6 +11,8 @@ Prepared: 2026-10-26. This is a shot brief for the selected story, not a Veo req
 ## First paid hypothesis: scene 3
 
 The question is whether a **raw moving shot** can show the design revision more clearly than the retained local diagram. Keep the lower bridge fixed and the elevated pink proposal distinct. Removing only the upper proposal must read as a change to a model, while the bridge itself stays intact. This does not visually prove why the city changed the plan; the source-attributed narration carries that reason.
+
+The owner found the first free whole-cut comparison unclear. A 2026-10-27 local motion proof now lifts the pink proposal layer away, then a separate plan-view scene widens the existing walkway at one level and the ending compares the two alternatives. This isolates the visual hypothesis before any model request; the revised whole cut still awaits the owner's judgment. The motion proof does not approve its flat art style or demonstrate that Veo will follow the same topology.
 
 | Item | Proposed value |
 | --- | --- |

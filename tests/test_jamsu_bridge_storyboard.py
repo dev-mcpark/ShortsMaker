@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image, ImageChops, ImageColor
 
-from scripts.render_jamsu_bridge_storyboard import BG, PINK, frame, pilot_seed
+from scripts.render_jamsu_bridge_storyboard import BG, PINK, TEAL, frame, pilot_motion_frame, pilot_seed
 
 
 class JamsuBridgeStoryboardTests(unittest.TestCase):
@@ -25,6 +25,12 @@ class JamsuBridgeStoryboardTests(unittest.TestCase):
         self.assertIsNone(ImageChops.difference(
             proposed.crop((0, 960, 720, 1280)), revised.crop((0, 960, 720, 1280))
         ).getbbox())
+        self.assertIsNone(ImageChops.difference(proposed, pilot_motion_frame(2)).getbbox())
+        self.assertIsNone(ImageChops.difference(revised, pilot_motion_frame(6)).getbbox())
+        self.assertIsNone(ImageChops.difference(
+            proposed.crop((100, 525, 620, 740)), pilot_motion_frame(4).crop((100, 525, 620, 740))
+        ).getbbox())
+        self.assertNotEqual(pilot_motion_frame(4).getpixel((300, 415)), proposed.getpixel((300, 415)))
 
     def test_plan_revisions_and_caption_space(self):
         self.assertEqual(frame(1, 1, 8).getpixel((100, 328)), ImageColor.getrgb(PINK))
@@ -33,10 +39,9 @@ class JamsuBridgeStoryboardTests(unittest.TestCase):
         revised = frame(3, 5, 8)
         self.assertEqual(old.getpixel((100, 328)), ImageColor.getrgb(PINK))
         self.assertEqual(revised.getpixel((100, 328)), ImageColor.getrgb(BG))
-        self.assertIsNotNone(ImageChops.difference(
-            frame(4, 0.5, 8).crop((130, 270, 410, 325)),
-            frame(4, 2, 8).crop((130, 270, 410, 325))
-        ).getbbox())
+        self.assertEqual(frame(4, 0.5, 8).getpixel((90, 430)), ImageColor.getrgb("#e4e9e6"))
+        self.assertEqual(frame(4, 2, 8).getpixel((90, 430)), ImageColor.getrgb(TEAL))
+        self.assertEqual(frame(4, 5, 8).getpixel((270, 340)), ImageColor.getrgb(BG))
         for scene in range(1, 6):
             region = frame(scene, 5, 8).crop((0, 640, 540, 960))
             self.assertIsNone(ImageChops.difference(

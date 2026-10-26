@@ -66,32 +66,35 @@ def frame(scene, t, duration):
         label(draw, (270, 555), "서울시: 홍수 시 안전성 등 고려", 24, MUTED)
     elif scene == 4:
         label(draw, (270, 132), "한 높이에서 넓히는 계획", 33)
-        bridge(draw, revised=True)
-        draw.rounded_rectangle((135, 240, 405, 258), radius=8, fill=MUTED)
-        if t >= 1:
-            draw.rounded_rectangle((135, 275, 405, 318), radius=9, fill=TEAL)
-            label(draw, (270, 355), "넓어진 보행 공간", 27, TEAL)
-        if t >= 2:
-            label(draw, (270, 185), "조망 공간 22곳", 26)
-        if t >= 4:
-            for x in (160, 330):
-                draw.rounded_rectangle((x, 458, x + 50, 491), radius=5,
+        label(draw, (270, 210), "설명용 평면도", 24, MUTED)
+        draw.rounded_rectangle((70, 370, 470, 495), radius=18, fill="#e4e9e6")
+        growth = max(0.0, min((t - 1.0) / 1.0, 1.0))
+        draw.rounded_rectangle((int(130 - 45 * growth), int(405 - 18 * growth),
+                                int(410 + 45 * growth), int(455 + 18 * growth)),
+                               radius=12, fill=TEAL if growth else INK)
+        if growth >= 1:
+            label(draw, (270, 300), "같은 높이 · 넓어진 보행 공간", 25, TEAL)
+        if t >= 2.5:
+            for x in (125, 205, 305, 385):
+                draw.rounded_rectangle((x, 371, x + 30, 390), radius=6, fill=TEAL)
+            label(draw, (270, 545), "조망 공간 22곳 계획", 24, MUTED)
+        if t >= 4.5:
+            for x in (170, 350):
+                draw.rounded_rectangle((x, 405, x + 48, 452), radius=5,
                                        fill=WATER, outline=INK, width=2)
-            label(draw, (270, 550), "배 통과 구간 투명 데크 2곳", 24, MUTED)
+            label(draw, (270, 585), "항로 두 구간에 투명 바닥", 23, MUTED)
     elif scene == 5:
         label(draw, (270, 132), "위로 올리는 길 → 기존 다리 확장", 29)
-        bridge(draw, x1=47, x2=250, y=335, raised=True)
-        label(draw, (150, 280), "2024 당선안", 22, PINK)
-        bridge(draw, x1=290, x2=493, y=335, revised=True)
-        label(draw, (392, 280), "2026 수정안", 22, TEAL)
-        if t >= 4:
-            label(draw, (270, 525), "개통 목표: 2027년 하반기", 28)
+        bridge(draw, x1=60, x2=240, y=335, raised=True)
+        label(draw, (150, 170), "2024 당선안", 22, PINK)
+        bridge(draw, x1=275, x2=510, y=335, revised=True)
+        label(draw, (392, 170), "2026 수정안", 22, TEAL)
     else:
         raise ValueError(f"Unknown Jamsu scene: {scene}")
     return image
 
 
-def pilot_seed(raised=True):
+def pilot_seed(raised=True, lift=0.0):
     """Unlettered model states for reviewing a possible scene-3 Veo first frame."""
     image = Image.new("RGB", (720, 1280), "#f1eee8")
     draw = ImageDraw.Draw(image)
@@ -103,13 +106,40 @@ def pilot_seed(raised=True):
     for x in (205, 505):
         draw.polygon(((x, 584), (x + 19, 584), (x + 22, 649), (x + 3, 649)),
                      fill="#667d84")
-    if raised:
+    if raised and lift < 1:
+        offset = int(460 * lift)
         for x in (216, 493):
-            draw.polygon(((x, 425), (x + 12, 425), (x + 18, 522), (x + 6, 522)),
+            draw.polygon(((x, 425 - offset), (x + 12, 425 - offset),
+                          (x + 18, 522 - offset), (x + 6, 522 - offset)),
                          fill="#8f7a86")
-        draw.polygon(((146, 397), (531, 397), (567, 433), (182, 433)), fill=PINK)
-        draw.polygon(((182, 433), (567, 433), (567, 448), (182, 448)), fill="#b95581")
+        draw.polygon(((146, 397 - offset), (531, 397 - offset),
+                      (567, 433 - offset), (182, 433 - offset)), fill=PINK)
+        draw.polygon(((182, 433 - offset), (567, 433 - offset),
+                      (567, 448 - offset), (182, 448 - offset)), fill="#b95581")
     return image
+
+
+def pilot_motion_frame(t):
+    progress = max(0.0, min((t - 3.0) / 2.0, 1.0))
+    return pilot_seed(progress < 1, progress * progress * (3 - 2 * progress))
+
+
+def render_pilot_motion(duration, output_dir):
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "scene_3.mp4"
+    command = [FFMPEG_BINARY, "-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo",
+               "-pix_fmt", "rgb24", "-s", "720x1280", "-r", "24", "-i", "-",
+               "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+               "-pix_fmt", "yuv420p", str(path)]
+    process = subprocess.Popen(command, stdin=subprocess.PIPE)
+    try:
+        for index in range(math.ceil(duration * 24)):
+            process.stdin.write(pilot_motion_frame(index / 24).tobytes())
+    finally:
+        process.stdin.close()
+    if process.wait() != 0 or path.stat().st_size <= 10_000:
+        raise RuntimeError("Pilot motion encode failed")
+    return path
 
 
 def render_scene(scene, duration, output_dir):
@@ -133,8 +163,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--audio-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--pilot-scene3", action="store_true", help="render only the free scene-3 motion proof")
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    if args.pilot_scene3:
+        with AudioFileClip(str(args.audio_dir / "scene_3.aiff")) as audio:
+            print(render_pilot_motion(audio.duration + 0.5, args.output_dir))
+        return
     for scene in range(1, 6):
         with AudioFileClip(str(args.audio_dir / f"scene_{scene}.aiff")) as audio:
             duration = audio.duration + 0.5
