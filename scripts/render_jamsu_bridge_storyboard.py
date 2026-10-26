@@ -91,6 +91,27 @@ def frame(scene, t, duration):
     return image
 
 
+def pilot_seed(raised=True):
+    """Unlettered model states for reviewing a possible scene-3 Veo first frame."""
+    image = Image.new("RGB", (720, 1280), "#f1eee8")
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((64, 210, 656, 930), radius=34, fill="#d9d5cb")
+    draw.rounded_rectangle((76, 198, 644, 910), radius=32, fill="#faf8f3")
+    draw.polygon(((112, 600), (557, 600), (618, 724), (173, 724)), fill="#99cbd5")
+    draw.polygon(((135, 522), (553, 522), (591, 566), (173, 566)), fill="#2d4756")
+    draw.polygon(((173, 566), (591, 566), (591, 584), (173, 584)), fill="#1c3442")
+    for x in (205, 505):
+        draw.polygon(((x, 584), (x + 19, 584), (x + 22, 649), (x + 3, 649)),
+                     fill="#667d84")
+    if raised:
+        for x in (216, 493):
+            draw.polygon(((x, 425), (x + 12, 425), (x + 18, 522), (x + 6, 522)),
+                         fill="#8f7a86")
+        draw.polygon(((146, 397), (531, 397), (567, 433), (182, 433)), fill=PINK)
+        draw.polygon(((182, 433), (567, 433), (567, 448), (182, 448)), fill="#b95581")
+    return image
+
+
 def render_scene(scene, duration, output_dir):
     path = output_dir / f"scene_{scene}.mp4"
     command = [FFMPEG_BINARY, "-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo",
