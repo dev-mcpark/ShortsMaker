@@ -401,6 +401,7 @@ class ProductionGateTests(unittest.TestCase):
                 body = youtube.videos.return_value.insert.call_args.kwargs["body"]
                 self.assertEqual(body["status"]["privacyStatus"], "private")
                 self.assertIs(body["status"]["containsSyntheticMedia"], expected)
+                self.assertEqual(body["snippet"]["defaultLanguage"], "ko")
             uploader.get_authenticated_service.reset_mock()
             self.assertIsNone(uploader._upload_sync("review.mp4", {"contains_synthetic_media": "no"}))
             uploader.get_authenticated_service.assert_not_called()

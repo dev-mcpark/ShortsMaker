@@ -522,6 +522,8 @@ class ScheduleManager:
             }
             if result.video_path:
                 updates['last_video_path'] = str(result.video_path)
+                updates['last_youtube_id'] = (getattr(result, 'youtube_id', None)
+                                              if result.success and schedule.get('auto_upload') else None)
             if schedule.get('direct_url') and (result.success or result.video_path):
                 updates['last_rendered_url'] = schedule['direct_url']
                 updates['enabled'] = False

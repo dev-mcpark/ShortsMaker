@@ -82,7 +82,7 @@ class YouTubeUploader:
             raise ValueError("contains_synthetic_media must be a boolean")
         return {
             "snippet": {"title": title, "description": description,
-                        "tags": list(tags), "categoryId": "22"},
+                        "tags": list(tags), "categoryId": "22", "defaultLanguage": "ko"},
             "status": {"privacyStatus": "private", "selfDeclaredMadeForKids": False,
                        "containsSyntheticMedia": synthetic_media},
         }

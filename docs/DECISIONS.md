@@ -643,3 +643,11 @@ The earlier source-link prefill could be erased in Studio or omitted from a call
 ## 2026-10-26 — Preflight automatic upload metadata before paid work
 
 The final upload gate alone can discover a missing source URL or malformed caller metadata after planning or rendering. Validate supplied request fields before automatic planning, then check the selected script's source URL against the chosen description before narration or visuals. Keep the final sidecar-based upload gate because a manually changed description or record can still arrive through Studio. A generated script's source cannot be checked before the planning that discovers it; this preflight only prevents avoidable downstream work.
+
+## 2026-10-26 — Link a scheduled private upload from its review card
+
+A successful scheduled private upload paused for editorial review but its Studio card showed only the local MP4. Retain the returned YouTube ID with that run's video path and show a fixed-host Shorts link only for a successful automatic upload with a safe ID. Clear the saved ID when a later render has no confirmed upload so it cannot be paired with the wrong cut. The schedule remains paused; the link is a review aid, not proof of public release or editorial acceptance.
+
+## 2026-10-26 — Label Korean upload text in future API requests
+
+The Sillim Studio details show Korean title and description with the default metadata language unset. [YouTube's `videos.insert` documentation](https://developers.google.com/youtube/data/reference/rest/v3/videos/insert) permits `snippet.defaultLanguage` in the upload request. Set it to `ko` for future ShortsMaker API uploads, whose title and description are Korean. Do not assume this edits earlier uploads or sets the spoken-audio language; the insert method's settable-field list does not include `defaultAudioLanguage`. The current private Sillim candidate needs its language fields reviewed in Studio before a separate public-release decision.

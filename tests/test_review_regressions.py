@@ -17,7 +17,9 @@ from PIL import Image
 from moviepy import ColorClip, VideoFileClip
 
 from shorts_maker.generator.video_generator import VideoGenerator
-from shorts_maker.gui.components.scheduling_tab import _reviewable_video_path, _schedule_readiness_messages
+from shorts_maker.gui.components.scheduling_tab import (
+    _reviewable_video_path, _reviewable_youtube_url, _schedule_readiness_messages,
+)
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.content_enricher import ContentEnricher
 from shorts_maker.planner.content_analyzer import ContentAnalyzer
@@ -500,7 +502,8 @@ class ReviewRegressions(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             manager = ScheduleManager(str(Path(directory) / "schedules.json"))
             schedule = manager.create_schedule("RSS", "09:00", auto_upload=True)
-            result = SimpleNamespace(success=True, video_path="/retained/video.mp4", error=None)
+            result = SimpleNamespace(success=True, video_path="/retained/video.mp4",
+                                     youtube_id="Mrlr_6IVgf8", error=None)
             with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
                 "shorts_maker.services.production_service.ProductionService.full_pipeline",
                 new_callable=AsyncMock, return_value=result,
@@ -513,6 +516,7 @@ class ReviewRegressions(unittest.TestCase):
             self.assertFalse(paused["enabled"])
             self.assertEqual(paused["run_count"], 1)
             self.assertEqual(paused["last_video_path"], "/retained/video.mp4")
+            self.assertEqual(paused["last_youtube_id"], "Mrlr_6IVgf8")
             pipeline.assert_awaited_once()
 
     def test_schedule_review_player_rejects_missing_and_external_files(self):
@@ -530,6 +534,13 @@ class ReviewRegressions(unittest.TestCase):
             self.assertIsNone(_reviewable_video_path(str(output / "missing.mp4")))
             self.assertIsNone(_reviewable_video_path(42))
             self.assertIsNone(_reviewable_video_path("bad\x00path.mp4"))
+
+    def test_schedule_review_link_accepts_only_video_ids(self):
+        self.assertEqual(_reviewable_youtube_url("Mrlr_6IVgf8"),
+                         "https://www.youtube.com/shorts/Mrlr_6IVgf8")
+        self.assertIsNone(_reviewable_youtube_url("https://evil.example/video"))
+        self.assertIsNone(_reviewable_youtube_url("bad?id=1"))
+        self.assertIsNone(_reviewable_youtube_url(42))
 
     def test_unverified_planning_result_pauses_repeating_schedule(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -562,6 +573,7 @@ class ReviewRegressions(unittest.TestCase):
             url = "https://example.com/article"
             schedule = manager.create_schedule("Private upload", "09:00", auto_upload=True,
                                                direct_url=url)
+            manager.update_schedule(schedule["id"], {"last_youtube_id": "stale-id"})
             backend = Mock()
             manager._scheduler = backend
             manager._scheduler_running = True
@@ -574,6 +586,7 @@ class ReviewRegressions(unittest.TestCase):
             stored = manager.get_schedule(schedule["id"])
             self.assertFalse(stored["enabled"])
             self.assertEqual(stored["last_result"], "rendered_failed")
+            self.assertIsNone(stored["last_youtube_id"])
             self.assertEqual(stored["last_rendered_url"], url)
             self.assertEqual(stored["run_count"], 1)
             pipeline.assert_awaited_once()

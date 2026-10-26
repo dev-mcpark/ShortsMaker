@@ -1,6 +1,7 @@
 """Schedule Management 탭 컴포넌트"""
 
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING
 
 from nicegui import ui
@@ -31,6 +32,12 @@ def _reviewable_video_path(path: object) -> str | None:
             return str(candidate)
     except (OSError, ValueError, RuntimeError):
         pass
+    return None
+
+
+def _reviewable_youtube_url(video_id: object) -> str | None:
+    if isinstance(video_id, str) and re.fullmatch(r'[A-Za-z0-9_-]{6,64}', video_id):
+        return f'https://www.youtube.com/shorts/{video_id}'
     return None
 
 
@@ -348,6 +355,11 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 ui.button('최근 영상 재생', on_click=review_dialog.open).props('flat dense color=teal')
                                             elif schedule.get('last_video_path'):
                                                 ui.label('최근 영상 파일을 찾을 수 없습니다. 출력 폴더를 확인하세요.').classes('text-xs text-amber-300')
+                                            youtube_url = _reviewable_youtube_url(schedule.get('last_youtube_id'))
+                                            if (youtube_url and schedule.get('auto_upload')
+                                                    and schedule.get('last_result') == 'success'):
+                                                ui.link('YouTube 비공개 검토본 보기', youtube_url, new_tab=True).classes(
+                                                    'text-xs text-teal-300')
 
                                             if registered:
                                                 with ui.element('div').classes('mt-2 p-2 bg-teal-900/30 rounded-lg border border-teal-500/20'):
