@@ -519,6 +519,31 @@ class ReviewRegressions(unittest.TestCase):
             self.assertEqual(paused["last_youtube_id"], "Mrlr_6IVgf8")
             pipeline.assert_awaited_once()
 
+    def test_three_private_rss_cycles_require_review_resume_even_after_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            filename = str(Path(directory) / "schedules.json")
+            schedule = ScheduleManager(filename).create_schedule("RSS", "09:00", auto_upload=True)
+            results = [SimpleNamespace(success=True, error=None, video_path=f"episode_{n}.mp4",
+                                       youtube_id=f"private_{n:06d}") for n in range(1, 4)]
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, side_effect=results,
+            ) as pipeline:
+                for number in range(1, 4):
+                    manager = ScheduleManager(filename)
+                    if number > 1:
+                        self.assertTrue(manager.toggle_schedule(schedule["id"]))
+                    asyncio.run(manager._execute_pipeline(schedule))
+                    stored = manager.get_schedule(schedule["id"])
+                    self.assertFalse(stored["enabled"])
+                    self.assertEqual(stored["last_result"], "success")
+                    self.assertEqual(stored["run_count"], number)
+                    self.assertEqual(stored["last_video_path"], f"episode_{number}.mp4")
+                    self.assertEqual(stored["last_youtube_id"], f"private_{number:06d}")
+                    asyncio.run(manager._execute_pipeline(schedule))
+                    self.assertEqual(pipeline.await_count, number)
+            self.assertTrue(all(call.kwargs["auto_upload"] for call in pipeline.await_args_list))
+
     def test_schedule_review_player_rejects_missing_and_external_files(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(
             settings, "output_dir", Path(directory) / "outputs"
