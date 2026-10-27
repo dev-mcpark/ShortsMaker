@@ -84,7 +84,7 @@ def frame(scene, t, duration):
                                        fill=WATER, outline=INK, width=2)
             label(draw, (270, 585), "항로 두 구간에 투명 바닥", 23, MUTED)
     elif scene == 5:
-        label(draw, (270, 132), "위로 올리는 길 → 기존 다리 확장", 29)
+        label(draw, (270, 132), "공중길 제외 → 기존 다리 보행 공간 확대", 29)
         bridge(draw, x1=60, x2=240, y=335, raised=True)
         label(draw, (150, 170), "2024 당선안", 22, PINK)
         bridge(draw, x1=275, x2=510, y=335, revised=True)
