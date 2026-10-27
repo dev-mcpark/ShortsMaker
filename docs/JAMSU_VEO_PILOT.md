@@ -10,7 +10,7 @@ Prepared: 2026-10-26; updated 2026-10-27. This is a shot brief for the selected 
 
 On 2026-10-27, the two original announcements were checked again against the retained Yuna audition. The spoken story does not assert whether the October 26 vehicle closure has happened, so that date crossing does not invalidate the current cut. Before buying final narration, replace scene 1's relative “최신 설계” with “2026년 수정안,” and make scene 5 say the **walking space on the existing bridge** widens; the 2026 announcement names pedestrian-deck expansion, not a new upper level or a measured bridge-width change. Re-record any scene whose text changes and rebuild the script-bound cut. Keep the current audition untouched until the owner judges its visual explanation.
 
-The draft now lists the 2024 article as a supporting URL for future production records and YouTube credit. Existing ignored Jamsu MP4 sidecars were written before that field existed; do not upload those as if their citation set were complete. Rebuild a later accepted cut with the final script so the production record binds both source URLs.
+The draft now lists the 2024 article as a supporting URL for future production records and YouTube credit. The local Yuna audition was re-rendered with both URLs in its sidecar, but it is still unapproved and not a final narration. Rebuild any later accepted cut with the final script so its own production record binds both source URLs.
 
 ## First paid hypothesis: scene 3
 
