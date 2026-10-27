@@ -391,7 +391,8 @@ class WorkflowTests(unittest.TestCase):
         service = ProductionService()
         service._uploader = SimpleNamespace(get_authenticated_service=Mock(return_value=object()))
         script = SimpleNamespace(title="Title", description="Description", tags=[],
-                                 source_url="https://example.com/report")
+                                 source_url="https://example.com/report",
+                                 supporting_source_urls=["https://example.com/context"])
         service.generate_script = AsyncMock(return_value=(script, None))
         service.produce_video = AsyncMock(return_value=ProductionResult(
             success=True, video_path="video.mp4", clips=["scene.png"], ready_for_upload=True,
@@ -409,12 +410,21 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(result.ready_for_upload)
         metadata = service.upload_to_youtube.await_args.args[1]
         self.assertEqual(metadata["description"],
-                         "Description\n\n출처: https://example.com/report")
+                         "Description\n\n출처: https://example.com/report"
+                         "\n\n출처: https://example.com/context")
 
     def test_source_credit_does_not_duplicate_existing_link(self):
         description = "설명\n출처: https://example.com/report"
         self.assertEqual(source_credited_description(description, "https://example.com/report"),
                          description)
+        self.assertEqual(source_credited_description(
+            "설명\n출처: https://example.com/report-extra", "https://example.com/report",
+            ["https://example.com/earlier"]),
+            "설명\n출처: https://example.com/report-extra\n\n"
+            "출처: https://example.com/report\n\n출처: https://example.com/earlier")
+        both = "자료: https://example.com/report; 보조: https://example.com/earlier"
+        self.assertEqual(source_credited_description(
+            both, "https://example.com/report", ["https://example.com/earlier"]), both)
 
     def test_full_pipeline_reuses_approved_script_and_assets_for_private_upload(self):
         service = ProductionService(mode="video")
@@ -500,6 +510,19 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("출처 URL", result.error)
         service.produce_video.assert_not_awaited()
         service.upload_to_youtube.assert_not_awaited()
+
+        secondary = asyncio.run(service.full_pipeline(
+            approved_script=SimpleNamespace(
+                source_url="https://example.com/article",
+                supporting_source_urls=["https://example.com/earlier"]),
+            auto_upload=True,
+            upload_metadata={"title": "Reviewed",
+                             "description": "출처: https://example.com/article",
+                             "contains_synthetic_media": True},
+        ))
+        self.assertFalse(secondary.success)
+        self.assertIn("모든 출처 URL", secondary.error)
+        service.produce_video.assert_not_awaited()
 
     def test_auto_upload_rejects_invalid_metadata_before_planning(self):
         service = ProductionService()

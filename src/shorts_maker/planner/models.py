@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import List, Optional, Dict, Any, Literal
+from shorts_maker.utils.source_manager import SourceManager
 
 
 @dataclass
@@ -50,6 +51,7 @@ class ShortsScript(BaseModel):
     music_direction: str = ""
     source_name: str
     source_url: str
+    supporting_source_urls: List[str] = Field(default_factory=list)
     generation_mode: str  # 'image', 'video' or 'hybrid'
     scenes: List[VideoScene] = Field(min_length=1)
 
@@ -58,6 +60,10 @@ class ShortsScript(BaseModel):
         numbers = [scene.scene_number for scene in self.scenes]
         if len(numbers) != len(set(numbers)):
             raise ValueError("씬 번호가 중복되었습니다.")
+        if (len(set(self.supporting_source_urls)) != len(self.supporting_source_urls)
+                or self.source_url in self.supporting_source_urls
+                or any(not SourceManager.is_allowed_url(url) for url in self.supporting_source_urls)):
+            raise ValueError("보조 출처 URL이 중복되거나 올바르지 않습니다.")
         return self
 
 

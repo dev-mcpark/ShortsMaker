@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import shutil
 import time
 import uuid
@@ -27,14 +28,34 @@ from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
 from shorts_maker.utils.config import settings
+from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.editor.quality_check import check_video_quality
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
 from shorts_maker.services.google_budget import check_google_budget
 
 
-def source_credited_description(description: str, source_url: str) -> str:
-    if source_url and source_url not in description:
-        return f"{description.rstrip()}\n\n출처: {source_url}".strip()
+def _required_source_urls(source_url: str | None, supporting: list[str] | tuple[str, ...] = ()) -> list[str]:
+    if (source_url is not None and not isinstance(source_url, str)
+            or not isinstance(supporting, (list, tuple))):
+        raise ValueError("출처 URL 형식이 올바르지 않습니다.")
+    urls = [url for url in (source_url, *supporting) if url]
+    if any(not isinstance(url, str) or not SourceManager.is_allowed_url(url) for url in urls):
+        raise ValueError("출처 URL 형식이 올바르지 않습니다.")
+    return list(dict.fromkeys(urls))
+
+
+def _has_source_credit(description: str, url: str) -> bool:
+    return url in {
+        match.rstrip(".,;!?)]}")
+        for match in re.findall(r'''https?://[^\s<>"']+''', description)
+    }
+
+
+def source_credited_description(description: str, source_url: str,
+                                supporting_source_urls: list[str] | tuple[str, ...] = ()) -> str:
+    for url in _required_source_urls(source_url, supporting_source_urls):
+        if not _has_source_credit(description, url):
+            description = f"{description.rstrip()}\n\n출처: {url}".strip()
     return description
 
 
@@ -755,6 +776,7 @@ class ProductionService:
                 "video_path": video_path,
                 "title": getattr(script, "title", None),
                 "source_url": getattr(script, "source_url", None),
+                "supporting_source_urls": getattr(script, "supporting_source_urls", []),
                 "script_key": script_key,
                 "production_mode": self.mode,
                 "paired_comparison_eligible": not bool(manual_paths),
@@ -875,12 +897,14 @@ class ProductionService:
                 )
 
             upload_body = YouTubeUploader.build_upload_body(metadata)
-            source_url = report.get("source_url")
-            if source_url is not None and not isinstance(source_url, str):
-                return self._failed_result("제작 기록의 출처 URL 형식이 올바르지 않습니다.",
-                                           video_path=video_path)
-            if source_url and source_url.strip() not in upload_body["snippet"]["description"]:
-                return self._failed_result("설명에 제작 기록의 출처 URL을 포함하세요.",
+            try:
+                source_urls = _required_source_urls(
+                    report.get("source_url"), report.get("supporting_source_urls", []))
+            except ValueError as error:
+                return self._failed_result(f"제작 기록의 {error}", video_path=video_path)
+            if any(not _has_source_credit(upload_body["snippet"]["description"], url)
+                   for url in source_urls):
+                return self._failed_result("설명에 제작 기록의 모든 출처 URL을 포함하세요.",
                                            video_path=video_path)
             if not recorded_hash:
                 report["video_sha256"] = current_hash
@@ -1042,18 +1066,21 @@ class ProductionService:
 
         metadata = None
         if auto_upload:
-            metadata = upload_metadata or {
-                "title": script.title,
-                "description": source_credited_description(
-                    script.description, getattr(script, "source_url", "")),
-                "tags": script.tags,
-                "contains_synthetic_media": True,
-            }
             try:
+                metadata = upload_metadata or {
+                    "title": script.title,
+                    "description": source_credited_description(
+                        script.description, getattr(script, "source_url", ""),
+                        getattr(script, "supporting_source_urls", [])),
+                    "tags": script.tags,
+                    "contains_synthetic_media": True,
+                }
                 description = YouTubeUploader.build_upload_body(metadata)["snippet"]["description"]
-                source_url = getattr(script, "source_url", "")
-                if source_url and source_url not in description:
-                    return self._failed_result("설명에 대본의 출처 URL을 포함하세요.")
+                source_urls = _required_source_urls(
+                    getattr(script, "source_url", ""),
+                    getattr(script, "supporting_source_urls", []))
+                if any(not _has_source_credit(description, url) for url in source_urls):
+                    return self._failed_result("설명에 대본의 모든 출처 URL을 포함하세요.")
             except (TypeError, ValueError) as error:
                 return self._failed_result(f"업로드 메타데이터 확인 실패: {error}")
 

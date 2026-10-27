@@ -35,7 +35,8 @@ def render_publishing_tab(state: 'AppState') -> None:
                     if state.script:
                         title_input.value = state.script.title
                         desc_input.value = source_credited_description(
-                            state.script.description, state.script.source_url)
+                            state.script.description, state.script.source_url,
+                            getattr(state.script, 'supporting_source_urls', []))
                         tags_input.value = ",".join(state.script.tags)
                     else:
                         safe_notify("No script loaded", type='warning')

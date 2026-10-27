@@ -40,6 +40,15 @@ def sample_script():
     )
 
 
+class SourceListTests(unittest.TestCase):
+    def test_script_rejects_duplicate_or_local_supporting_source(self):
+        script = sample_script()
+        for urls in ([script.source_url], ["https://example.com/earlier"] * 2,
+                     ["http://127.0.0.1/private"]):
+            with self.subTest(urls=urls), self.assertRaises(ValueError):
+                ShortsScript.model_validate({**script.model_dump(), "supporting_source_urls": urls})
+
+
 def fake_editor(output):
     return SimpleNamespace(
         prepare_narration=AsyncMock(return_value=["one.mp3", "two.mp3"]),
@@ -701,6 +710,7 @@ class ProductionGateTests(unittest.TestCase):
             output = Path(directory) / "output.mp4"
             output.touch()
             script = sample_script()
+            script.supporting_source_urls = ["https://example.com/context"]
             script.music_direction = "조용한 호기심, 강한 드럼은 피함"
             service = ProductionService(mode="hybrid")
             service._editor = fake_editor(output)
@@ -721,6 +731,7 @@ class ProductionGateTests(unittest.TestCase):
             self.assertTrue(report["quality_passed"])
             self.assertEqual(report["video_sha256"], hashlib.sha256(output.read_bytes()).hexdigest())
             self.assertEqual(report["source_url"], script.source_url)
+            self.assertEqual(report["supporting_source_urls"], script.supporting_source_urls)
             self.assertEqual(report["production_mode"], "hybrid")
             self.assertEqual(report["music_direction"], script.music_direction)
             self.assertEqual(report["bgm_track"], "documented.mp3")
@@ -872,7 +883,9 @@ class ProductionGateTests(unittest.TestCase):
             report_path.write_text(json.dumps({
                 "video_path": str(output), "quality_passed": True,
                 "video_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
-                "source_url": "https://example.com/article", "youtube_id": None,
+                "source_url": "https://example.com/article",
+                "supporting_source_urls": ["https://example.com/earlier"],
+                "youtube_id": None,
             }), encoding="utf-8")
             service = ProductionService()
             service._uploader = SimpleNamespace(upload=AsyncMock(return_value="video-id"))
@@ -885,8 +898,31 @@ class ProductionGateTests(unittest.TestCase):
             self.assertFalse(output.with_suffix(".upload-pending.json").exists())
             service._uploader.upload.assert_not_awaited()
 
-            credited = asyncio.run(service.upload_to_youtube(
+            primary_only = asyncio.run(service.upload_to_youtube(
                 str(output), {"title": "Example", "description": "출처: https://example.com/article"},
+            ))
+            self.assertFalse(primary_only.success)
+            service._uploader.upload.assert_not_awaited()
+
+            malformed_report = json.loads(report_path.read_text(encoding="utf-8"))
+            malformed_report["supporting_source_urls"] = "https://example.com/earlier"
+            report_path.write_text(json.dumps(malformed_report), encoding="utf-8")
+            malformed = asyncio.run(service.upload_to_youtube(
+                str(output), {"title": "Example", "description": (
+                    "출처: https://example.com/article\n"
+                    "출처: https://example.com/earlier")},
+            ))
+            self.assertFalse(malformed.success)
+            self.assertIn("형식", malformed.error)
+            self.assertFalse(output.with_suffix(".upload-pending.json").exists())
+            service._uploader.upload.assert_not_awaited()
+            malformed_report["supporting_source_urls"] = ["https://example.com/earlier"]
+            report_path.write_text(json.dumps(malformed_report), encoding="utf-8")
+
+            credited = asyncio.run(service.upload_to_youtube(
+                str(output), {"title": "Example", "description": (
+                    "출처: https://example.com/article\n"
+                    "출처: https://example.com/earlier")},
             ))
             self.assertTrue(credited.success)
             service._uploader.upload.assert_awaited_once()
