@@ -130,9 +130,15 @@ def render_story_review(script_path: Path, audio_paths: list[str], output_dir: P
     finally:
         partial.unlink(missing_ok=True)
 
-    source = (f'<a href="{escape(script.source_url, quote=True)}" target="_blank" '
-              f'rel="noopener noreferrer">{escape(script.source_name)}</a>'
-              if SourceManager.is_allowed_url(script.source_url) else escape(script.source_name))
+    source = escape(script.source_name)
+    if SourceManager.is_allowed_url(script.source_url):
+        source += (f' · <a href="{escape(script.source_url, quote=True)}" target="_blank" '
+                   'rel="noopener noreferrer">주 출처</a>')
+    source += "".join(
+        f' · <a href="{escape(url, quote=True)}" target="_blank" '
+        f'rel="noopener noreferrer">추가 출처 {index}</a>'
+        for index, url in enumerate(script.supporting_source_urls, 1)
+    )
     scenes = "".join(
         f'<li><strong>{duration:.1f}초</strong><p>{escape(scene.script_text)}</p>'
         f'<small>{escape(scene.visual_description)}</small></li>'

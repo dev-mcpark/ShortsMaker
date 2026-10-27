@@ -1,0 +1,49 @@
+{
+  "title": "잠수교 위의 분홍 공중길은 왜 사라졌을까?",
+  "description": "서울시의 2024년 잠수교 설계공모 당선안과 2026년 10월 수정 설계 발표를 비교한 미승인 이야기 초안입니다. 2024년 당선안에는 다리 위에 떠 있는 분홍색 공중보행데크가 있었지만, 서울시는 홍수 시 안전성 등을 고려해 이를 수정 설계에서 제외했다고 밝혔습니다. 지금 발표된 보행교는 아직 완공되지 않았으며 2027년 하반기 개통이 목표입니다. 두 발표의 이미지·도면은 복제하지 않고 자체 제작 개념도로만 검토합니다. 2024년 자료: https://mediahub.seoul.go.kr/archives/2011129 ; 2026년 자료: https://mediahub.seoul.go.kr/archives/2019683",
+  "tags": ["잠수교", "도시설계", "한강", "보행교"],
+  "mood": "calm",
+  "style": "source-grounded design revision story",
+  "music_direction": "처음에는 설계가 바뀐 이유를 궁금하게 만들고, 변경 이유에서는 리듬을 절제한다. 완공된 성과나 재난 장면처럼 들리는 극적인 음악은 피한다. 이 첫 이야기 오디션은 음악 없이 듣는다.",
+  "source_name": "서울시 — 잠수교 설계공모 당선안 (2024)·보행교 수정 설계 발표 (2026)",
+  "source_url": "https://mediahub.seoul.go.kr/archives/2019683",
+  "supporting_source_urls": ["https://mediahub.seoul.go.kr/archives/2011129"],
+  "generation_mode": "image",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Original conceptual side view of a low river bridge with a separate pink elevated walkway above it. Label this locally as the 2024 competition proposal, never as built footage.",
+      "script_text": "잠수교 위에 분홍색 공중 산책길이 생길 뻔했습니다. 그런데 2026년 수정안에서는 사라졌죠. 왜일까요?"
+    },
+    {
+      "scene_number": 2,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Show the 2024 proposal as two distinct walking levels in an original schematic, revealing the upper path only when named. Avoid copying the competition rendering.",
+      "script_text": "2024년 서울시 공모 당선안은 다리 위에 떠 있는 길을 더해, 한강을 다른 높이에서 보게 하는 구상이었습니다."
+    },
+    {
+      "scene_number": 3,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Conceptual design-review transition: remove the upper path while a restrained river-water boundary stays in frame. Show a safety consideration, not an invented flood failure or measured hazard.",
+      "script_text": "하지만 서울시는 홍수 때 안전성 등을 고려해, 그 공중 데크를 수정 설계에서 제외했다고 밝혔습니다."
+    },
+    {
+      "scene_number": 4,
+      "visual_mode": "image",
+      "duration_seconds": 8,
+      "visual_description": "Original revised-bridge schematic with one widened pedestrian level and small viewing bays. A separate close-up may indicate transparent floor at ship-passage areas; typeset 22 viewing areas and two transparent sections locally.",
+      "script_text": "대신 보행 공간을 넓히고, 스물두 곳의 조망 공간과 배가 지나는 두 구간의 투명 데크를 계획했습니다."
+    },
+    {
+      "scene_number": 5,
+      "visual_mode": "image",
+      "duration_seconds": 8,
+      "visual_description": "Side-by-side original proposal and revised-plan miniatures, both clearly marked as unbuilt concepts. End on the 2027 target date, not footage of a completed bridge.",
+      "script_text": "결국 한 층 위로 올리던 길은 빠지고, 기존 다리의 보행 공간을 넓히는 설계로 바뀌었습니다. 개통 목표는 2027년 하반기입니다."
+    }
+  ]
+}

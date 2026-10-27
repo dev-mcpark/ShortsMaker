@@ -78,7 +78,8 @@ class ScratchNarrationTests(unittest.TestCase):
             self.script(script)
             draft = json.loads(script.read_text(encoding="utf-8"))
             draft.update(title="<script>Draft</script>", description="<b>Unapproved</b>",
-                         source_name="<Source>", source_url="javascript:alert(1)")
+                         source_name="<Source>", source_url="javascript:alert(1)",
+                         supporting_source_urls=["https://example.com/earlier?a=1&b=2"])
             draft["scenes"][0]["visual_description"] = "<img src=x>"
             script.write_text(json.dumps(draft, ensure_ascii=False), encoding="utf-8")
             audio = output / "scene_1.aiff"
@@ -104,6 +105,8 @@ class ScratchNarrationTests(unittest.TestCase):
                 self.assertIn("&lt;script&gt;Draft&lt;/script&gt;", page)
                 self.assertIn("&lt;img src=x&gt;", page)
                 self.assertNotIn("javascript:", page)
+                self.assertIn('href="https://example.com/earlier?a=1&amp;b=2"', page)
+                self.assertIn("추가 출처 1", page)
                 self.assertIn("story_audio.m4a", page)
                 self.assertEqual((output / "story_audio.m4a").read_bytes(), b"combined audio")
                 run.assert_called_once()
@@ -112,6 +115,11 @@ class ScratchNarrationTests(unittest.TestCase):
                         scratch.render_story_review(script, [str(audio)], output)
                 self.assertEqual((output / "story_audio.m4a").read_bytes(), b"combined audio")
                 self.assertEqual(page_path.read_text(encoding="utf-8"), page)
+                draft["source_url"] = "https://example.com/current"
+                script.write_text(json.dumps(draft, ensure_ascii=False), encoding="utf-8")
+                page = scratch.render_story_review(script, [str(audio)], output).read_text(encoding="utf-8")
+                self.assertIn('href="https://example.com/current"', page)
+                self.assertIn("주 출처", page)
 
 
 if __name__ == "__main__":
