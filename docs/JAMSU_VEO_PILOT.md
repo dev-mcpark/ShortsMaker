@@ -1,6 +1,6 @@
 # Jamsu Bridge visual pilot — unapproved
 
-Prepared: 2026-10-26; updated 2026-10-27. This is a shot brief for the selected story, not a Veo request or permission to spend. [STATUS.md](STATUS.md) owns the current gate and budget snapshot; [jamsu_bridge_review_draft.json](jamsu_bridge_review_draft.json) owns the provisional narration.
+Prepared: 2026-10-26; updated 2026-10-27. This is a shot brief for the selected story, not a Veo request or permission to spend. [STATUS.md](STATUS.md) owns the current gate and budget snapshot; [the original draft](jamsu_bridge_review_draft.json) and [source-precise candidate](jamsu_bridge_narration_candidate.json) retain their separate provisional narration versions.
 
 ## Source boundary
 
@@ -11,6 +11,8 @@ Prepared: 2026-10-26; updated 2026-10-27. This is a shot brief for the selected 
 On 2026-10-27, the two original announcements were checked again against the retained Yuna audition. The spoken story does not assert whether the October 26 vehicle closure has happened, so that date crossing does not invalidate the current cut. The separate [narration candidate](jamsu_bridge_narration_candidate.json) replaces scene 1's relative “최신 설계” with “2026년 수정안” and specifies the **walking space on the existing bridge** in scene 5; the 2026 announcement names pedestrian-deck expansion, not a new upper level or a measured bridge-width change. Its [local Yuna audio review](../outputs/evaluation/jamsu_bridge_20261027/narration_candidate/story_review.html) is 1.5 seconds longer than the earlier story, so final voice timing and visual edits still need checking. The earlier audition remains saved for comparison; wait for the owner's visual judgment before buying final voice.
 
 The draft now lists the 2024 article as a supporting URL for future production records and YouTube credit. The local Yuna audition was re-rendered with both URLs in its sidecar. A frame audit also narrowed scene 5's on-screen title from whole-bridge expansion to expansion of walking space on the existing bridge, matching the 2026 announcement. This remains an unapproved audition with provisional spoken wording, not final narration. Rebuild any later accepted cut with the final script so its own production record binds both source URLs.
+
+The [source-precise local whole cut](../outputs/evaluation/jamsu_bridge_20261027/combined_review/review.html) now binds the new Yuna scenes to the corrected diagrams at 44.625 seconds. A [three-way music comparison](../outputs/evaluation/jamsu_bridge_20261027/combined_review/music_review.html) holds the visuals and speech fixed. Those links are free editorial auditions; the owner's visual and music decisions, final voice, and any raw Veo shot are still open.
 
 ## First paid hypothesis: scene 3
 
