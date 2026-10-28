@@ -1,4 +1,4 @@
-# Jamsu Bridge visual pilot — first frame approved, paid request pending
+# Jamsu Bridge visual pilot — raw shot review pending
 
 Prepared: 2026-10-26; updated 2026-10-28. This is a shot brief for the selected story, not permission to spend. [STATUS.md](STATUS.md) owns the current gate and budget snapshot; [the original draft](jamsu_bridge_review_draft.json) and [source-precise candidate](jamsu_bridge_narration_candidate.json) retain their separate narration versions.
 
@@ -36,6 +36,8 @@ The v3 941×1672 PNG is 1,949,449 bytes with SHA-256 `67478a1f29d9d31d0b41f6baaf
 > One continuous silent vertical shot of the supplied fictional architectural scale model. The low gray pedestrian bridge, its tiny model figures, and calm blue water remain fully visible, fixed, and intact. Above it, the empty pink elevated walkway with railings and two slender supports is a removable 2024 proposal layer. In one slow clean movement, only that entire pink proposal layer lifts straight upward and out of the exhibit model, leaving the lower bridge unchanged and unmarked. Locked camera, stable geometry, soft studio daylight, generous blank lower third for later editor captions. This illustrates a design revision, not physical demolition or real footage. No writing, numbers, logos, new figures, vehicles, new structures, rising water, flood, collapse, or damage.
 
 The first frame must already establish both levels. The raw clip passes only if a muted viewer can identify (1) the separate upper pink proposal, (2) its removal, and (3) the unchanged lower bridge, without text or a later overlay. Reject an attractive shot that merely pans across the bridge, changes both levels, invents a flood, or makes the deck seem physically demolished. Inspect first, change, and last frames, then watch the entire raw shot. Save the request record and raw result before any whole-cut edit; one rejected output does not authorize an automatic retry.
+
+On 2026-10-28, the owner separately approved one v3 Veo Lite request with a $0.24 ceiling. The one-shot runner submitted it once and saved an [8-second silent 720p raw clip](../outputs/evaluation/jamsu_scene3_native_20261028/scene_3.mp4) with SHA-256 `1dd7197d67a658cbb3aabcff3c2f8e6d4de4db8e93095c24afe9f28d17e3fd34`. The [muted raw comparison](../outputs/evaluation/jamsu_scene3_native_20261028/raw_review.html) places it beside the free diagram motion and shows start/change/end frames. A local frame audit sees the pink upper path lift away and disappear while the lower bridge, model figures, and calm water remain; it shows no flood or damage. The rising layer may still read as physical removal rather than a design decision, so **the owner's full-playback verdict is pending**. The app reserved ₩480, leaving ₩3,400 estimated October room; that is not a provider bill. This approval is exhausted. Do not reuse it for another output, final narration, or upload.
 
 ## Later scene map and spending gate
 
