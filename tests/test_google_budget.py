@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 from shorts_maker.generator.video_generator import VideoGenerator
 from shorts_maker.services.google_budget import (
     budget_status, check_google_budget, initialize_google_budget,
-    mark_google_result, reserve_google_output,
+    mark_google_result, reconcile_google_no_charge, reserve_google_output,
 )
 from shorts_maker.utils.character_video_generator import CharacterVideoGenerator
 from shorts_maker.utils.config import Settings, settings
@@ -114,6 +114,35 @@ class GoogleBudgetTests(unittest.TestCase):
         self.assertEqual(budget_status()["remaining_krw"], 432)
         with self.assertRaisesRegex(ValueError, "비용을 알 수 없는"):
             reserve_google_output("image", "unpriced-model")
+
+    def test_verified_no_charge_releases_only_failed_reserves_with_audit(self):
+        budget = patch.object(settings, "google_monthly_budget_krw", 2000)
+        budget.start()
+        self.addCleanup(budget.stop)
+        failed = reserve_google_output("video", "veo-3.1-lite-generate-001", 8)
+        self.assertTrue(mark_google_result(failed, "provider_limited"))
+        saved = reserve_google_output("image", settings.image_model_id)
+        self.assertTrue(mark_google_result(saved, "saved"))
+        before = budget_status()["remaining_krw"]
+        with self.assertRaisesRegex(ValueError, "근거"):
+            reconcile_google_no_charge([failed], "")
+        with self.assertRaises(ValueError):
+            reconcile_google_no_charge([failed, saved], "Cloud SKU count verified")
+        self.assertEqual(budget_status()["remaining_krw"], before)
+
+        self.assertEqual(reconcile_google_no_charge([failed], "Cloud SKU count verified"), 480)
+        status = budget_status()
+        self.assertEqual(status["remaining_krw"], before + 480)
+        self.assertEqual(status["verified_no_charge_krw"], 480)
+        self.assertFalse(mark_google_result(failed, "saved"))
+        with self.assertRaises(ValueError):
+            reconcile_google_no_charge([failed], "Cloud SKU count verified")
+        ledger = Path(self.directory.name) / "evaluation" / "google_budget.sqlite3"
+        with sqlite3.connect(ledger) as db:
+            self.assertEqual(db.execute(
+                "SELECT previous_status, original_reserved_krw, evidence "
+                "FROM no_charge_reconciliations WHERE request_id = ?", (failed,),
+            ).fetchone(), ("provider_limited", 480, "Cloud SKU count verified"))
 
     def test_parallel_requests_cannot_exceed_monthly_limit(self):
         with ThreadPoolExecutor(max_workers=2) as pool:
