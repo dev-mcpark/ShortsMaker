@@ -543,6 +543,15 @@ class ReviewRegressions(unittest.TestCase):
                 self.assertEqual(saved["last_script"], script.model_dump())
                 self.assertFalse(saved["enabled"])
                 self.assertNotIn("last_rendered_url", saved)
+                with self.assertRaisesRegex(ValueError, "바로 재개할 수 없습니다"):
+                    manager.toggle_schedule(schedule["id"])
+                manager.update_schedule(schedule["id"], {"enabled": True})
+                asyncio.run(manager._execute_pipeline(schedule))
+                self.assertEqual(manager.get_schedule(schedule["id"])["last_result"],
+                                 "script_review_pending")
+                self.assertFalse(manager.get_schedule(schedule["id"])["enabled"])
+                manager.reject_pending_script(schedule["id"])
+                self.assertFalse(manager.get_schedule(schedule["id"])["enabled"])
                 manager.toggle_schedule(schedule["id"])
                 asyncio.run(manager._execute_pipeline(schedule))
                 second = manager.create_schedule("Same article", "10:00", direct_url=script.source_url)
@@ -550,6 +559,37 @@ class ReviewRegressions(unittest.TestCase):
             pipeline.assert_awaited_once()
             self.assertEqual(manager.get_schedule(schedule["id"])["last_result"], "duplicate_url")
             self.assertEqual(manager.get_schedule(second["id"])["last_result"], "duplicate_url")
+
+    def test_rejected_rss_script_resumes_discovery_only_after_explicit_rejection(self):
+        script = ShortsScript(
+            title="First lead", description="A source-backed change", tags=[],
+            mood="calm", style="documentary", source_name="Source",
+            source_url="https://example.com/first", generation_mode="video",
+            scenes=[VideoScene(scene_number=1, visual_description="Show the decision",
+                               script_text="Explain the decision")],
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("RSS", "09:00")
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, return_value=ProductionResult(
+                    success=True, script=script, review_pending=True,
+                ),
+            ) as pipeline:
+                asyncio.run(manager._execute_pipeline(schedule))
+                with self.assertRaisesRegex(ValueError, "바로 재개할 수 없습니다"):
+                    manager.toggle_schedule(schedule["id"])
+                self.assertEqual(pipeline.await_count, 1)
+                rejected = manager.reject_pending_script(schedule["id"])
+                self.assertEqual(rejected["last_result"], "script_rejected")
+                self.assertEqual(rejected["last_script"], script.model_dump())
+                self.assertEqual(rejected["last_planned_url"], script.source_url)
+                self.assertTrue(rejected["enabled"])
+                asyncio.run(manager._execute_pipeline(schedule))
+                self.assertEqual(pipeline.await_count, 2)
+                self.assertEqual(manager.get_schedule(schedule["id"])["last_result"],
+                                 "script_review_pending")
 
     def test_three_private_rss_cycles_require_review_resume_even_after_restart(self):
         with tempfile.TemporaryDirectory() as directory:

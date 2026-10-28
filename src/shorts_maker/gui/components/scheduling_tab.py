@@ -399,6 +399,26 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 safe_refresh(schedule_list)
                                                 safe_refresh(history_list)
 
+                                            def reject_pending_script(sid=schedule['id']):
+                                                with ui.dialog() as dialog, ui.card():
+                                                    ui.label('이 각본을 제외하고 다음 소재를 찾을까요?')
+                                                    ui.label('RSS 일정은 다음 예약 시 다시 기획합니다. 직접 URL 일정은 중지 상태로 남습니다.').classes(
+                                                        'text-xs text-gray-400')
+                                                    with ui.row():
+                                                        ui.button('취소', on_click=dialog.close)
+
+                                                        def confirm_rejection():
+                                                            try:
+                                                                schedule_manager.reject_pending_script(sid)
+                                                                dialog.close()
+                                                                safe_refresh(schedule_list)
+                                                                safe_refresh(history_list)
+                                                            except (OSError, ValueError) as error:
+                                                                safe_notify(f'각본 제외 실패: {error}', type='negative')
+
+                                                        ui.button('각본 제외', on_click=confirm_rejection).props('color=amber')
+                                                dialog.open()
+
                                             def delete_schedule(sid=schedule['id'], sname=schedule['name']):
                                                 with ui.dialog() as dialog, ui.card():
                                                     ui.label(f'{sname} 일정을 삭제할까요?')
@@ -421,10 +441,14 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                             toggle_icon = 'pause' if enabled else 'play_arrow'
                                             toggle_color = 'amber' if enabled else 'green'
                                             toggle_tip = 'Pause' if enabled else 'Resume'
-                                            ui.button(
-                                                icon=toggle_icon,
-                                                on_click=toggle_schedule
-                                            ).props(f'round size=md color={toggle_color} aria-label="일정 {"일시정지" if enabled else "재개"}"').tooltip(toggle_tip)
+                                            if not enabled and schedule.get('last_result') == 'script_review_pending':
+                                                ui.button('각본 제외', on_click=reject_pending_script).props(
+                                                    'flat dense color=amber')
+                                            else:
+                                                ui.button(
+                                                    icon=toggle_icon,
+                                                    on_click=toggle_schedule
+                                                ).props(f'round size=md color={toggle_color} aria-label="일정 {"일시정지" if enabled else "재개"}"').tooltip(toggle_tip)
 
                                             ui.button(
                                                 icon='delete_outline',

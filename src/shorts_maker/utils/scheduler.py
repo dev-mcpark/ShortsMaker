@@ -289,10 +289,24 @@ class ScheduleManager:
         schedules = self.load_schedules()
         for schedule in schedules:
             if schedule['id'] == schedule_id:
+                if not schedule.get('enabled', True) and schedule.get('last_result') == 'script_review_pending':
+                    raise ValueError("검토 대기 각본은 바로 재개할 수 없습니다. 다음 소재를 찾으려면 각본을 제외하세요.")
                 new_state = not schedule.get('enabled', True)
                 return self.update_schedule(schedule_id, {'enabled': new_state}) is not None and new_state
 
         return None
+
+    def reject_pending_script(self, schedule_id: str) -> Optional[Dict[str, Any]]:
+        """Leave a reviewed-out script in history and resume only RSS discovery."""
+        schedule = self.get_schedule(schedule_id)
+        if schedule is None:
+            return None
+        if schedule.get('last_result') != 'script_review_pending' or schedule.get('enabled'):
+            raise ValueError("제외할 검토 대기 각본이 없습니다.")
+        return self.update_schedule(schedule_id, {
+            'last_result': 'script_rejected',
+            'enabled': not bool(schedule.get('direct_url')),
+        })
 
     def get_schedule(self, schedule_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -391,6 +405,9 @@ class ScheduleManager:
         schedule = self.get_schedule(schedule['id'])
         if schedule is None or not schedule.get('enabled', True):
             return
+        if schedule.get('last_result') == 'script_review_pending':
+            self.update_schedule(schedule['id'], {'enabled': False})
+            return
         self.logger.info(f"=== Executing scheduled pipeline: {schedule['name']} ===")
 
         try:
@@ -476,7 +493,7 @@ class ScheduleManager:
                     'last_run': datetime.now().isoformat(),
                     'run_count': schedule.get('run_count', 0) + 1,
                     'last_result': 'script_review_pending',
-                    'last_planned_url': schedule.get('direct_url'),
+                    'last_planned_url': result.script.source_url,
                     'last_script': result.script.model_dump(),
                     'enabled': False,
                 })
