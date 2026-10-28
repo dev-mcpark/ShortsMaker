@@ -704,10 +704,15 @@ class WorkflowTests(unittest.TestCase):
         generator._generate_image_gemini = AsyncMock(return_value="image.png")
         scene = SimpleNamespace(scene_number=1)
 
-        self.assertEqual(asyncio.run(generator.generate_scene_clip(scene)), "background.mp4")
+        self.assertEqual(asyncio.run(generator.generate_scene_clip(
+            scene, first_frame_path="reviewed.png", expected_first_frame_sha256="frame-hash",
+        )), "background.mp4")
         generator.mode = "image"
         self.assertEqual(asyncio.run(generator.generate_scene_clip(scene)), "image.png")
-        generator._generate_background_video.assert_awaited_once_with(scene, source_url=None)
+        generator._generate_background_video.assert_awaited_once_with(
+            scene, source_url=None, first_frame_path="reviewed.png",
+            expected_first_frame_sha256="frame-hash",
+        )
         generator._generate_image_gemini.assert_awaited_once_with(scene, None)
 
     def test_sequential_generation_waits_only_between_scenes(self):

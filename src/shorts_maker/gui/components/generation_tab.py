@@ -1,11 +1,14 @@
 """Video Generation 탭 컴포넌트 - Google AI Studio 스타일 중앙 융합 개편"""
 import asyncio
 import json
+from pathlib import Path
 from nicegui import ui
 from typing import TYPE_CHECKING
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify
 from shorts_maker.services.production_service import ProductionPhase, ProductionProgress
+from shorts_maker.services.visual_cost import scene_mode
+from shorts_maker.services.visual_review import approve_first_frame, inspect_frame, verified_first_frame
 from shorts_maker.gui.components.common.progress_utils import update_scene_grid
 from shorts_maker.utils.veo_prompt_exporter import VeoPromptExporter
 from shorts_maker.utils.logger import get_logger
@@ -22,6 +25,80 @@ SCENE_ACCENT = [
     ('from-teal-600', 'to-emerald-600', 'border-teal-500/30', 'bg-teal-950/20', 'text-teal-300'),
     ('from-fuchsia-600', 'to-rose-600', 'border-fuchsia-500/30', 'bg-fuchsia-950/20', 'text-fuchsia-300'),
 ]
+
+
+def render_first_frame_reviews(state: 'AppState') -> None:
+    """Preview and bind locally supplied Veo first frames before a paid scene request."""
+    if not state.script or state.manual_video_mode:
+        return
+    video_scenes = [scene for index, scene in enumerate(state.script.scenes)
+                    if scene_mode(state.mode, scene, index) == 'video']
+    if not video_scenes:
+        return
+    with ui.expansion('Veo 첫 프레임 검토', icon='image_search', value=True).classes(
+        'w-full bg-slate-900 border border-amber-700/40 rounded-lg'):
+        ui.label('각 장면의 내레이션에 맞는 9:16 이미지를 미리 본 뒤 승인하세요. 승인 기록이 없으면 새 Veo 영상은 생성되지 않습니다.').classes(
+            'text-xs text-amber-200')
+        ui.label('출처: ' + ' · '.join([state.script.source_url, *state.script.supporting_source_urls])).classes(
+            'text-xs text-slate-400')
+        for scene in video_scenes:
+            with ui.card().classes('w-full bg-slate-950 border border-slate-700'):
+                ui.label(f'장면 {scene.scene_number}').classes('font-bold text-white')
+                ui.label(f'내레이션: {scene.script_text}').classes('text-sm text-slate-200')
+                ui.label(f'화면: {scene.visual_description}').classes('text-xs text-slate-300')
+                ui.label(f'움직임: {scene.motion_instruction or "고정 카메라"}').classes('text-xs text-slate-400')
+                try:
+                    current_frame, _ = verified_first_frame(state.script, scene)
+                    ui.label(f'승인된 첫 프레임: {current_frame}').classes('text-xs text-teal-300')
+                except ValueError:
+                    ui.label('첫 프레임 승인 대기').classes('text-xs text-amber-300')
+                path_input = ui.input('첫 프레임 PNG/JPEG 경로').classes('w-full')
+                must_show = ui.textarea('반드시 보여야 할 내용 (한 줄에 하나)').classes('w-full')
+                must_avoid = ui.textarea('피해야 할 묘사 (한 줄에 하나)').classes('w-full')
+                reviewer_note = ui.input('검토 의견').classes('w-full')
+                preview_area = ui.column().classes('w-full')
+                previewed = {'path': None, 'sha256': None}
+
+                def preview(frame_input=path_input, area=preview_area, snapshot=previewed):
+                    try:
+                        path = str(Path(frame_input.value or '').resolve())
+                        digest = inspect_frame(path)
+                        snapshot.update(path=path, sha256=digest)
+                        area.clear()
+                        with area:
+                            ui.image(path).classes('w-full max-w-[230px] max-h-[410px]')
+                        safe_notify('이미지를 확인한 뒤 기준과 의견을 적어 승인하세요.', type='info')
+                    except (OSError, ValueError) as error:
+                        snapshot.update(path=None, sha256=None)
+                        safe_notify(f'첫 프레임 미리보기 실패: {error}', type='negative')
+
+                def approve(scene_number=scene.scene_number, frame_input=path_input,
+                            show_input=must_show, avoid_input=must_avoid,
+                            note_input=reviewer_note, snapshot=previewed):
+                    if not state.is_script_reviewed():
+                        safe_notify('현재 각본을 기획 탭에서 먼저 확인하세요.', type='warning')
+                        return
+                    current = next((item for item in state.script.scenes
+                                    if item.scene_number == scene_number), None)
+                    if current is None or not snapshot['sha256'] or snapshot['path'] != str(
+                        Path(frame_input.value or '').resolve()
+                    ):
+                        safe_notify('현재 이미지를 다시 미리보세요.', type='warning')
+                        return
+                    try:
+                        approve_first_frame(
+                            state.script, current, snapshot['path'],
+                            [line.strip() for line in (show_input.value or '').splitlines() if line.strip()],
+                            [line.strip() for line in (avoid_input.value or '').splitlines() if line.strip()],
+                            note_input.value or '', snapshot['sha256'],
+                        )
+                        safe_notify(f'장면 {scene_number}의 첫 프레임을 승인했습니다.', type='positive')
+                    except (OSError, ValueError) as error:
+                        safe_notify(f'첫 프레임 승인 실패: {error}', type='negative')
+
+                with ui.row():
+                    ui.button('이미지 미리보기', on_click=preview).props('flat color=amber')
+                    ui.button('이 첫 프레임 승인', on_click=approve).props('color=teal')
 
 
 def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
@@ -242,6 +319,16 @@ def render_generation_tab(state: 'AppState') -> None:
                     if not state.script:
                         safe_notify('로드된 각본이 없습니다. 스크립트 작성 후 실행해주십시오.', type='warning')
                         return
+                    if not state.is_script_reviewed():
+                        safe_notify('기획 탭에서 현재 각본을 먼저 확인하세요.', type='warning')
+                        return
+                    for index, scene in enumerate(state.script.scenes):
+                        if scene_mode(state.mode, scene, index) == 'video':
+                            try:
+                                verified_first_frame(state.script, scene)
+                            except ValueError:
+                                safe_notify('Veo 장면의 첫 프레임을 아래에서 미리 보고 승인하세요.', type='warning')
+                                return
                     ui.notify('🎬 비디오 자동 생성을 구동합니다. Vertex AI 비용 모니터링을 진행하십시오...', type='info')
                     await run_production()
 
@@ -261,6 +348,8 @@ def render_generation_tab(state: 'AppState') -> None:
             # --- 2A. LEFT SIDE: WIDE PREVIEW MONITOR (자동 모드 시 메인, 수동 모드 시 숨김/작게) ---
             # 자동 모드와 수동 모드 모두의 통합 뷰어
             with ui.column().classes('w-full flex-grow h-auto lg:h-full p-4 lg:p-6 overflow-visible lg:overflow-y-auto gap-5') as main_workspace_area:
+
+                render_first_frame_reviews(state)
 
                 # ── 대형 프리뷰 모니터 카드 (자동 생성 시 혹은 수동 편집 완료 시 띄움) ──
                 with ui.element('div').classes('w-full rounded-xl bg-slate-900 border border-slate-800 overflow-hidden flex flex-col shadow-xl') as preview_monitor_card:

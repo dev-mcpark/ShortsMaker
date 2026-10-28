@@ -31,6 +31,7 @@ from shorts_maker.utils.config import settings
 from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.editor.quality_check import check_video_quality
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
+from shorts_maker.services.visual_review import verified_first_frame
 from shorts_maker.services.google_budget import check_google_budget
 
 
@@ -337,7 +338,7 @@ class ProductionService:
         self._update_progress(ProductionPhase.FAILED, 0, f"오류: {error}")
         return ProductionResult(success=False, video_path=video_path, clips=clips or [], error=error)
 
-    def _scene_cache_dir(self, scene, mode: str) -> Path:
+    def _scene_cache_dir(self, scene, mode: str, first_frame_sha256: str | None = None) -> Path:
         overlay = (self.character_overlay_config or CharacterOverlayConfig()).to_dict()
         for key in ("character_image", "character_video"):
             path = overlay.get(key)
@@ -356,6 +357,7 @@ class ProductionService:
         }
         if mode == "video":
             identity_data["prompt_version"] = VIDEO_PROMPT_VERSION
+            identity_data["first_frame_sha256"] = first_frame_sha256
         identity = json.dumps(identity_data, sort_keys=True, ensure_ascii=False)
         digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
         return settings.clips_dir / "scenes" / digest
@@ -611,8 +613,14 @@ class ProductionService:
 
             # Estimate only new API requests; manual clips and valid cache entries cost nothing.
             visual_modes = [scene_mode(self.mode, scene, i) for i, scene in enumerate(script.scenes)]
+            first_frames = {
+                scene.scene_number: verified_first_frame(script, scene)
+                for scene, mode in zip(script.scenes, visual_modes)
+                if mode == "video" and scene.scene_number not in manual_paths
+            }
             cache_dirs = [
-                self._scene_cache_dir(scene, mode) if isinstance(script, ShortsScript) else None
+                self._scene_cache_dir(scene, mode, first_frames.get(scene.scene_number, (None, None))[1])
+                if isinstance(script, ShortsScript) and scene.scene_number not in manual_paths else None
                 for scene, mode in zip(script.scenes, visual_modes)
             ]
             cached_paths = []
@@ -678,12 +686,13 @@ class ProductionService:
                         path = manual or cached
                     else:
                         generator = self._get_generator()
-                        path = await generator.generate_scene_clip(
-                            scene, mode_override=visual_modes[index],
-                            source_url=getattr(script, "source_url", None),
-                        ) if self.mode == "hybrid" else await generator.generate_scene_clip(
-                            scene, source_url=getattr(script, "source_url", None),
-                        )
+                        kwargs = {'source_url': getattr(script, "source_url", None)}
+                        if self.mode == "hybrid":
+                            kwargs['mode_override'] = visual_modes[index]
+                        if scene.scene_number in first_frames:
+                            kwargs['first_frame_path'], kwargs['expected_first_frame_sha256'] = first_frames[
+                                scene.scene_number]
+                        path = await generator.generate_scene_clip(scene, **kwargs)
                         if cache_dirs[index]:
                             path = await asyncio.to_thread(
                                 self._save_clip, cache_dirs[index], visual_modes[index], path,

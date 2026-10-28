@@ -182,7 +182,8 @@ def render_main_page() -> None:
                 def on_mode_change(e):
                     state.mode = e.value
                     ui.notify(f'생성 모드가 {e.value.upper()}로 전환되었습니다.', type='info')
-                    # 모드 변경 시 에디터 영역 갱신 필요 시 호출 가능
+                    if state.current_view == 'workspace' and state.workspace_sub_tab == 'preview':
+                        render_active_view()
                 mode_select.on_value_change(on_mode_change)
 
                 # Cost/API Mode Toggle

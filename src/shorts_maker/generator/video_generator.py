@@ -117,16 +117,24 @@ class VideoGenerator:
             )
 
     async def generate_scene_clip(self, scene, mode_override: Optional[str] = None,
-                                  *, source_url: str | None = None) -> str:
+                                  *, source_url: str | None = None,
+                                  first_frame_path: str | None = None,
+                                  expected_first_frame_sha256: str | None = None) -> str:
         """현재 생성 모드에 맞는 단일 씬 클립을 만듭니다."""
         mode = mode_override or self.mode
         reserve = self._scene_output_reserve(mode)
         self._check_visual_cap(reserve)
         check_google_budget(reserve, self.max_veo_attempts if mode == "video" else 1)
         if mode == "video":
+            if not first_frame_path:
+                raise ValueError("FIRST_FRAME_REVIEW_REQUIRED: Veo 첫 프레임 검토가 필요합니다.")
             path = (await self._generate_background_video(
                 scene, settings.hybrid_veo_duration_seconds, source_url,
-            ) if self.mode == "hybrid" else await self._generate_background_video(scene, source_url=source_url))
+                first_frame_path, expected_first_frame_sha256,
+            ) if self.mode == "hybrid" else await self._generate_background_video(
+                scene, source_url=source_url, first_frame_path=first_frame_path,
+                expected_first_frame_sha256=expected_first_frame_sha256,
+            ))
             if self.character_overlay:
                 return await self._composite_character_on_video(path, scene)
             return path
@@ -147,11 +155,17 @@ class VideoGenerator:
         """순차적 클립 생성."""
         clips_paths = []
         for index, scene in enumerate(script.scenes):
+            mode = scene_mode(self.mode, scene, index)
+            kwargs = {'source_url': getattr(script, 'source_url', None)}
+            if mode == 'video':
+                from shorts_maker.services.visual_review import verified_first_frame
+                kwargs['first_frame_path'], kwargs['expected_first_frame_sha256'] = verified_first_frame(
+                    script, scene,
+                )
             path = await self.generate_scene_clip(
-                scene, mode_override=scene_mode(self.mode, scene, index),
-                source_url=getattr(script, "source_url", None),
+                scene, mode_override=mode, **kwargs,
             ) if self.mode == "hybrid" else await self.generate_scene_clip(
-                scene, source_url=getattr(script, "source_url", None),
+                scene, **kwargs,
             )
             clips_paths.append(path)
             if index < len(script.scenes) - 1:
@@ -188,7 +202,9 @@ class VideoGenerator:
     # ── Current Pipeline: Background Video + Character Composite ─────────
 
     async def _generate_background_video(self, scene, duration_seconds: Optional[int] = None,
-                                         source_url: str | None = None) -> str:
+                                         source_url: str | None = None,
+                                         first_frame_path: str | None = None,
+                                         expected_first_frame_sha256: str | None = None) -> str:
         """Stage 1: 배경 영상만 생성 (캐릭터 없이)."""
         output_path = str(settings.temp_dir / f"bg_scene_{scene.scene_number}_{uuid.uuid4().hex}.mp4")
 
@@ -205,7 +221,7 @@ class VideoGenerator:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None, self._run_veo_background_only, model_id, scene, output_path, duration_seconds,
-                source_url,
+                source_url, first_frame_path, expected_first_frame_sha256,
             )
             if os.path.exists(output_path):
                 self.logger.info(f"    ✅ Background video generated: {output_path}")
@@ -254,6 +270,7 @@ class VideoGenerator:
         first_frame_path: Optional[str] = None,
         request_budget_usd: Optional[float] = None,
         source_url: str | None = None,
+        expected_first_frame_sha256: str | None = None,
     ) -> None:
         """Veo API 호출을 재시도 로직과 함께 실행.
 
@@ -293,6 +310,9 @@ class VideoGenerator:
                 raise ValueError("Veo 첫 프레임은 세로 9:16 PNG 또는 JPEG여야 합니다.")
             first_frame = types.Image(image_bytes=image_bytes, mime_type=mime_type)
             image_sha256 = hashlib.sha256(image_bytes).hexdigest()
+            if (expected_first_frame_sha256 is not None
+                    and image_sha256 != expected_first_frame_sha256):
+                raise ValueError("승인된 Veo 첫 프레임이 변경됐습니다.")
 
         current_prompt = initial_prompt
 
@@ -415,6 +435,8 @@ class VideoGenerator:
     def _run_veo_background_only(
         self, model_id: str, scene, output_path: str, duration_seconds: Optional[int] = None,
         source_url: str | None = None,
+        first_frame_path: str | None = None,
+        expected_first_frame_sha256: str | None = None,
     ) -> None:
         """Veo로 배경 영상만 생성 (캐릭터 언급 없음)."""
         self.logger.info(
@@ -444,6 +466,8 @@ class VideoGenerator:
             scene_number=scene.scene_number,
             request_budget_usd=settings.max_visual_cost_usd,
             source_url=source_url,
+            first_frame_path=first_frame_path,
+            expected_first_frame_sha256=expected_first_frame_sha256,
         )
 
     # ── Image Helper ──────────────────────────────────────────────────────

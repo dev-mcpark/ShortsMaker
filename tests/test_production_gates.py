@@ -614,7 +614,10 @@ class ProductionGateTests(unittest.TestCase):
         service = ProductionService(mode="hybrid")
         service._editor = fake_editor("unused.mp4")
         service._generator = SimpleNamespace(generate_scene_clip=AsyncMock())
-        with patch.object(settings, "max_visual_cost_usd", 0.10):
+        with patch.object(settings, "max_visual_cost_usd", 0.10), patch(
+            "shorts_maker.services.production_service.verified_first_frame",
+            return_value=("reviewed.png", "frame-hash"),
+        ):
             result = asyncio.run(service.produce_video(sample_script()))
         self.assertFalse(result.success)
         self.assertIn("VISUAL_COST_CAP_EXCEEDED", result.error)
@@ -696,7 +699,10 @@ class ProductionGateTests(unittest.TestCase):
         service = ProductionService(mode="hybrid", max_veo_attempts=2)
         service._editor = fake_editor("unused.mp4")
         service._generator = SimpleNamespace(generate_scene_clip=AsyncMock())
-        with patch.object(settings, "max_visual_cost_usd", 0.90):
+        with patch.object(settings, "max_visual_cost_usd", 0.90), patch(
+            "shorts_maker.services.production_service.verified_first_frame",
+            return_value=("reviewed.png", "frame-hash"),
+        ):
             result = asyncio.run(service.produce_video(sample_script()))
         self.assertFalse(result.success)
         self.assertIn("$0.994", result.error)
@@ -719,7 +725,10 @@ class ProductionGateTests(unittest.TestCase):
             service._generator = SimpleNamespace(generate_scene_clip=AsyncMock(
                 side_effect=[str(output), str(output)],
             ))
-            with patch.object(ProductionService, "_save_clip", side_effect=lambda _dir, _mode, path: path):
+            with patch.object(ProductionService, "_save_clip", side_effect=lambda _dir, _mode, path: path), patch(
+                "shorts_maker.services.production_service.verified_first_frame",
+                return_value=("reviewed.png", "frame-hash"),
+            ):
                 result = asyncio.run(service.produce_video(script))
             self.assertTrue(result.success)
             self.assertEqual(result.generated_scenes, 2)
@@ -727,6 +736,8 @@ class ProductionGateTests(unittest.TestCase):
             calls = service._generator.generate_scene_clip.await_args_list
             self.assertEqual([call.kwargs["mode_override"] for call in calls], ["video", "image"])
             self.assertEqual([call.kwargs["source_url"] for call in calls], [script.source_url] * 2)
+            self.assertEqual(calls[0].kwargs["first_frame_path"], "reviewed.png")
+            self.assertNotIn("first_frame_path", calls[1].kwargs)
             report = json.loads(Path(result.report_path).read_text(encoding="utf-8"))
             self.assertTrue(report["quality_passed"])
             self.assertEqual(report["video_sha256"], hashlib.sha256(output.read_bytes()).hexdigest())
