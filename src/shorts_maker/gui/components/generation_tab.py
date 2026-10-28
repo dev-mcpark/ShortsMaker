@@ -49,13 +49,13 @@ def render_first_frame_reviews(state: 'AppState') -> None:
                 ui.label(f'움직임: {scene.motion_instruction or "고정 카메라"}').classes('text-xs text-slate-400')
                 try:
                     current_frame, _ = verified_first_frame(state.script, scene)
-                    ui.label(f'승인된 첫 프레임: {current_frame}').classes('text-xs text-teal-300')
+                    status_label = ui.label(f'승인된 첫 프레임: {current_frame}').classes('text-xs text-teal-300')
                 except ValueError:
-                    ui.label('첫 프레임 승인 대기').classes('text-xs text-amber-300')
-                path_input = ui.input('첫 프레임 PNG/JPEG 경로').classes('w-full')
-                must_show = ui.textarea('반드시 보여야 할 내용 (한 줄에 하나)').classes('w-full')
-                must_avoid = ui.textarea('피해야 할 묘사 (한 줄에 하나)').classes('w-full')
-                reviewer_note = ui.input('검토 의견').classes('w-full')
+                    status_label = ui.label('첫 프레임 승인 대기').classes('text-xs text-amber-300')
+                path_input = ui.input('첫 프레임 PNG/JPEG 경로').classes('w-full').props('dark')
+                must_show = ui.textarea('반드시 보여야 할 내용 (한 줄에 하나)').classes('w-full').props('dark')
+                must_avoid = ui.textarea('피해야 할 묘사 (한 줄에 하나)').classes('w-full').props('dark')
+                reviewer_note = ui.input('검토 의견').classes('w-full').props('dark')
                 preview_area = ui.column().classes('w-full')
                 previewed = {'path': None, 'sha256': None}
 
@@ -74,7 +74,7 @@ def render_first_frame_reviews(state: 'AppState') -> None:
 
                 def approve(scene_number=scene.scene_number, frame_input=path_input,
                             show_input=must_show, avoid_input=must_avoid,
-                            note_input=reviewer_note, snapshot=previewed):
+                            note_input=reviewer_note, snapshot=previewed, status=status_label):
                     if not state.is_script_reviewed():
                         safe_notify('현재 각본을 기획 탭에서 먼저 확인하세요.', type='warning')
                         return
@@ -92,6 +92,8 @@ def render_first_frame_reviews(state: 'AppState') -> None:
                             [line.strip() for line in (avoid_input.value or '').splitlines() if line.strip()],
                             note_input.value or '', snapshot['sha256'],
                         )
+                        status.text = f'승인된 첫 프레임: {snapshot["path"]}'
+                        status.classes(replace='text-xs text-teal-300')
                         safe_notify(f'장면 {scene_number}의 첫 프레임을 승인했습니다.', type='positive')
                     except (OSError, ValueError) as error:
                         safe_notify(f'첫 프레임 승인 실패: {error}', type='negative')
