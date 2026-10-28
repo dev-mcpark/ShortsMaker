@@ -1,6 +1,7 @@
 """Regression checks for production and local data boundaries."""
 
 import asyncio
+import hashlib
 import httpx
 import importlib
 import json
@@ -530,7 +531,8 @@ class ReviewRegressions(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             filename = str(Path(directory) / "schedules.json")
             manager = ScheduleManager(filename)
-            schedule = manager.create_schedule("Article", "09:00", direct_url=script.source_url)
+            direct_url = "https://example.com/redirect"
+            schedule = manager.create_schedule("Article", "09:00", direct_url=direct_url)
             with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
                 "shorts_maker.services.production_service.ProductionService.full_pipeline",
                 new_callable=AsyncMock, return_value=ProductionResult(
@@ -541,6 +543,7 @@ class ReviewRegressions(unittest.TestCase):
                 saved = ScheduleManager(filename).get_schedule(schedule["id"])
                 self.assertEqual(saved["last_result"], "script_review_pending")
                 self.assertEqual(saved["last_script"], script.model_dump())
+                self.assertEqual(saved["last_planned_url"], direct_url)
                 self.assertFalse(saved["enabled"])
                 self.assertNotIn("last_rendered_url", saved)
                 with self.assertRaisesRegex(ValueError, "바로 재개할 수 없습니다"):
@@ -554,7 +557,7 @@ class ReviewRegressions(unittest.TestCase):
                 self.assertFalse(manager.get_schedule(schedule["id"])["enabled"])
                 manager.toggle_schedule(schedule["id"])
                 asyncio.run(manager._execute_pipeline(schedule))
-                second = manager.create_schedule("Same article", "10:00", direct_url=script.source_url)
+                second = manager.create_schedule("Same article", "10:00", direct_url=direct_url)
                 asyncio.run(manager._execute_pipeline(second))
             pipeline.assert_awaited_once()
             self.assertEqual(manager.get_schedule(schedule["id"])["last_result"], "duplicate_url")
@@ -591,30 +594,127 @@ class ReviewRegressions(unittest.TestCase):
                 self.assertEqual(manager.get_schedule(schedule["id"])["last_result"],
                                  "script_review_pending")
 
-    def test_three_private_rss_cycles_require_review_resume_even_after_restart(self):
+    def test_private_review_handoff_requires_matching_uploaded_video(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "outputs"
+            output.mkdir()
+            video = output / "cut.mp4"
+            video.write_bytes(b"reviewed private cut")
+            report_path = video.with_suffix(".production.json")
+            source_url = "https://example.com/first"
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("RSS", "09:00")
+            manager.update_schedule(schedule["id"], {
+                "last_result": "script_review_pending", "enabled": False,
+                "last_script": {"source_url": source_url}, "last_planned_url": source_url,
+            })
+            report = {
+                "video_path": str(video), "source_url": source_url,
+                "quality_passed": True,
+                "video_sha256": hashlib.sha256(video.read_bytes()).hexdigest(),
+                "youtube_id": "private_12345", "uploaded_at_utc": "2026-10-29T00:00:00Z",
+                "youtube_upload_request": {"status": {"privacyStatus": "private"}},
+            }
+            with patch.object(settings, "output_dir", output):
+                with self.assertRaisesRegex(ValueError, "제작 기록"):
+                    manager.accept_pending_video(schedule["id"], str(video))
+                for field, bad_value in (
+                    ("source_url", "https://example.com/other"),
+                    ("video_sha256", "wrong"),
+                    ("youtube_id", None),
+                    ("youtube_upload_request", {"status": {"privacyStatus": "public"}}),
+                ):
+                    invalid = {**report, field: bad_value}
+                    report_path.write_text(json.dumps(invalid), encoding="utf-8")
+                    with self.assertRaises(ValueError):
+                        manager.accept_pending_video(schedule["id"], str(video))
+                    self.assertEqual(manager.get_schedule(schedule["id"])["last_result"],
+                                     "script_review_pending")
+                report_path.write_text(json.dumps(report), encoding="utf-8")
+                accepted = manager.accept_pending_video(schedule["id"], str(video))
+                self.assertEqual(accepted["last_result"], "private_review_accepted")
+                self.assertEqual(accepted["last_video_path"], str(video.resolve()))
+                self.assertEqual(accepted["last_youtube_id"], "private_12345")
+                self.assertTrue(accepted["enabled"])
+                self.assertEqual(ScheduleManager(str(Path(directory) / "schedules.json")).get_schedule(
+                    schedule["id"])["last_result"], "private_review_accepted")
+                with self.assertRaisesRegex(ValueError, "검토 대기"):
+                    manager.accept_pending_video(schedule["id"], str(video))
+
+    def test_direct_url_private_review_does_not_repeat_same_article(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "outputs"
+            output.mkdir()
+            video = output / "cut.mp4"
+            video.write_bytes(b"reviewed private cut")
+            direct_url = "https://example.com/redirect"
+            source_url = "https://example.com/first"
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("Direct", "09:00", direct_url=direct_url)
+            manager.update_schedule(schedule["id"], {
+                "last_result": "script_review_pending", "enabled": False,
+                "last_script": {"source_url": source_url}, "last_planned_url": direct_url,
+            })
+            video.with_suffix(".production.json").write_text(json.dumps({
+                "video_path": str(video), "source_url": source_url,
+                "quality_passed": True,
+                "video_sha256": hashlib.sha256(video.read_bytes()).hexdigest(),
+                "youtube_id": "private_12345", "uploaded_at_utc": "2026-10-29T00:00:00Z",
+                "youtube_upload_request": {"status": {"privacyStatus": "private"}},
+            }), encoding="utf-8")
+            with patch.object(settings, "output_dir", output):
+                accepted = manager.accept_pending_video(schedule["id"], str(video))
+            self.assertFalse(accepted["enabled"])
+            self.assertEqual(accepted["last_planned_url"], direct_url)
+
+    def test_three_reviewed_rss_cycles_survive_restart_without_replanning_pending_script(self):
         with tempfile.TemporaryDirectory() as directory:
             filename = str(Path(directory) / "schedules.json")
-            schedule = ScheduleManager(filename).create_schedule("RSS", "09:00", auto_upload=True)
-            results = [SimpleNamespace(success=True, error=None, video_path=f"episode_{n}.mp4",
-                                       youtube_id=f"private_{n:06d}") for n in range(1, 4)]
-            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+            output = Path(directory) / "outputs"
+            output.mkdir()
+            schedule = ScheduleManager(filename).create_schedule("RSS", "09:00")
+            scripts = [ShortsScript(
+                title=f"Episode {number}", description="Source-backed", tags=[],
+                mood="calm", style="documentary", source_name="Source",
+                source_url=f"https://example.com/{number}", generation_mode="video",
+                scenes=[VideoScene(scene_number=1, visual_description="Show the change",
+                                   script_text="Explain the change")],
+            ) for number in range(1, 4)]
+            results = [ProductionResult(success=True, script=script, review_pending=True)
+                       for script in scripts]
+            with patch.object(settings, "output_dir", output), patch(
+                "shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True,
+            ), patch(
                 "shorts_maker.services.production_service.ProductionService.full_pipeline",
                 new_callable=AsyncMock, side_effect=results,
             ) as pipeline:
-                for number in range(1, 4):
+                for number, script in enumerate(scripts, 1):
                     manager = ScheduleManager(filename)
-                    if number > 1:
-                        self.assertTrue(manager.toggle_schedule(schedule["id"]))
                     asyncio.run(manager._execute_pipeline(schedule))
                     stored = manager.get_schedule(schedule["id"])
                     self.assertFalse(stored["enabled"])
-                    self.assertEqual(stored["last_result"], "success")
+                    self.assertEqual(stored["last_result"], "script_review_pending")
                     self.assertEqual(stored["run_count"], number)
-                    self.assertEqual(stored["last_video_path"], f"episode_{number}.mp4")
-                    self.assertEqual(stored["last_youtube_id"], f"private_{number:06d}")
                     asyncio.run(manager._execute_pipeline(schedule))
                     self.assertEqual(pipeline.await_count, number)
-            self.assertTrue(all(call.kwargs["auto_upload"] for call in pipeline.await_args_list))
+
+                    video = output / f"episode_{number}.mp4"
+                    video.write_bytes(f"reviewed episode {number}".encode())
+                    video_id = f"private_{number:06d}"
+                    video.with_suffix(".production.json").write_text(json.dumps({
+                        "video_path": str(video), "source_url": script.source_url,
+                        "quality_passed": True,
+                        "video_sha256": hashlib.sha256(video.read_bytes()).hexdigest(),
+                        "youtube_id": video_id, "uploaded_at_utc": "2026-10-29T00:00:00Z",
+                        "youtube_upload_request": {"status": {"privacyStatus": "private"}},
+                    }), encoding="utf-8")
+                    accepted = manager.accept_pending_video(schedule["id"], str(video))
+                    self.assertTrue(accepted["enabled"])
+                    self.assertEqual(accepted["last_result"], "private_review_accepted")
+                    self.assertEqual(accepted["last_youtube_id"], video_id)
+                    self.assertEqual(ScheduleManager(filename).get_schedule(schedule["id"])["last_result"],
+                                     "private_review_accepted")
+            self.assertTrue(all(not call.kwargs["auto_upload"] for call in pipeline.await_args_list))
 
     def test_schedule_review_player_rejects_missing_and_external_files(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(

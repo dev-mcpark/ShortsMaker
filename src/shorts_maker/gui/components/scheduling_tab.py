@@ -321,7 +321,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 mode_color = 'purple-9' if mode == 'video' else 'teal-9' if mode == 'hybrid' else 'blue-9'
                                                 ui.badge(mode.upper()).props(f'color={mode_color} text-color=white').classes('text-xs px-2')
 
-                                                if schedule.get('auto_upload') and schedule.get('last_result') == 'success':
+                                                if ((schedule.get('auto_upload') and schedule.get('last_result') == 'success')
+                                                        or schedule.get('last_result') == 'private_review_accepted'):
                                                     ui.badge('YouTube').props('color=red-9 text-color=white').classes('text-xs px-2')
 
                                             with ui.row().classes('gap-4'):
@@ -367,6 +368,12 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 ui.label('제작 완료 미확인 · 출력과 청구 내역 확인 후 일정 재개').classes('text-xs text-amber-300')
                                             elif enabled and schedule.get('last_result') == 'source_unavailable':
                                                 ui.label('RSS 피드 읽기 실패 · 다음 예약에 다시 확인').classes('text-xs text-amber-300')
+                                            elif schedule.get('last_result') == 'private_review_accepted':
+                                                message = ('비공개 영상 검토 완료 · 직접 URL 일정 종료'
+                                                           if schedule.get('direct_url') else
+                                                           '비공개 영상 검토 완료 · RSS는 다음 예약에서 새 소재 탐색')
+                                                ui.label(message).classes(
+                                                    'text-xs text-teal-300')
                                             if review_path:
                                                 with ui.dialog() as review_dialog, ui.card():
                                                     ui.label('최근 제작 영상').classes('text-lg font-medium')
@@ -376,8 +383,10 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                             elif schedule.get('last_video_path'):
                                                 ui.label('최근 영상 파일을 찾을 수 없습니다. 출력 폴더를 확인하세요.').classes('text-xs text-amber-300')
                                             youtube_url = _reviewable_youtube_url(schedule.get('last_youtube_id'))
-                                            if (youtube_url and schedule.get('auto_upload')
-                                                    and schedule.get('last_result') == 'success'):
+                                            if youtube_url and (
+                                                schedule.get('last_result') == 'private_review_accepted'
+                                                or (schedule.get('auto_upload') and schedule.get('last_result') == 'success')
+                                            ):
                                                 ui.link('YouTube 비공개 검토본 보기', youtube_url, new_tab=True).classes(
                                                     'text-xs text-teal-300')
 
@@ -413,10 +422,37 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                                 dialog.close()
                                                                 safe_refresh(schedule_list)
                                                                 safe_refresh(history_list)
-                                                            except (OSError, ValueError) as error:
+                                                            except Exception as error:
                                                                 safe_notify(f'각본 제외 실패: {error}', type='negative')
 
                                                         ui.button('각본 제외', on_click=confirm_rejection).props('color=amber')
+                                                dialog.open()
+
+                                            def accept_pending_video(sid=schedule['id'], name=schedule['name']):
+                                                with ui.dialog() as dialog, ui.card():
+                                                    ui.label('비공개 영상 검토 완료').classes('text-lg font-medium')
+                                                    ui.label(f'일정: {name}')
+                                                    ui.label('전체 영상과 출처·음악·자막을 확인했다면 완성 MP4 경로를 입력하세요.').classes(
+                                                        'text-xs text-gray-400')
+                                                    ui.label('유료 제작 스위치와 월 장부가 활성화돼 있으면 다음 예약에서 기획 비용이 발생할 수 있습니다.').classes(
+                                                        'text-xs text-amber-300')
+                                                    path_input = ui.input('완성 MP4 경로', value=state.final_video_path or '').classes(
+                                                        'w-full min-w-[320px]')
+                                                    with ui.row():
+                                                        ui.button('취소', on_click=dialog.close)
+
+                                                        def confirm_acceptance():
+                                                            try:
+                                                                schedule_manager.accept_pending_video(sid, path_input.value)
+                                                                dialog.close()
+                                                                safe_notify('비공개 영상 검토 완료가 기록됐습니다.', type='positive')
+                                                                safe_refresh(schedule_list)
+                                                                safe_refresh(history_list)
+                                                            except Exception as error:
+                                                                safe_notify(f'완료 기록 실패: {error}', type='negative')
+
+                                                        ui.button('검토 완료·다음 소재 예약', on_click=confirm_acceptance).props(
+                                                            'color=teal')
                                                 dialog.open()
 
                                             def delete_schedule(sid=schedule['id'], sname=schedule['name']):
@@ -442,6 +478,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                             toggle_color = 'amber' if enabled else 'green'
                                             toggle_tip = 'Pause' if enabled else 'Resume'
                                             if not enabled and schedule.get('last_result') == 'script_review_pending':
+                                                ui.button('비공개 영상 검토 완료', on_click=accept_pending_video).props(
+                                                    'flat dense color=teal')
                                                 ui.button('각본 제외', on_click=reject_pending_script).props(
                                                     'flat dense color=amber')
                                             else:

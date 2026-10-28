@@ -57,7 +57,7 @@ For a reviewed story with retained assets, `ProductionService.full_pipeline` als
 | Jamsu scene-3 one-shot visual audition | `assets/jamsu_scene3_seed_v3.png`, `docs/jamsu_scene3_visual_review.json`, `scripts/jamsu_scene3_native_pilot.py`, `docs/JAMSU_VEO_PILOT.md` | `tests/test_jamsu_scene3_native_pilot.py` |
 | Composite-bus story audition | `docs/composite_bus_review_draft.json`, `scripts/render_composite_bus_storyboard.py`, `scripts/prepare_scratch_narration.py`, `scripts/local_review.py` | `tests/test_composite_bus_storyboard.py` |
 | Browser state, script confirmation, and controls | `src/shorts_maker/gui/state/app_state.py`, `gui/pages/`, `gui/components/` | `tests/test_workflows.py` |
-| Scheduled planning, persisted script-review pause and explicit rejection, local cross-process serialization, and legacy post-render review links | `src/shorts_maker/utils/scheduler.py`, `gui/components/scheduling_tab.py`; the ignored `schedules.json.lock.sqlite3` coordinates instances sharing one schedule file | `tests/test_review_regressions.py` |
+| Scheduled planning, persisted script review, private-upload acceptance or explicit rejection, local cross-process serialization, and legacy post-render review links | `src/shorts_maker/utils/scheduler.py`, `gui/components/scheduling_tab.py`; the ignored `schedules.json.lock.sqlite3` coordinates instances sharing one schedule file | `tests/test_review_regressions.py` |
 | Upload | `src/shorts_maker/uploader/youtube_uploader.py` | `tests/test_production_gates.py` |
 
 ## Runtime boundaries

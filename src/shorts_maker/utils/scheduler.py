@@ -4,6 +4,7 @@ ScheduleManager - 자동 비디오 프로덕션 스케줄링 관리 모듈
 정기적인 비디오 생성 작업을 스케줄링하고 실행합니다.
 """
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -308,6 +309,52 @@ class ScheduleManager:
             'enabled': not bool(schedule.get('direct_url')),
         })
 
+    def accept_pending_video(self, schedule_id: str, video_path: str) -> Dict[str, Any]:
+        """Resume RSS discovery only after a reviewed private upload is bound to its saved source."""
+        from shorts_maker.utils.config import settings
+
+        schedule = self.get_schedule(schedule_id)
+        if (schedule is None or schedule.get('last_result') != 'script_review_pending'
+                or schedule.get('enabled')):
+            raise ValueError("검토 대기 중인 각본 일정이 없습니다.")
+        if not isinstance(video_path, str) or not video_path:
+            raise ValueError("완성 영상 경로가 필요합니다.")
+        try:
+            video = Path(video_path).resolve()
+            if (video.suffix.lower() != '.mp4' or not video.is_file()
+                    or not video.is_relative_to(settings.output_dir.resolve())):
+                raise ValueError("출력 폴더의 완성 MP4를 선택하세요.")
+            report = json.loads(video.with_suffix('.production.json').read_text(encoding='utf-8'))
+            with video.open('rb') as stream:
+                video_sha256 = hashlib.file_digest(stream, 'sha256').hexdigest()
+        except (OSError, TypeError, UnicodeError, ValueError) as error:
+            raise ValueError("영상과 제작 기록을 확인할 수 없습니다.") from error
+        if (not isinstance(report, dict) or not isinstance(report.get('video_path'), str)
+                or Path(report['video_path']).resolve() != video
+                or not isinstance(schedule.get('last_script'), dict)
+                or report.get('source_url') != schedule['last_script'].get('source_url')
+                or report.get('quality_passed') is not True
+                or report.get('video_sha256') != video_sha256):
+            raise ValueError("저장된 각본·출처·품질·영상 해시가 제작 기록과 일치하지 않습니다.")
+        video_id = report.get('youtube_id')
+        upload = report.get('youtube_upload_request')
+        if (not isinstance(video_id, str) or not re.fullmatch(r'[A-Za-z0-9_-]{6,64}', video_id)
+                or not isinstance(upload, dict) or not isinstance(upload.get('status'), dict)
+                or upload['status'].get('privacyStatus') != 'private'
+                or not isinstance(report.get('uploaded_at_utc'), str)
+                or not report['uploaded_at_utc']):
+            raise ValueError("확인된 YouTube 비공개 업로드 기록이 필요합니다.")
+        updated = self.update_schedule(schedule_id, {
+            'last_result': 'private_review_accepted',
+            'last_video_path': str(video),
+            'last_youtube_id': video_id,
+            'accepted_at': datetime.now().isoformat(),
+            'enabled': not bool(schedule.get('direct_url')),
+        })
+        if updated is None:
+            raise ValueError("일정이 사라져 완료 기록을 저장하지 못했습니다.")
+        return updated
+
     def get_schedule(self, schedule_id: str) -> Optional[Dict[str, Any]]:
         """
         특정 스케줄 조회
@@ -493,7 +540,7 @@ class ScheduleManager:
                     'last_run': datetime.now().isoformat(),
                     'run_count': schedule.get('run_count', 0) + 1,
                     'last_result': 'script_review_pending',
-                    'last_planned_url': result.script.source_url,
+                    'last_planned_url': schedule.get('direct_url') or result.script.source_url,
                     'last_script': result.script.model_dump(),
                     'enabled': False,
                 })
