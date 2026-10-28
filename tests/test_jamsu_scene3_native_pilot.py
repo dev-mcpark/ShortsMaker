@@ -10,6 +10,11 @@ from scripts import jamsu_scene3_native_pilot as pilot
 
 
 class JamsuScene3NativePilotTests(unittest.TestCase):
+    def test_unreviewed_frame_blocks_paid_submission(self):
+        self.assertFalse(pilot.FRAME_APPROVED)
+        with self.assertRaisesRegex(RuntimeError, "editorial verdict"):
+            pilot.run()
+
     def test_one_mocked_submission_stays_budgeted_and_cannot_repeat(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory)
@@ -17,6 +22,7 @@ class JamsuScene3NativePilotTests(unittest.TestCase):
             service_account.write_text("{}")
             with (
                 patch.object(pilot, "OUT", output),
+                patch.object(pilot, "FRAME_APPROVED", True),
                 patch.object(pilot, "budget_status", return_value={"enabled": True}),
                 patch.object(pilot, "check_google_budget"),
                 patch.object(pilot.settings, "paid_production_enabled", True),

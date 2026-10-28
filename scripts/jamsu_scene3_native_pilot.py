@@ -17,19 +17,21 @@ from shorts_maker.utils.config import PROJECT_ROOT, settings
 MODEL = "veo-3.1-lite-generate-001"
 DURATION = 8
 REQUEST_CAP_USD = 0.24
-FRAME = PROJECT_ROOT / "assets" / "jamsu_scene3_seed_v2.png"
-FRAME_SHA256 = "da2ee4584a4f81c67013517d505389c875401abdde46ba4077ac9bf50b196ab0"
+FRAME = PROJECT_ROOT / "assets" / "jamsu_scene3_seed_v3.png"
+FRAME_SHA256 = "67478a1f29d9d31d0b41f6baaf6a7b4a08fe05d2420aed5d8be041a7e5b42379"
+FRAME_APPROVED = False
 SOURCE_URL = "https://mediahub.seoul.go.kr/archives/2019683"
 OUT = PROJECT_ROOT / "outputs" / "evaluation" / "jamsu_scene3_native_20261028"
 PROMPT = (
     "One continuous silent vertical shot of the supplied fictional architectural scale model. "
-    "The low dark bridge and calm blue water remain fully visible, fixed, and intact. "
-    "Above it, the separate pink elevated walkway and its two slender supports are a removable "
-    "proposal layer. In one slow clean movement, only that entire pink proposal layer lifts "
-    "straight upward and out of the model, leaving the lower bridge unchanged and unmarked. "
+    "The low gray pedestrian bridge, its tiny model figures, and calm blue water remain fully "
+    "visible, fixed, and intact. Above it, the empty pink elevated walkway with railings and "
+    "two slender supports is a removable 2024 proposal layer. In one slow clean movement, "
+    "only that entire pink proposal layer lifts straight upward and out of the exhibit model, "
+    "leaving the lower bridge unchanged and unmarked. "
     "Locked camera, stable geometry, soft studio daylight, generous blank lower third for later "
     "editor captions. This illustrates a design revision, not physical demolition or real footage. "
-    "No writing, numbers, logos, people, vehicles, new structures, rising water, flood, collapse, "
+    "No writing, numbers, logos, new figures, vehicles, new structures, rising water, flood, collapse, "
     "or damage."
 )
 
@@ -59,6 +61,8 @@ def preflight() -> float:
 
 
 def run() -> None:
+    if not FRAME_APPROVED:
+        raise RuntimeError("The revised first frame needs an editorial verdict before paid submission")
     cost = preflight()
     if not settings.paid_production_enabled:
         raise RuntimeError("Paid production is disabled")
@@ -109,7 +113,7 @@ def main() -> None:
     if args.execute:
         run()
     else:
-        print(json.dumps({"status": "ready", "model": MODEL,
+        print(json.dumps({"status": "ready" if FRAME_APPROVED else "awaiting_frame_approval", "model": MODEL,
                           "estimated_output_usd": preflight(), "request_cap_usd": REQUEST_CAP_USD}))
 
 
