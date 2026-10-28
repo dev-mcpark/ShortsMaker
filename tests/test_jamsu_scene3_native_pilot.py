@@ -11,12 +11,16 @@ from scripts import jamsu_scene3_native_pilot as pilot
 
 class JamsuScene3NativePilotTests(unittest.TestCase):
     def test_unreviewed_frame_blocks_paid_submission(self):
-        self.assertEqual(pilot.visual_review_status(), "pending")
-        with patch.object(pilot, "preflight") as preflight, patch.object(pilot, "VideoGenerator") as generator:
-            with self.assertRaisesRegex(RuntimeError, "editorial verdict"):
-                pilot.run()
-            preflight.assert_not_called()
-            generator.assert_not_called()
+        with tempfile.TemporaryDirectory() as directory:
+            review = json.loads(pilot.REVIEW.read_text(encoding="utf-8"))
+            review.update(decision="pending", reviewer_note="")
+            review_path = Path(directory) / "visual_review.json"
+            review_path.write_text(json.dumps(review), encoding="utf-8")
+            with patch.object(pilot, "REVIEW", review_path), patch.object(pilot, "preflight") as preflight, patch.object(pilot, "VideoGenerator") as generator:
+                with self.assertRaisesRegex(RuntimeError, "editorial verdict"):
+                    pilot.run()
+                preflight.assert_not_called()
+                generator.assert_not_called()
 
     def test_one_mocked_submission_stays_budgeted_and_cannot_repeat(self):
         with tempfile.TemporaryDirectory() as directory:
