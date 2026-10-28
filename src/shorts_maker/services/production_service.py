@@ -126,7 +126,7 @@ class ProductionProgress:
 
 @dataclass
 class ProductionResult:
-    """프로덕션 결과를 담는 데이터 클래스"""
+    """A planned script may succeed with review_pending and no video path."""
     success: bool
     video_path: Optional[str] = None
     youtube_id: Optional[str] = None
@@ -138,6 +138,7 @@ class ProductionResult:
     generated_scenes: int = 0
     reused_scenes: int = 0
     report_path: Optional[str] = None
+    review_pending: bool = False
 
 
 class ProductionService:
@@ -972,12 +973,12 @@ class ProductionService:
         prepared_audio_paths: Optional[List[str]] = None,
     ) -> ProductionResult:
         """
-        전체 프로덕션 파이프라인 실행
+        새 소재는 각본 검토에서 멈추고, 승인된 각본은 영상 제작까지 실행
 
         Args:
             topic: 등록된 RSS 분야 (선택, None이면 전체)
             direct_url: 직접 URL 입력 (선택)
-            auto_upload: True면 자동으로 YouTube 업로드
+            auto_upload: 승인된 각본의 영상 제작 후 비공개 YouTube 업로드
             upload_metadata: 업로드 메타데이터 (auto_upload가 True일 때 필요)
             approved_script: 이미 검토한 대본. 지정하면 새 대본 생성 생략.
             manual_clip_paths: 재사용할 씬별 영상 클립.
@@ -1005,7 +1006,7 @@ class ProductionService:
             except (TypeError, ValueError) as error:
                 return self._failed_result(f"업로드 메타데이터 확인 실패: {error}")
 
-        if auto_upload:
+        if auto_upload and approved_script is not None:
             try:
                 await asyncio.to_thread(self._get_uploader().get_authenticated_service,
                                         interactive=False)
@@ -1064,17 +1065,15 @@ class ProductionService:
                 reason = "스크립트 생성 실패"
             return self._failed_result(reason)
 
+        if approved_script is None:
+            self._update_progress(ProductionPhase.COMPLETED, 100,
+                                  "대본 생성 완료 · 장면 검토 후 제작을 이어가세요")
+            return ProductionResult(success=True, script=script, review_pending=True)
+
         metadata = None
         if auto_upload:
             try:
-                metadata = upload_metadata or {
-                    "title": script.title,
-                    "description": source_credited_description(
-                        script.description, getattr(script, "source_url", ""),
-                        getattr(script, "supporting_source_urls", [])),
-                    "tags": script.tags,
-                    "contains_synthetic_media": True,
-                }
+                metadata = upload_metadata
                 description = YouTubeUploader.build_upload_body(metadata)["snippet"]["description"]
                 source_urls = _required_source_urls(
                     getattr(script, "source_url", ""),

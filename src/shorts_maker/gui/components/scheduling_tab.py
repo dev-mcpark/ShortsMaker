@@ -8,6 +8,7 @@ from nicegui import ui
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.card_header import card_with_header
+from shorts_maker.planner.models import ShortsScript
 from shorts_maker.utils.scheduler import ScheduleManager
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.source_manager import SourceManager
@@ -232,9 +233,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                         button.props(remove='color=purple-9', add='outline color=purple-3')
                             mode_select.on_value_change(lambda: update_mode_btns())
 
-                        with ui.column().classes('gap-1'):
-                            ui.label('YouTube').classes('text-xs text-gray-300')
-                            auto_upload_check = ui.switch('Private Auto-Upload').props('color=red dense')
+                        ui.label('예약 실행은 각본 검토에서 멈춥니다. 영상 제작과 비공개 업로드는 검토 후 Studio에서 진행합니다.').classes(
+                            'text-xs text-amber-300')
 
                     # Create Button
                     def create_schedule():
@@ -247,7 +247,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                 topic=(category_select.value if source_mode.value == 'Auto-Discovery (RSS)'
                                        and category_select.value != '전체 분야' else None),
                                 direct_url=url_input.value if source_mode.value == 'Direct URL' else None,
-                                auto_upload=auto_upload_check.value,
+                                auto_upload=False,
                                 mode=mode_select.value,
                                 enabled=True
                             )
@@ -321,7 +321,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 mode_color = 'purple-9' if mode == 'video' else 'teal-9' if mode == 'hybrid' else 'blue-9'
                                                 ui.badge(mode.upper()).props(f'color={mode_color} text-color=white').classes('text-xs px-2')
 
-                                                if schedule.get('auto_upload'):
+                                                if schedule.get('auto_upload') and schedule.get('last_result') == 'success':
                                                     ui.badge('YouTube').props('color=red-9 text-color=white').classes('text-xs px-2')
 
                                             with ui.row().classes('gap-4'):
@@ -343,6 +343,26 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 message = ('영상 검토 대기 · 확인 후 일정 재개' if review_path else
                                                            '최근 성공 기록 · 영상은 출력 폴더에서 확인')
                                                 ui.label(message).classes('text-xs text-amber-300')
+                                            elif not enabled and schedule.get('last_result') == 'script_review_pending':
+                                                ui.label('각본·장면 검토 대기 · 영상 API와 업로드는 실행되지 않음').classes(
+                                                    'text-xs text-amber-300')
+
+                                                def load_pending_script(data=schedule.get('last_script')):
+                                                    try:
+                                                        script = ShortsScript.model_validate(data)
+                                                    except (TypeError, ValueError) as error:
+                                                        safe_notify(f'저장된 각본 확인 실패: {error}', type='negative')
+                                                        return
+                                                    state.reset_manual_mode()
+                                                    state.script = script
+                                                    state.script_context = None
+                                                    state.topic_candidates = []
+                                                    state.reviewed_script_sha256 = None
+                                                    state.final_video_path = None
+                                                    safe_notify('각본을 불러왔습니다. Workspace의 Script Editor에서 장면을 검토하고 확인하세요.', type='info')
+
+                                                ui.button('검토할 각본 불러오기', on_click=load_pending_script).props(
+                                                    'flat dense color=amber')
                                             elif not enabled and schedule.get('last_result') == 'run_in_progress':
                                                 ui.label('제작 완료 미확인 · 출력과 청구 내역 확인 후 일정 재개').classes('text-xs text-amber-300')
                                             elif enabled and schedule.get('last_result') == 'source_unavailable':

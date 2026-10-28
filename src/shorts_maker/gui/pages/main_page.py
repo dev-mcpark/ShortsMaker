@@ -89,7 +89,7 @@ def render_main_page() -> None:
                     if state.pipeline_running:
                         ui.notify('이미 파이프라인이 구동 중입니다.', type='warning')
                         return
-                    ui.notify('🎬 전 파이프라인 자동 실행을 시작합니다...', type='info')
+                    ui.notify('출처 기반 각본 기획을 시작합니다...', type='info')
                     state.pipeline_running = True
                     state.final_video_path = None
                     try:
@@ -104,7 +104,9 @@ def render_main_page() -> None:
                             state.final_video_path = result.video_path
                         if result.clips:
                             state.generated_clips = result.clips
-                        if result.success:
+                        if result.review_pending:
+                            ui.notify('각본을 만들었습니다. Script Editor에서 장면을 검토하고 확인하세요.', type='info')
+                        elif result.success:
                             ui.notify(
                                 f'제작 완료 · 예상 비주얼 API 비용 ${result.estimated_visual_cost_usd:.3f}',
                                 type='positive',
@@ -125,7 +127,7 @@ def render_main_page() -> None:
                     state.pipeline_message = '취소 요청됨 — 현재 작업 종료 대기 중'
                     ui.notify('⚠️ 파이프라인 취소가 요청되었습니다.', type='warning')
 
-                ui.button('Run Pipeline', on_click=run_entire_pipeline).props('color=violet size=sm icon=play_arrow unelevated').classes('rounded font-semibold text-xs')
+                ui.button('Plan Script', on_click=run_entire_pipeline).props('color=violet size=sm icon=play_arrow unelevated').classes('rounded font-semibold text-xs')
                 ui.button(on_click=stop_pipeline).props('flat round color=red icon=stop size=sm aria-label="파이프라인 중단"').classes('bg-slate-800/80')
 
         # === 2. MAIN BODY (3단 분할 레이아웃) ===
@@ -348,7 +350,7 @@ def render_main_page() -> None:
                     elif state.current_view == 'pipeline':
                         with ui.element('div').classes('w-full bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center gap-2 shrink-0'):
                             ui.icon('terminal', size='xs').classes('text-teal-400')
-                            ui.label('Production Console & Logging').classes('text-sm font-bold text-white')
+                            ui.label('Script Planning Console').classes('text-sm font-bold text-white')
                         with ui.element('div').classes('w-full flex-grow overflow-auto p-3 lg:p-6'):
                             render_pipeline_tab(
                                 state,

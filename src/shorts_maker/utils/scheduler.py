@@ -397,20 +397,24 @@ class ScheduleManager:
             # A fixed article URL is one story; use topic discovery for a repeating source.
             article_url = schedule.get('direct_url')
             prior_article_run = article_url and any(
-                other.get('id') != schedule['id'] and other.get('direct_url') == article_url
+                other.get('id') != schedule['id']
                 and (other.get('last_rendered_url') == article_url
-                     or (not other.get('last_rendered_url') and other.get('last_result') == 'success'))
+                     or other.get('last_planned_url') == article_url
+                     or (other.get('direct_url') == article_url
+                         and not other.get('last_rendered_url')
+                         and other.get('last_result') == 'success'))
                 for other in self.load_schedules()
             )
             if (article_url and (prior_article_run
                     or schedule.get('last_rendered_url') == article_url
+                    or schedule.get('last_planned_url') == article_url
                     or (not schedule.get('last_rendered_url')
                         and schedule.get('last_result') == 'success'))):
                 self.update_schedule(schedule['id'], {
                     'last_run': datetime.now().isoformat(),
                     'run_count': schedule.get('run_count', 0) + 1,
                     'last_result': 'duplicate_url',
-                    'last_rendered_url': schedule['direct_url'],
+                    'last_planned_url': article_url,
                     'enabled': False,
                 })
                 return
@@ -466,6 +470,18 @@ class ScheduleManager:
                 direct_url=schedule.get('direct_url'),
                 auto_upload=schedule.get('auto_upload', False)
             )
+
+            if getattr(result, 'review_pending', False):
+                self.update_schedule(schedule['id'], {
+                    'last_run': datetime.now().isoformat(),
+                    'run_count': schedule.get('run_count', 0) + 1,
+                    'last_result': 'script_review_pending',
+                    'last_planned_url': schedule.get('direct_url'),
+                    'last_script': result.script.model_dump(),
+                    'enabled': False,
+                })
+                self.logger.info("Scheduled script awaits visual review: %s", result.script.title)
+                return
 
             billing_disabled = "BILLING_DISABLED" in (result.error or "")
             music_missing = "사용 권한이 기록된 BGM이 없습니다" in (result.error or "")

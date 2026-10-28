@@ -26,7 +26,7 @@ from shorts_maker.planner.content_analyzer import ContentAnalyzer
 from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.planner.script_planner import ScriptPlanner
 from shorts_maker.planner.script_validator import ScriptValidator
-from shorts_maker.services.production_service import ProductionService
+from shorts_maker.services.production_service import ProductionResult, ProductionService
 from shorts_maker.utils.character_overlay import CharacterOverlay
 from shorts_maker.utils.character_video_generator import CharacterVideoGenerator
 from shorts_maker.utils.config import PROJECT_ROOT, _find_project_root, settings
@@ -519,6 +519,38 @@ class ReviewRegressions(unittest.TestCase):
             self.assertEqual(paused["last_youtube_id"], "Mrlr_6IVgf8")
             pipeline.assert_awaited_once()
 
+    def test_scheduled_script_survives_restart_without_visual_purchase(self):
+        script = ShortsScript(
+            title="One article", description="A source-backed change", tags=[],
+            mood="calm", style="documentary", source_name="Source",
+            source_url="https://example.com/article", generation_mode="video",
+            scenes=[VideoScene(scene_number=1, visual_description="Show the decision",
+                               script_text="Explain the decision")],
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            filename = str(Path(directory) / "schedules.json")
+            manager = ScheduleManager(filename)
+            schedule = manager.create_schedule("Article", "09:00", direct_url=script.source_url)
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, return_value=ProductionResult(
+                    success=True, script=script, review_pending=True,
+                ),
+            ) as pipeline:
+                asyncio.run(manager._execute_pipeline(schedule))
+                saved = ScheduleManager(filename).get_schedule(schedule["id"])
+                self.assertEqual(saved["last_result"], "script_review_pending")
+                self.assertEqual(saved["last_script"], script.model_dump())
+                self.assertFalse(saved["enabled"])
+                self.assertNotIn("last_rendered_url", saved)
+                manager.toggle_schedule(schedule["id"])
+                asyncio.run(manager._execute_pipeline(schedule))
+                second = manager.create_schedule("Same article", "10:00", direct_url=script.source_url)
+                asyncio.run(manager._execute_pipeline(second))
+            pipeline.assert_awaited_once()
+            self.assertEqual(manager.get_schedule(schedule["id"])["last_result"], "duplicate_url")
+            self.assertEqual(manager.get_schedule(second["id"])["last_result"], "duplicate_url")
+
     def test_three_private_rss_cycles_require_review_resume_even_after_restart(self):
         with tempfile.TemporaryDirectory() as directory:
             filename = str(Path(directory) / "schedules.json")
@@ -668,7 +700,7 @@ class ReviewRegressions(unittest.TestCase):
             stored = manager.get_schedule(schedule["id"])
             self.assertFalse(stored["enabled"])
             self.assertEqual(stored["last_result"], "duplicate_url")
-            self.assertEqual(stored["last_rendered_url"], "https://example.com/old")
+            self.assertNotIn("last_rendered_url", stored)
             manager.update_schedule(schedule["id"], {"enabled": True})
             with patch("shorts_maker.services.production_service.ProductionService.full_pipeline",
                        new_callable=AsyncMock) as repeat:

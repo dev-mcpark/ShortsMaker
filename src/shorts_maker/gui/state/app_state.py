@@ -1,6 +1,7 @@
 """애플리케이션 상태 관리"""
 
 from dataclasses import dataclass, field
+import hashlib
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from datetime import datetime
 
@@ -43,6 +44,7 @@ class AppState:
 
     # Results
     script: Optional["ShortsScript"] = None
+    reviewed_script_sha256: Optional[str] = None
     script_context: Optional["ScriptGenerationContext"] = None
     topic_candidates: List["TopicCandidate"] = field(default_factory=list)
     scene_clips: List[str] = field(default_factory=list)
@@ -138,6 +140,18 @@ class AppState:
         return self._production_service
 
     # ── State mutators ────────────────────────────────────────────────────────
+
+    def confirm_script_review(self) -> None:
+        if self.script is None:
+            raise ValueError("검토할 각본이 없습니다.")
+        self.reviewed_script_sha256 = hashlib.sha256(
+            self.script.model_dump_json().encode("utf-8")
+        ).hexdigest()
+
+    def is_script_reviewed(self) -> bool:
+        return bool(self.script and self.reviewed_script_sha256 == hashlib.sha256(
+            self.script.model_dump_json().encode("utf-8")
+        ).hexdigest())
 
     def reset_pipeline(self) -> None:
         """파이프라인 상태 초기화"""

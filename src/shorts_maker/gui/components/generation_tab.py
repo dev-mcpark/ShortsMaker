@@ -359,6 +359,9 @@ def render_generation_tab(state: 'AppState') -> None:
             if state.pipeline_running:
                 safe_notify('이미 제작이 진행 중입니다.', type='warning')
                 return
+            if not state.is_script_reviewed():
+                safe_notify('기획 탭에서 현재 각본을 확인한 뒤 제작을 시작하세요.', type='warning')
+                return
             production_running = True
 
             try:

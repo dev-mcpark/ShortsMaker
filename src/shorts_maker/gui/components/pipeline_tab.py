@@ -98,10 +98,8 @@ def render_pipeline_tab(
 
             # --- Options ---
             with ui.column().classes('w-full gap-2'):
-                ui.label('퍼블리싱 & 하이퍼파라미터').classes('text-[10px] text-slate-400 font-bold uppercase tracking-widest')
-
-                auto_upload = ui.switch('유튜브에 비공개 자동 업로드').props('color=red dense').classes('text-xs text-slate-400')
-                parallel_clips = ui.switch('미디어 병렬 고속 생성').props('color=violet dense').classes('text-xs text-slate-400')
+                ui.label('검토 단계').classes('text-[10px] text-slate-400 font-bold uppercase tracking-widest')
+                ui.label('각본 생성 후 멈춥니다. 장면을 검토한 뒤 Workspace에서 제작하세요.').classes('text-xs text-amber-300')
 
                 character_overlay = ui.switch('캐릭터 아바타 오버레이').props('color=violet dense').classes('text-xs text-slate-400')
                 character_overlay.bind_value(state, 'character_overlay_enabled')
@@ -167,7 +165,7 @@ def render_pipeline_tab(
                 safe_set_visibility(preview_placeholder, True)
 
                 try:
-                    service = state.new_production_service(parallel_clips=parallel_clips.value)
+                    service = state.new_production_service()
 
                     # 콜백 연결
                     def on_progress(progress: ProductionProgress):
@@ -241,7 +239,7 @@ def render_pipeline_tab(
                         topic=(category_select.value if source_mode.value == 'Auto (RSS)'
                                and category_select.value != '전체 분야' else None),
                         direct_url=url_input.value if source_mode.value == 'Direct URL' else None,
-                        auto_upload=auto_upload.value
+                        auto_upload=False
                     )
 
                     state.pipeline_running = False
@@ -258,7 +256,18 @@ def render_pipeline_tab(
                         except Exception as e:
                             logger.warning(f"Video set source failed: {e}")
 
-                    if result.success:
+                    if result.review_pending:
+                        state.pipeline_phase = ProductionPhase.COMPLETED
+                        state.pipeline_message = '각본 생성 완료 · 장면 검토 대기'
+                        safe_notify('각본을 만들었습니다. Workspace의 Script Editor에서 확인한 뒤 제작하세요.', type='info')
+                        state.pipeline_history.append({
+                            'title': state.script.title,
+                            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                            'success': True,
+                            'review_pending': True,
+                        })
+                        safe_refresh(history_list)
+                    elif result.success:
                         state.pipeline_phase = ProductionPhase.COMPLETED
                         state.pipeline_message = "파이프라인 전체 완료!"
                         safe_notify(
@@ -333,7 +342,7 @@ def render_pipeline_tab(
 
             with ui.row().classes('w-full gap-2 mt-2'):
                 start_btn = ui.button(
-                    '실행 시작',
+                    '각본 기획 시작',
                     on_click=run_full_pipeline
                 ).classes('flex-grow font-bold text-xs py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600').props('color=purple-9 unelevated icon=play_arrow')
 
@@ -396,6 +405,8 @@ def render_pipeline_tab(
                                         else:
                                             ui.icon('error', size='xs').classes('text-rose-400')
 
+                                    if run.get('review_pending'):
+                                        ui.label('각본 검토 대기').classes('text-[10px] text-amber-300')
                                     if run.get('video_path'):
                                         def play_history_video(path=run['video_path']):
                                             try:
@@ -422,9 +433,6 @@ def render_pipeline_tab(
                 with ui.row().classes('w-full justify-between items-center bg-slate-950/40 rounded-xl border border-slate-800 p-4 gap-2'):
                     phases_info = [
                         ('planning', '기획 & 대본 작성', 'edit_note', 'violet', '대본 분석 및 씬 플래닝'),
-                        ('generating', '미디어 클립 매핑', 'auto_fix_high', 'purple', 'Veo/Imagen 이미지 생성'),
-                        ('editing', '인코딩 & 믹싱', 'movie_edit', 'indigo', '오디오 자막 및 BGM 병합'),
-                        ('uploading', '최종 퍼블리싱', 'cloud_upload', 'rose', '유튜브 쇼츠 자동 업로드'),
                     ]
 
                     for idx, (phase_key, phase_name, phase_icon, phase_color, phase_desc) in enumerate(phases_info):
@@ -445,14 +453,14 @@ def render_pipeline_tab(
 
             # --- 2B. 격자 씬 미디어 상황판 (Scene Progress Grid) ---
             with ui.element('div').classes('w-full rounded-xl bg-slate-900 border border-slate-800 p-5'):
-                ui.label('각 씬별 미디어 생성 진행상황').classes('text-xs font-bold text-slate-400 uppercase tracking-widest mb-4')
+                ui.label('각 씬별 기획 현황').classes('text-xs font-bold text-slate-400 uppercase tracking-widest mb-4')
 
                 scene_grid = ui.grid(columns='repeat(auto-fill, minmax(130px, 1fr))').classes('w-full gap-4')
                 with scene_grid:
                     with ui.column().classes('w-full items-center justify-center col-span-full py-12'):
                         ui.icon('burst_mode', size='lg').classes('text-slate-800')
                         ui.label('대기 중').classes('text-sm font-bold text-slate-400')
-                        ui.label('파이프라인이 기획 씬 분석을 통과하면 상황판이 격자 배열됩니다').classes('text-xs text-slate-400 mt-1')
+                        ui.label('각본 생성 후 Workspace에서 장면 설명을 검토하세요.').classes('text-xs text-slate-400 mt-1')
 
             # --- 2C. 에러 알림 박스 (실패 시에만 보임) ---
             error_panel = ui.element('div').classes('w-full rounded-xl p-4 bg-rose-950/20 border border-rose-500/30 flex items-start gap-3 shadow-lg')
@@ -465,14 +473,14 @@ def render_pipeline_tab(
 
             # --- 2D. 최종 비디오 프리뷰어 모니터 ---
             with ui.element('div').classes('w-full rounded-xl bg-slate-900 border border-slate-800 p-5'):
-                ui.label('퍼블리싱 비디오 프리뷰어').classes('text-xs font-bold text-slate-400 uppercase tracking-widest mb-4')
+                ui.label('현재 세션 영상').classes('text-xs font-bold text-slate-400 uppercase tracking-widest mb-4')
 
                 with ui.element('div').classes('w-full aspect-[16/9] md:aspect-[21/9] bg-black/80 rounded-xl overflow-hidden flex items-center justify-center relative border border-slate-950'):
                     # Placeholder
                     with ui.column().classes('items-center gap-2 z-10') as preview_placeholder:
                         ui.icon('videocam_off', size='lg').classes('text-slate-700')
                         ui.label('미리보기 없음').classes('text-xs font-bold text-slate-400')
-                        ui.label('생성 프로세스 완료 시 여기에 믹싱된 영상이 노출됩니다').classes('text-[10px] text-slate-400')
+                        ui.label('각본 기획은 영상을 생성하지 않습니다.').classes('text-[10px] text-slate-400')
 
                     # Video Player
                     video_preview = ui.video('').classes('max-h-full max-w-[200px] h-full shadow-2xl rounded bg-black')

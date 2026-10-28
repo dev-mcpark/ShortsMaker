@@ -383,15 +383,18 @@ def render_planning_tab(state: 'AppState') -> None:
 
             # 확인 및 이동 버튼
             with ui.element('div').classes('w-full mt-auto pt-4'):
+                ui.label('출처·내레이션·장면 설명을 확인하세요. 영상 첫 프레임과 움직임은 별도 검토가 필요합니다.').classes(
+                    'text-xs text-amber-300 mb-2')
                 def confirm_script():
                     if state.script:
+                        state.confirm_script_review()
                         safe_notify('✅ 각본 확인 완료! Generation 탭으로 이동하세요.', type='positive')
                         logger.info(f"Script confirmed: {state.script.title}")
                     else:
                         safe_notify('생성된 각본이 없습니다', type='warning')
 
                 ui.button(
-                    '각본 확인 완료 →',
+                    '각본·장면 설명 확인 완료 →',
                     on_click=confirm_script
                 ).classes('w-full').props('color=green-9 unelevated icon=check_circle size=md')
 

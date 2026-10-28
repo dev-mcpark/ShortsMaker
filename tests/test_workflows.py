@@ -16,7 +16,7 @@ from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.generator.video_generator import VideoGenerator
 from shorts_maker.gui.components.planning_tab import estimate_new_visual_cost
 from shorts_maker.gui.state.app_state import AppState
-from shorts_maker.planner.models import ScriptGenerationContext, TopicCandidate
+from shorts_maker.planner.models import ScriptGenerationContext, ShortsScript, TopicCandidate
 from shorts_maker.planner.script_planner import ScriptPlanner
 from shorts_maker.services.production_service import (
     ProductionPhase, ProductionResult, ProductionService, source_credited_description,
@@ -401,17 +401,58 @@ class WorkflowTests(unittest.TestCase):
             success=False, error="upload failed"
         ))
 
-        result = asyncio.run(service.full_pipeline(auto_upload=True))
+        metadata = {
+            "title": "Title",
+            "description": "Description\n\n출처: https://example.com/report"
+                           "\n\n출처: https://example.com/context",
+            "contains_synthetic_media": True,
+        }
+        result = asyncio.run(service.full_pipeline(
+            approved_script=script, auto_upload=True, upload_metadata=metadata,
+        ))
 
         self.assertFalse(result.success)
         self.assertIs(result.script, script)
         self.assertEqual(result.video_path, "video.mp4")
         self.assertEqual(result.clips, ["scene.png"])
         self.assertTrue(result.ready_for_upload)
-        metadata = service.upload_to_youtube.await_args.args[1]
-        self.assertEqual(metadata["description"],
-                         "Description\n\n출처: https://example.com/report"
-                         "\n\n출처: https://example.com/context")
+        self.assertEqual(service.upload_to_youtube.await_args.args[1], metadata)
+
+    def test_new_script_stops_before_visuals_and_upload_auth(self):
+        service = ProductionService(mode="image", editor_options={"bgm_volume": 0})
+        script = ShortsScript(
+            title="Reviewed later", description="A source-backed change", tags=[],
+            mood="calm", style="documentary", source_name="Source",
+            source_url="https://example.com/article", generation_mode="image",
+            scenes=[{"scene_number": 1, "visual_description": "Show the relationship",
+                     "script_text": "Explain the change"}],
+        )
+        service.generate_script = AsyncMock(return_value=(script, None))
+        service.produce_video = AsyncMock()
+        service._uploader = SimpleNamespace(get_authenticated_service=Mock())
+
+        result = asyncio.run(service.full_pipeline(auto_upload=True))
+
+        self.assertTrue(result.success)
+        self.assertTrue(result.review_pending)
+        self.assertIs(result.script, script)
+        self.assertIsNone(result.video_path)
+        service.produce_video.assert_not_awaited()
+        service._uploader.get_authenticated_service.assert_not_called()
+
+    def test_script_confirmation_is_bound_to_current_content(self):
+        state = AppState(script=ShortsScript(
+            title="Current", description="Description", tags=[], mood="calm",
+            style="documentary", source_name="Source",
+            source_url="https://example.com/article", generation_mode="image",
+            scenes=[{"scene_number": 1, "visual_description": "A bridge",
+                     "script_text": "A decision"}],
+        ))
+        self.assertFalse(state.is_script_reviewed())
+        state.confirm_script_review()
+        self.assertTrue(state.is_script_reviewed())
+        state.script.scenes[0].visual_description = "A different plan"
+        self.assertFalse(state.is_script_reviewed())
 
     def test_source_credit_does_not_duplicate_existing_link(self):
         description = "설명\n출처: https://example.com/report"
@@ -455,7 +496,7 @@ class WorkflowTests(unittest.TestCase):
         )
         service.upload_to_youtube.assert_awaited_once_with("render.mp4", metadata)
 
-    def test_auto_upload_checks_auth_before_paid_planning_or_render(self):
+    def test_approved_upload_checks_auth_before_render(self):
         service = ProductionService()
         service._uploader = SimpleNamespace(get_authenticated_service=Mock(
             side_effect=RuntimeError("YOUTUBE_AUTH_REQUIRED"),
@@ -463,7 +504,11 @@ class WorkflowTests(unittest.TestCase):
         service.generate_script = AsyncMock()
         service.produce_video = AsyncMock()
 
-        result = asyncio.run(service.full_pipeline(auto_upload=True))
+        result = asyncio.run(service.full_pipeline(
+            approved_script=SimpleNamespace(), auto_upload=True,
+            upload_metadata={"title": "Approved", "description": "Reviewed",
+                             "contains_synthetic_media": True},
+        ))
 
         self.assertFalse(result.success)
         self.assertIn("YOUTUBE_AUTH_REQUIRED", result.error)
@@ -574,7 +619,11 @@ class WorkflowTests(unittest.TestCase):
             service.set_progress_callback(lambda progress: phases.append(progress.phase))
 
             with patch("shorts_maker.services.production_service.asyncio.sleep", new_callable=AsyncMock) as delay:
-                result = asyncio.run(service.full_pipeline(auto_upload=True))
+                result = asyncio.run(service.full_pipeline(
+                    approved_script=script, auto_upload=True,
+                    upload_metadata={"title": "Title", "description": "Description",
+                                     "contains_synthetic_media": True},
+                ))
             delay.assert_not_awaited()
 
         self.assertTrue(result.success)
