@@ -11,18 +11,25 @@ from scripts import jamsu_scene3_native_pilot as pilot
 
 class JamsuScene3NativePilotTests(unittest.TestCase):
     def test_unreviewed_frame_blocks_paid_submission(self):
-        self.assertFalse(pilot.FRAME_APPROVED)
-        with self.assertRaisesRegex(RuntimeError, "editorial verdict"):
-            pilot.run()
+        self.assertEqual(pilot.visual_review_status(), "pending")
+        with patch.object(pilot, "preflight") as preflight, patch.object(pilot, "VideoGenerator") as generator:
+            with self.assertRaisesRegex(RuntimeError, "editorial verdict"):
+                pilot.run()
+            preflight.assert_not_called()
+            generator.assert_not_called()
 
     def test_one_mocked_submission_stays_budgeted_and_cannot_repeat(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory)
             service_account = output / "service_account.json"
             service_account.write_text("{}")
+            review = json.loads(pilot.REVIEW.read_text(encoding="utf-8"))
+            review.update(decision="approved", reviewer_note="The upper walking path is distinct from the lower bridge")
+            review_path = output / "visual_review.json"
+            review_path.write_text(json.dumps(review), encoding="utf-8")
             with (
                 patch.object(pilot, "OUT", output),
-                patch.object(pilot, "FRAME_APPROVED", True),
+                patch.object(pilot, "REVIEW", review_path),
                 patch.object(pilot, "budget_status", return_value={"enabled": True}),
                 patch.object(pilot, "check_google_budget"),
                 patch.object(pilot.settings, "paid_production_enabled", True),
@@ -40,6 +47,7 @@ class JamsuScene3NativePilotTests(unittest.TestCase):
                 record = json.loads((output / "request.json").read_text())
                 self.assertEqual(record["status"], "saved_unreviewed")
                 self.assertEqual(record["first_frame_sha256"], pilot.FRAME_SHA256)
+                self.assertEqual(record["visual_review_sha256"], pilot.sha256(review_path))
                 self.assertEqual(record["estimated_output_usd"], 0.24)
                 kwargs = generator._retry_veo_call.call_args.kwargs
                 self.assertEqual(kwargs["max_attempts"], 1)
@@ -48,6 +56,11 @@ class JamsuScene3NativePilotTests(unittest.TestCase):
                 self.assertEqual(kwargs["first_frame_path"], str(pilot.FRAME))
                 with self.assertRaisesRegex(RuntimeError, "already been used"):
                     pilot.preflight()
+
+    def test_changed_motion_invalidates_visual_verdict(self):
+        with patch.object(pilot, "PROMPT", pilot.PROMPT + " A new camera move."):
+            with self.assertRaisesRegex(ValueError, "Visual review is stale"):
+                pilot.visual_review_status()
 
 
 if __name__ == "__main__":

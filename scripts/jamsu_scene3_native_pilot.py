@@ -19,7 +19,8 @@ DURATION = 8
 REQUEST_CAP_USD = 0.24
 FRAME = PROJECT_ROOT / "assets" / "jamsu_scene3_seed_v3.png"
 FRAME_SHA256 = "67478a1f29d9d31d0b41f6baaf6a7b4a08fe05d2420aed5d8be041a7e5b42379"
-FRAME_APPROVED = False
+SCRIPT = PROJECT_ROOT / "docs" / "jamsu_bridge_narration_candidate.json"
+REVIEW = PROJECT_ROOT / "docs" / "jamsu_scene3_visual_review.json"
 SOURCE_URL = "https://mediahub.seoul.go.kr/archives/2019683"
 OUT = PROJECT_ROOT / "outputs" / "evaluation" / "jamsu_scene3_native_20261028"
 PROMPT = (
@@ -40,11 +41,40 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def visual_review_status() -> str:
+    script = json.loads(SCRIPT.read_text(encoding="utf-8"))
+    review = json.loads(REVIEW.read_text(encoding="utf-8"))
+    scene = next((item for item in script["scenes"] if item["scene_number"] == 3), None)
+    if script["source_url"] != SOURCE_URL:
+        raise ValueError("Visual review is stale: primary source changed")
+    expected = {
+        "scene_number": 3,
+        "source_urls": [script["source_url"], *script.get("supporting_source_urls", [])],
+        "script_text": scene["script_text"] if scene else None,
+        "frame_sha256": sha256(FRAME),
+        "motion_prompt_sha256": hashlib.sha256(PROMPT.encode("utf-8")).hexdigest(),
+    }
+    if any(review.get(key) != value for key, value in expected.items()):
+        raise ValueError("Visual review is stale: source, narration, frame, or motion changed")
+    if any(not isinstance(review.get(key), list) or not review[key]
+           or any(not isinstance(item, str) or not item.strip() for item in review[key])
+           for key in ("must_show", "must_avoid")):
+        raise ValueError("Visual review needs concrete acceptance and rejection criteria")
+    decision = review.get("decision")
+    if decision not in {"pending", "approved", "rejected"}:
+        raise ValueError("Visual review decision is invalid")
+    note = review.get("reviewer_note")
+    if decision == "approved" and (not isinstance(note, str) or not note.strip()):
+        raise ValueError("Approved visual review needs a reviewer note")
+    return decision
+
+
 def preflight() -> float:
     if (OUT / "request.json").exists() or (OUT / "scene_3.mp4").exists():
         raise RuntimeError("This Jamsu one-shot attempt has already been used")
     if sha256(FRAME) != FRAME_SHA256:
         raise ValueError("The reviewed first frame has changed")
+    visual_review_status()
     if FRAME.stat().st_size > 20_000_000:
         raise ValueError("First frame exceeds the 20 MB limit")
     with Image.open(FRAME) as image:
@@ -61,7 +91,7 @@ def preflight() -> float:
 
 
 def run() -> None:
-    if not FRAME_APPROVED:
+    if visual_review_status() != "approved":
         raise RuntimeError("The revised first frame needs an editorial verdict before paid submission")
     cost = preflight()
     if not settings.paid_production_enabled:
@@ -82,6 +112,7 @@ def run() -> None:
         "scene_number": 3, "model": MODEL, "duration_seconds": DURATION,
         "estimated_output_usd": cost, "request_cap_usd": REQUEST_CAP_USD,
         "max_attempts": 1, "first_frame_sha256": FRAME_SHA256,
+        "visual_review_sha256": sha256(REVIEW),
         "source_url": SOURCE_URL, "prompt": PROMPT, "status": "pending_or_submitted",
     }
     with request_path.open("x", encoding="utf-8") as file:
@@ -113,7 +144,7 @@ def main() -> None:
     if args.execute:
         run()
     else:
-        print(json.dumps({"status": "ready" if FRAME_APPROVED else "awaiting_frame_approval", "model": MODEL,
+        print(json.dumps({"status": "ready" if visual_review_status() == "approved" else "awaiting_frame_approval", "model": MODEL,
                           "estimated_output_usd": preflight(), "request_cap_usd": REQUEST_CAP_USD}))
 
 

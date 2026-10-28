@@ -1,0 +1,22 @@
+{
+  "scene_number": 3,
+  "source_urls": [
+    "https://mediahub.seoul.go.kr/archives/2019683",
+    "https://mediahub.seoul.go.kr/archives/2011129"
+  ],
+  "script_text": "하지만 서울시는 홍수 때 안전성 등을 고려해, 그 공중 데크를 수정 설계에서 제외했다고 밝혔습니다.",
+  "frame_sha256": "67478a1f29d9d31d0b41f6baaf6a7b4a08fe05d2420aed5d8be041a7e5b42379",
+  "motion_prompt_sha256": "d49e42b9d7ea68bba274d0f96c4fbfcdd65fd3a6de2800c1adc7bf4e31037c38",
+  "must_show": [
+    "분홍색 상부가 난간과 보행면이 있는 별도 공중 보행길로 읽힌다",
+    "하부의 기존 보행 공간과 강물이 분리되어 보인다",
+    "상부 제안만 사라져도 하부 다리 구조가 그대로 남을 수 있다"
+  ],
+  "must_avoid": [
+    "완공된 실제 잠수교 영상처럼 보이는 묘사",
+    "상부에 사람이 있는 상태에서 공중길을 들어 올리는 연출",
+    "홍수 사고·철거·붕괴 또는 2026년 대안을 한 컷에 지어내는 연출"
+  ],
+  "decision": "pending",
+  "reviewer_note": ""
+}
