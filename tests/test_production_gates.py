@@ -513,11 +513,21 @@ class ProductionGateTests(unittest.TestCase):
         script.scenes[0].visual_mode = "video"
         script.scenes[1].visual_mode = "image"
         image, hybrid = estimate_pair(script)
-        self.assertAlmostEqual(image + hybrid, 0.582)
+        self.assertAlmostEqual(image + hybrid, 0.102)
         with patch("scripts.paired_review.VideoEditor") as editor:
             with self.assertRaisesRegex(ValueError, "비교 실험 상한"):
-                asyncio.run(render_pair(script, budget_usd=0.50))
+                asyncio.run(render_pair(script, budget_usd=0.05))
         editor.assert_not_called()
+
+    def test_pair_requires_reviewed_raw_video_before_paid_narration(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            settings, 'clips_dir', Path(directory) / 'clips',
+        ), patch.object(settings, 'output_dir', Path(directory) / 'outputs'), patch.object(
+            settings, 'paid_production_enabled', True,
+        ), patch('scripts.paired_review.VideoEditor') as narrator:
+            with self.assertRaisesRegex(ValueError, 'FIRST_FRAME_REVIEW_REQUIRED'):
+                asyncio.run(render_pair(sample_script(), budget_usd=1.25))
+            narrator.assert_not_called()
 
     @patch("shorts_maker.services.production_service.check_video_quality")
     def test_zero_paid_round_blocks_api_work_but_allows_complete_local_edit(self, _check):
@@ -610,7 +620,7 @@ class ProductionGateTests(unittest.TestCase):
             cached.write_bytes(b"corrupt")
             self.assertIsNone(ProductionService._cached_clip(cache, "image"))
 
-    def test_estimated_cost_cap_blocks_paid_calls_and_tts(self):
+    def test_raw_veo_cost_cap_blocks_paid_calls_and_tts(self):
         service = ProductionService(mode="hybrid")
         service._editor = fake_editor("unused.mp4")
         service._generator = SimpleNamespace(generate_scene_clip=AsyncMock())
@@ -618,10 +628,8 @@ class ProductionGateTests(unittest.TestCase):
             "shorts_maker.services.production_service.verified_first_frame",
             return_value=("reviewed.png", "frame-hash"),
         ):
-            result = asyncio.run(service.produce_video(sample_script()))
-        self.assertFalse(result.success)
-        self.assertIn("VISUAL_COST_CAP_EXCEEDED", result.error)
-        self.assertIn("예상 비주얼 비용", result.error)
+            with self.assertRaisesRegex(ValueError, "VISUAL_COST_CAP_EXCEEDED"):
+                asyncio.run(service.generate_review_clip(sample_script(), 0))
         service._editor.prepare_narration.assert_not_awaited()
         service._generator.generate_scene_clip.assert_not_awaited()
 
@@ -703,15 +711,14 @@ class ProductionGateTests(unittest.TestCase):
             "shorts_maker.services.production_service.verified_first_frame",
             return_value=("reviewed.png", "frame-hash"),
         ):
-            result = asyncio.run(service.produce_video(sample_script()))
-        self.assertFalse(result.success)
-        self.assertIn("$0.994", result.error)
+            with self.assertRaisesRegex(ValueError, "자동 재시도 없이 1회"):
+                asyncio.run(service.generate_review_clip(sample_script(), 0))
         service._editor.prepare_narration.assert_not_awaited()
         service._generator.generate_scene_clip.assert_not_awaited()
 
     @patch("shorts_maker.services.production_service.check_video_quality")
     @patch("shorts_maker.services.production_service.asyncio.sleep", new_callable=AsyncMock)
-    def test_hybrid_generates_video_hook_and_image_remainder(self, _sleep, _check):
+    def test_hybrid_reuses_reviewed_video_hook_and_generates_image_remainder(self, _sleep, _check):
         with tempfile.TemporaryDirectory() as directory, patch.object(settings, "clips_dir", Path(directory)):
             output = Path(directory) / "output.mp4"
             output.touch()
@@ -722,22 +729,22 @@ class ProductionGateTests(unittest.TestCase):
             service._editor = fake_editor(output)
             service._editor.selected_bgm_path = "/tmp/documented.mp3"
             service._editor.bgm_volume = 0.35
-            service._generator = SimpleNamespace(generate_scene_clip=AsyncMock(
-                side_effect=[str(output), str(output)],
-            ))
+            service._generator = SimpleNamespace(generate_scene_clip=AsyncMock(return_value=str(output)))
             with patch.object(ProductionService, "_save_clip", side_effect=lambda _dir, _mode, path: path), patch(
                 "shorts_maker.services.production_service.verified_first_frame",
                 return_value=("reviewed.png", "frame-hash"),
+            ), patch.object(ProductionService, "_cached_clip", side_effect=lambda _dir, mode: str(output) if mode == 'video' else None), patch(
+                "shorts_maker.services.production_service.verified_raw_clip", return_value="raw-hash",
             ):
                 result = asyncio.run(service.produce_video(script))
             self.assertTrue(result.success)
-            self.assertEqual(result.generated_scenes, 2)
-            self.assertAlmostEqual(result.estimated_visual_cost_usd, 0.514)
+            self.assertEqual(result.generated_scenes, 1)
+            self.assertEqual(result.reused_scenes, 1)
+            self.assertAlmostEqual(result.estimated_visual_cost_usd, 0.034)
             calls = service._generator.generate_scene_clip.await_args_list
-            self.assertEqual([call.kwargs["mode_override"] for call in calls], ["video", "image"])
-            self.assertEqual([call.kwargs["source_url"] for call in calls], [script.source_url] * 2)
-            self.assertEqual(calls[0].kwargs["first_frame_path"], "reviewed.png")
-            self.assertNotIn("first_frame_path", calls[1].kwargs)
+            self.assertEqual([call.kwargs["mode_override"] for call in calls], ["image"])
+            self.assertEqual([call.kwargs["source_url"] for call in calls], [script.source_url])
+            self.assertNotIn("first_frame_path", calls[0].kwargs)
             report = json.loads(Path(result.report_path).read_text(encoding="utf-8"))
             self.assertTrue(report["quality_passed"])
             self.assertEqual(report["video_sha256"], hashlib.sha256(output.read_bytes()).hexdigest())
@@ -750,8 +757,9 @@ class ProductionGateTests(unittest.TestCase):
             self.assertEqual(report["bgm_source_target_lufs"], -14)
             self.assertTrue(report["paired_comparison_eligible"])
             self.assertEqual([scene["visual_mode"] for scene in report["scenes"]], ["video", "image"])
-            self.assertEqual([scene["source"] for scene in report["scenes"]], ["generated", "generated"])
-            self.assertAlmostEqual(report["estimated_visual_output_cost_usd"], 0.514)
+            self.assertEqual([scene["source"] for scene in report["scenes"]], ["cache", "generated"])
+            self.assertEqual(report["scenes"][0]["raw_clip_sha256"], "raw-hash")
+            self.assertAlmostEqual(report["estimated_visual_output_cost_usd"], 0.034)
 
     @patch("shorts_maker.services.production_service.check_video_quality")
     @patch("shorts_maker.services.production_service.asyncio.sleep", new_callable=AsyncMock)

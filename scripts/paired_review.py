@@ -9,6 +9,7 @@ from pathlib import Path
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.services.production_service import ProductionService
+from shorts_maker.services.raw_review import verified_raw_clip
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
 from shorts_maker.utils.config import settings
 
@@ -18,8 +19,8 @@ def estimate_pair(script: ShortsScript) -> tuple[float, float]:
     hybrid = 0.0
     for index, scene in enumerate(script.scenes):
         mode = scene_mode("hybrid", scene, index)
-        model = settings.veo_model_id if mode == "video" else settings.image_model_id
-        hybrid += estimated_scene_cost(mode, model, settings.hybrid_veo_duration_seconds)
+        if mode == 'image':
+            hybrid += estimated_scene_cost('image', settings.image_model_id)
     return image, hybrid
 
 
@@ -34,7 +35,14 @@ async def render_pair(script: ShortsScript, budget_usd: float) -> None:
         raise ValueError("영상별 비주얼 비용 상한을 넘습니다.")
     if not settings.paid_production_enabled:
         raise ValueError(ProductionService.PAID_WORK_DISABLED)
-    print(f"Pair visual upper estimate: ${image_estimate + hybrid_estimate:.3f}", flush=True)
+    hybrid_service = ProductionService(mode='hybrid', max_veo_attempts=1)
+    for index, scene in enumerate(script.scenes):
+        if scene_mode('hybrid', scene, index) == 'video':
+            clip, frame_hash = hybrid_service.review_clip_path(script, index)
+            if not clip:
+                raise ValueError(f'RAW_CLIP_REVIEW_REQUIRED: 씬 {scene.scene_number}의 승인된 Veo 원본이 필요합니다.')
+            verified_raw_clip(script, scene, clip, frame_hash)
+    print(f"Pair new visual upper estimate: ${image_estimate + hybrid_estimate:.3f}", flush=True)
 
     narrator = VideoEditor(bgm_volume=0.0)
     audio_paths = await narrator.prepare_narration(script)
