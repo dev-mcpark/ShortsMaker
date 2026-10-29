@@ -41,6 +41,8 @@ On 2026-10-28, the owner separately approved one v3 Veo Lite request with a $0.2
 
 A [provisional whole-story comparison](../outputs/evaluation/jamsu_scene3_context_20261028/context_review.html) now uses that raw shot only in scene 3 with the four existing local diagram clips and the same script-bound Yuna audio. The two 44.625-second cuts have identical encoded audio and no music; the new cut passes the technical video check, retains both source URLs, and has no YouTube ID. Its $0 new visual output estimate describes this free assembly, not the earlier Veo request. Watch the muted raw clip first, then this context comparison to judge whether the motion reads as a design revision and connects to scene 4. Neither cut has a new editorial verdict.
 
+A [12-second focused context comparison](../outputs/evaluation/jamsu_scene3_focus_20261029/review.html) now trims the unchanged baseline and Veo-replacement full cuts at the same 16.5–28.5-second window. Its decoded audio is identical, both clips passed `check_video_quality`, and it preserves the previous and next scene around the change. This reduces review time but does not establish whether lifting the pink model reads as a design exclusion rather than physical removal; that judgment remains with the owner. No provider call or upload ran.
+
 ## Later scene map and spending gate
 
 | Scene | Visual information that must be readable | Cheapest next check |
