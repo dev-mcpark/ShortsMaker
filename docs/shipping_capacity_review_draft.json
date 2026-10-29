@@ -1,0 +1,48 @@
+{
+  "title": "배를 더 투입했는데 왜 물류는 막혔을까?",
+  "description": "미국 세인트루이스 연방준비은행의 2026년 10월 27일 해운 분석에 근거한 미승인 이야기 초안입니다. 2021~22년 미국행 컨테이너선 전체의 투입 능력과 이용률, 아시아~미국 서부 항로의 별도 이용률을 구분합니다. 이용률 하락을 화물 총량 감소로 바꾸어 말하지 않습니다. 모든 화면은 원자료의 지도·차트나 실제 사고 장면을 복제하지 않는 자체 제작 개념 영상으로 계획합니다. 원문: https://www.stlouisfed.org/on-the-economy/2026/oct/measuring-shipping-disruptions-satellite-data",
+  "tags": ["해운", "공급망", "경제", "Shorts"],
+  "mood": "curious",
+  "style": "source-grounded shipping-capacity puzzle",
+  "music_direction": "선박 수와 실제 항로 이용률의 역설을 차분한 호기심으로 열고, 대기와 저속 운항이 드러날 때만 가볍게 고조한다. 재난 속보나 승리감처럼 들리는 음악은 피한다. 이 이야기 오디션은 음악 없이 듣는다.",
+  "source_name": "Federal Reserve Bank of St. Louis — Measuring Shipping Disruptions with Satellite Data (2026-10-27)",
+  "source_url": "https://www.stlouisfed.org/on-the-economy/2026/oct/measuring-shipping-disruptions-satellite-data",
+  "generation_mode": "image",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "visual_mode": "image",
+      "duration_seconds": 5,
+      "visual_description": "Original miniature container route with more generic ships joining a lane while a few already wait ahead. Make the question visible without implying that total cargo delivered fell.",
+      "script_text": "배를 더 늘렸는데, 왜 미국행 항로는 더 막혔을까요?"
+    },
+    {
+      "scene_number": 2,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Fictional, unbranded route model: more ships join the U.S.-bound lanes, making deployed capacity visibly larger. The editor typesets early 2022 and more than 60% versus before the pandemic. Do not copy the source map or imply that delivered cargo grew by the same amount.",
+      "script_text": "2022년 초 미국행 선박의 투입 능력은 팬데믹 전보다 60퍼센트 넘게 커졌습니다."
+    },
+    {
+      "scene_number": 3,
+      "visual_mode": "image",
+      "duration_seconds": 8,
+      "visual_description": "In one original route model, the deployed-capacity lane grows while a separate utilization gauge shrinks. Editor typesets 89% and below 70%; keep them visibly different from total cargo volume.",
+      "script_text": "하지만 위성 자료 속 이용률은 팬데믹 전 약 89퍼센트에서, 2021년과 22년엔 70퍼센트 아래로 내려갔죠."
+    },
+    {
+      "scene_number": 4,
+      "visual_mode": "image",
+      "duration_seconds": 9,
+      "visual_description": "A single Asia-to-U.S.-West-Coast route: one ship queues outside port while another progresses slowly at sea. The editor reveals 92% before the pandemic and 53% by late 2021 only for this route.",
+      "script_text": "아시아에서 미국 서부로 가는 항로는 대기와 저속 운항이 겹쳤습니다. 이용률은 팬데믹 전 92퍼센트에서 2021년 말 53퍼센트로 떨어졌죠."
+    },
+    {
+      "scene_number": 5,
+      "visual_mode": "image",
+      "duration_seconds": 7,
+      "visual_description": "Return to the original route model: show more deployed ships but a portion of their capacity occupied by waiting or slow sailing. End on effective versus potential capacity, not a claim about prices or delivered cargo totals.",
+      "script_text": "배가 많아도 기다리고 느리게 가는 동안엔 그 능력을 못 씁니다. 배의 숫자만으로 병목을 알 수 없는 이유입니다."
+    }
+  ]
+}
