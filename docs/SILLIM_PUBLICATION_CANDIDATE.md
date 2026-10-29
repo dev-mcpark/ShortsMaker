@@ -1,6 +1,6 @@
 # Sillim publication candidate
 
-Updated: 2026-10-29. This handoff was prepared for a private review cut. YouTube Studio now shows the same video as **public**; the owner's intent for that change is pending confirmation. Do not change its visibility from this document. [STATUS.md](STATUS.md) owns the current decision state; [SILLIM_VISUAL_ALIGNMENT_REVIEW.md](SILLIM_VISUAL_ALIGNMENT_REVIEW.md) owns the source and scene evidence.
+Updated: 2026-10-30. This handoff was prepared for a private review cut. YouTube Studio shows the same video as **public**, and the owner confirmed that they published it. Do not change its visibility from this document. [STATUS.md](STATUS.md) owns the current decision state; [SILLIM_VISUAL_ALIGNMENT_REVIEW.md](SILLIM_VISUAL_ALIGNMENT_REVIEW.md) owns the source and scene evidence.
 
 ## Current evidence
 
@@ -10,6 +10,7 @@ Updated: 2026-10-29. This handoff was prepared for a private review cut. YouTube
 - The city page marks its own images and document as Korea Open Government License Type 4, including noncommercial and no-derivative conditions. The cut uses generated scenes and local editor graphics, not those source images. [Mixkit's music license](https://mixkit.co/license/modal/musicFree/) permits its music in commercial YouTube videos; a platform claim remains possible.
 - On 2026-10-29, the saved MP4 again passed `check_video_quality`, matched the sidecar's SHA-256, and `BGMManager.get_track_path("candidate_rnb_2.mp3")` accepted the local music file against its tracked hash. The [Seoul release](https://www.seoul.go.kr/news/news_report.do?nttNo=457013&srchCtgry=465) still states the ground/B1 bus space, B2 35,000-ton reservoir, and approximately 10 cm stream-level effect. [Mixkit's listing](https://mixkit.co/free-stock-music/tag/soft/) still identifies “RnB 2” by Arulo, and its [free music license](https://mixkit.co/license/modal/musicFree/) still allows commercial YouTube use.
 - Later on 2026-10-29, a read-only Studio check found video `Mrlr_6IVgf8` **public** with a displayed publication date of October 27, completed SD/HD processing, and no notice shown for that row or detail page. Its title still says “비공개 검토본”. Initial audience data exists, but the first seven-day window is incomplete; the dated snapshot is ignored under `outputs/evaluation/` and stays out of Git. No visibility or metadata setting was changed during this check.
+- On 2026-10-30, the owner confirmed that they personally made this video public; a fresh Studio list check still showed **public**. The private scorecard now marks the fully watched cut accepted and its public release confirmed. No seven-day outcome or billed cost was entered. The public title and description still describe a private review copy, so the proposed metadata below is pending a separate edit decision.
 
 ## Proposed public metadata — not applied
 
@@ -27,6 +28,6 @@ Updated: 2026-10-29. This handoff was prepared for a private review cut. YouTube
 
 The proposal removes “비공개 검토본” from the current title and description. Keep the YouTube AI-use answer at **yes**, set Korean as the title/description and video language in Studio, and verify the final visible metadata before applying any edit. Studio currently says external description links require one-time channel verification to become clickable; the URL remains readable as text without it. Future API uploads now set the supported title/description `defaultLanguage` to `ko`; this does not change this existing video or set its spoken-audio language through the upload API.
 
-## Remaining decision
+## Remaining checks
 
-Confirm whether the observed public state was the owner's intended release before marking it as approved or changing any visibility setting. The exact final metadata still needs its own approval. Per-video billed cost is unallocated because provider billing is aggregate and delayed; keep the private scorecard's acceptance and public-release fields blank until the editorial decision is confirmed, and leave its seven-day audience fields blank until that window completes. Do not resume repeating paid production solely because this cut is public.
+The exact final metadata still needs its own approval and a Studio check after any edit. Per-video billed cost is unallocated because provider billing is aggregate and delayed; leave the private scorecard's seven-day audience fields blank until that window completes. Do not resume repeating paid production solely because this cut is public.

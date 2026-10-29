@@ -45,6 +45,8 @@ A [12-second focused context comparison](../outputs/evaluation/jamsu_scene3_focu
 
 ## Later scene map and spending gate
 
+On 2026-10-29, the scene-4 narration was checked against [Seoul's revised-plan announcement](https://mediahub.seoul.go.kr/archives/2019683): it separately names expanded pedestrian space, 22 viewing areas, and transparent floor at two ship-passage sections. The retained flat concept diagram communicates most of this through labels. A new, ignored [still comparison](../outputs/evaluation/jamsu_scene4_first_frame_20261029/review.html) tests a one-level miniature with three representative empty viewing bays and two glass-floor examples; the first image's unsupported benches and planters were removed in v2. The visible three bays do **not** stand for the actual 22-site layout, and the model is not a drawing of the final bridge. At phone size the blue panels may still look like surface pools rather than walkable transparent floor, so the still has no editorial pass and is not a Veo input approval. Keep the exact counts and proposal status in source-attributed editing. The built-in image tool made the still outside the project's Google/OpenAI API clients; no project ledger reservation, Veo request, voice, or upload ran.
+
 | Scene | Visual information that must be readable | Cheapest next check |
 | --- | --- | --- |
 | 1 — question | An elevated pink path is **proposed**, then the question of its disappearance is raised. | Retained local motion can establish the question; decide after whole-cut playback whether a new Veo hook earns its cost. |
