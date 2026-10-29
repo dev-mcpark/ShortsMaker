@@ -684,6 +684,60 @@ class ReviewRegressions(unittest.TestCase):
             self.assertFalse(accepted["enabled"])
             self.assertEqual(accepted["last_planned_url"], direct_url)
 
+    def test_reviewed_script_local_cut_private_upload_and_schedule_handoff(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "outputs"
+            output.mkdir()
+            clip = root / "manual.mp4"
+            clip.write_bytes(b"local visual")
+            audio = root / "scene.wav"
+            audio.write_bytes(b"local voice")
+            video = output / "cut.mp4"
+            video.write_bytes(b"finished local cut")
+            script = ShortsScript(
+                title="Reviewed episode", description="Source-backed", tags=[],
+                mood="calm", style="documentary", source_name="Source",
+                source_url="https://example.com/reviewed", generation_mode="image",
+                scenes=[VideoScene(scene_number=1, visual_description="Show the change",
+                                   script_text="Explain the change")],
+            )
+            manager = ScheduleManager(str(root / "schedules.json"))
+            schedule = manager.create_schedule("RSS", "09:00")
+            manager.update_schedule(schedule["id"], {
+                "last_result": "script_review_pending", "enabled": False,
+                "last_script": script.model_dump(), "last_planned_url": script.source_url,
+            })
+            service = ProductionService(mode="image")
+            service._editor = SimpleNamespace(
+                validate_narration=Mock(), compose_video=AsyncMock(return_value=str(video)),
+                selected_bgm_path=None, bgm_volume=0,
+            )
+            service._uploader = SimpleNamespace(
+                get_authenticated_service=Mock(return_value=object()),
+                upload=AsyncMock(return_value="private_12345"),
+            )
+            metadata = {"title": script.title, "description": script.source_url,
+                        "contains_synthetic_media": False}
+            with patch.object(settings, "output_dir", output), patch.object(
+                settings, "paid_production_enabled", False,
+            ), patch("shorts_maker.services.production_service.check_video_quality"):
+                result = asyncio.run(service.full_pipeline(
+                    approved_script=script, manual_clip_paths={1: str(clip)},
+                    prepared_audio_paths=[str(audio)], auto_upload=True,
+                    upload_metadata=metadata,
+                ))
+                self.assertTrue(result.success, result.error)
+                self.assertEqual(result.youtube_id, "private_12345")
+                report = json.loads(video.with_suffix(".production.json").read_text(encoding="utf-8"))
+                self.assertEqual(report["script_sha256"], script_sha256(script.model_dump()))
+                self.assertEqual(report["youtube_upload_request"]["status"]["privacyStatus"], "private")
+                accepted = manager.accept_pending_video(schedule["id"], str(video))
+            self.assertEqual(accepted["last_result"], "private_review_accepted")
+            self.assertTrue(accepted["enabled"])
+            service._editor.validate_narration.assert_called_once()
+            service._uploader.upload.assert_awaited_once()
+
     def test_three_reviewed_rss_cycles_survive_restart_without_replanning_pending_script(self):
         with tempfile.TemporaryDirectory() as directory:
             filename = str(Path(directory) / "schedules.json")
