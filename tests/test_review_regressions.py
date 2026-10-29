@@ -1884,6 +1884,38 @@ class ReviewRegressions(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "검증 응답을 확인할 수 없습니다"):
             asyncio.run(planner._validate_and_save(script, {"content": "The factory expanded."}))
 
+    def test_validated_scripts_with_same_title_and_second_keep_both_versions(self):
+        script = ShortsScript(
+            title="Factory", description="first", tags=[], mood="calm", style="news",
+            source_name="source", source_url="https://example.com", generation_mode="image",
+            scenes=[VideoScene(scene_number=1, visual_description="factory", script_text="The factory expanded")],
+        )
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.validator = SimpleNamespace(validate_script=AsyncMock(return_value=SimpleNamespace(
+            is_valid=True, reason="approved")))
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "shorts_maker.planner.script_planner.datetime"
+        ) as clock:
+            clock.now.return_value.strftime.return_value = "20261029_120000"
+            planner.script_output_dir = directory
+            for description in ("first", "revised"):
+                asyncio.run(planner._validate_and_save(
+                    script.model_copy(update={"description": description}),
+                    {"content": "The factory expanded."},
+                ))
+            saved = list(Path(directory).glob("script_*.json"))
+            self.assertEqual(len(saved), 2)
+            self.assertEqual(list(Path(directory).glob("script_*.tmp")), [])
+            self.assertEqual({json.loads(path.read_text())["description"] for path in saved},
+                             {"first", "revised"})
+            unsaved = script.model_copy(update={"description": "unsaved"})
+            with patch("shorts_maker.planner.script_planner.os.replace", side_effect=OSError("disk error")):
+                self.assertIs(asyncio.run(planner._validate_and_save(
+                    unsaved, {"content": "The factory expanded."},
+                )), unsaved)
+            self.assertEqual(list(Path(directory).glob("script_*.tmp")), [])
+
     def test_subtitle_failure_is_not_silently_accepted(self):
         editor = object.__new__(VideoEditor)
         editor.logger = Mock()

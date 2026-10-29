@@ -587,15 +587,28 @@ class ScriptPlanner:
         self.logger.info(f"🎉 Script Validated!")
 
         # Save to file
+        temp_path = None
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             safe_title = re.sub(r'[^\w\s-]', '', script.title).strip().replace(' ', '_')[:30]
             os.makedirs(self.script_output_dir, exist_ok=True)
-            filepath = os.path.join(self.script_output_dir, f"script_{timestamp}_{safe_title}.json")
-            with open(filepath, 'w', encoding='utf-8') as f:
+            with tempfile.NamedTemporaryFile(
+                mode='w', encoding='utf-8', dir=self.script_output_dir,
+                prefix=f"script_{timestamp}_{safe_title}_", suffix='.tmp', delete=False,
+            ) as f:
+                temp_path = f.name
                 f.write(script.model_dump_json(indent=2))
+                f.flush()
+                os.fsync(f.fileno())
+            filepath = f"{temp_path[:-4]}.json"
+            os.replace(temp_path, filepath)
             self.logger.info(f"📄 스크립트 저장됨: {filepath}")
         except IOError as e:
+            if temp_path:
+                try:
+                    Path(temp_path).unlink(missing_ok=True)
+                except OSError:
+                    pass
             self.logger.warning(f"스크립트 저장 실패: {e}")
 
         return script
