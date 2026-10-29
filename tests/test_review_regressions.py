@@ -27,7 +27,7 @@ from shorts_maker.planner.content_analyzer import ContentAnalyzer
 from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.planner.script_planner import ScriptPlanner
 from shorts_maker.planner.script_validator import ScriptValidator
-from shorts_maker.services.production_service import ProductionResult, ProductionService
+from shorts_maker.services.production_service import ProductionResult, ProductionService, script_sha256
 from shorts_maker.utils.character_overlay import CharacterOverlay
 from shorts_maker.utils.character_video_generator import CharacterVideoGenerator
 from shorts_maker.utils.config import PROJECT_ROOT, _find_project_root, settings
@@ -602,14 +602,18 @@ class ReviewRegressions(unittest.TestCase):
             video.write_bytes(b"reviewed private cut")
             report_path = video.with_suffix(".production.json")
             source_url = "https://example.com/first"
+            pending_script = {"source_url": source_url, "title": "Pending story",
+                              "scenes": [{"script_text": "Original narration",
+                                          "visual_description": "Original shot"}]}
             manager = ScheduleManager(str(Path(directory) / "schedules.json"))
             schedule = manager.create_schedule("RSS", "09:00")
             manager.update_schedule(schedule["id"], {
                 "last_result": "script_review_pending", "enabled": False,
-                "last_script": {"source_url": source_url}, "last_planned_url": source_url,
+                "last_script": pending_script, "last_planned_url": source_url,
             })
             report = {
                 "video_path": str(video), "source_url": source_url,
+                "script_sha256": script_sha256(pending_script),
                 "quality_passed": True,
                 "video_sha256": hashlib.sha256(video.read_bytes()).hexdigest(),
                 "youtube_id": "private_12345", "uploaded_at_utc": "2026-10-29T00:00:00Z",
@@ -620,6 +624,8 @@ class ReviewRegressions(unittest.TestCase):
                     manager.accept_pending_video(schedule["id"], str(video))
                 for field, bad_value in (
                     ("source_url", "https://example.com/other"),
+                    ("script_sha256", "wrong"),
+                    ("script_sha256", None),
                     ("video_sha256", "wrong"),
                     ("youtube_id", None),
                     ("youtube_upload_request", {"status": {"privacyStatus": "public"}}),
@@ -630,6 +636,14 @@ class ReviewRegressions(unittest.TestCase):
                         manager.accept_pending_video(schedule["id"], str(video))
                     self.assertEqual(manager.get_schedule(schedule["id"])["last_result"],
                                      "script_review_pending")
+                manager.update_schedule(schedule["id"], {
+                    "last_script": {**pending_script, "scenes": [{"script_text": "Original narration",
+                                                                   "visual_description": "Different shot"}]},
+                })
+                report_path.write_text(json.dumps(report), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "각본"):
+                    manager.accept_pending_video(schedule["id"], str(video))
+                manager.update_schedule(schedule["id"], {"last_script": pending_script})
                 report_path.write_text(json.dumps(report), encoding="utf-8")
                 accepted = manager.accept_pending_video(schedule["id"], str(video))
                 self.assertEqual(accepted["last_result"], "private_review_accepted")
@@ -649,14 +663,17 @@ class ReviewRegressions(unittest.TestCase):
             video.write_bytes(b"reviewed private cut")
             direct_url = "https://example.com/redirect"
             source_url = "https://example.com/first"
+            pending_script = {"source_url": source_url, "title": "Direct story",
+                              "scenes": [{"script_text": "Original narration"}]}
             manager = ScheduleManager(str(Path(directory) / "schedules.json"))
             schedule = manager.create_schedule("Direct", "09:00", direct_url=direct_url)
             manager.update_schedule(schedule["id"], {
                 "last_result": "script_review_pending", "enabled": False,
-                "last_script": {"source_url": source_url}, "last_planned_url": direct_url,
+                "last_script": pending_script, "last_planned_url": direct_url,
             })
             video.with_suffix(".production.json").write_text(json.dumps({
                 "video_path": str(video), "source_url": source_url,
+                "script_sha256": script_sha256(pending_script),
                 "quality_passed": True,
                 "video_sha256": hashlib.sha256(video.read_bytes()).hexdigest(),
                 "youtube_id": "private_12345", "uploaded_at_utc": "2026-10-29T00:00:00Z",
@@ -703,6 +720,7 @@ class ReviewRegressions(unittest.TestCase):
                     video_id = f"private_{number:06d}"
                     video.with_suffix(".production.json").write_text(json.dumps({
                         "video_path": str(video), "source_url": script.source_url,
+                        "script_sha256": script_sha256(script.model_dump(mode="json")),
                         "quality_passed": True,
                         "video_sha256": hashlib.sha256(video.read_bytes()).hexdigest(),
                         "youtube_id": video_id, "uploaded_at_utc": "2026-10-29T00:00:00Z",

@@ -311,6 +311,7 @@ class ScheduleManager:
 
     def accept_pending_video(self, schedule_id: str, video_path: str) -> Dict[str, Any]:
         """Resume RSS discovery only after a reviewed private upload is bound to its saved source."""
+        from shorts_maker.services.production_service import script_sha256
         from shorts_maker.utils.config import settings
 
         schedule = self.get_schedule(schedule_id)
@@ -333,6 +334,7 @@ class ScheduleManager:
                 or Path(report['video_path']).resolve() != video
                 or not isinstance(schedule.get('last_script'), dict)
                 or report.get('source_url') != schedule['last_script'].get('source_url')
+                or report.get('script_sha256') != script_sha256(schedule['last_script'])
                 or report.get('quality_passed') is not True
                 or report.get('video_sha256') != video_sha256):
             raise ValueError("저장된 각본·출처·품질·영상 해시가 제작 기록과 일치하지 않습니다.")

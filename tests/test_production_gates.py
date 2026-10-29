@@ -749,6 +749,9 @@ class ProductionGateTests(unittest.TestCase):
             self.assertTrue(report["quality_passed"])
             self.assertEqual(report["video_sha256"], hashlib.sha256(output.read_bytes()).hexdigest())
             self.assertEqual(report["source_url"], script.source_url)
+            self.assertEqual(report["script_sha256"], hashlib.sha256(json.dumps(
+                script.model_dump(mode="json"), sort_keys=True, ensure_ascii=False,
+            ).encode("utf-8")).hexdigest())
             self.assertEqual(report["supporting_source_urls"], script.supporting_source_urls)
             self.assertEqual(report["production_mode"], "hybrid")
             self.assertEqual(report["music_direction"], script.music_direction)

@@ -61,6 +61,12 @@ def source_credited_description(description: str, source_url: str,
     return description
 
 
+def script_sha256(script: dict) -> str:
+    return hashlib.sha256(json.dumps(
+        script, sort_keys=True, ensure_ascii=False,
+    ).encode('utf-8')).hexdigest()
+
+
 class ProductionPhase(Enum):
     """프로덕션 단계 열거형"""
     IDLE = "idle"
@@ -872,6 +878,8 @@ class ProductionService:
                 "source_url": getattr(script, "source_url", None),
                 "supporting_source_urls": getattr(script, "supporting_source_urls", []),
                 "script_key": script_key,
+                "script_sha256": (script_sha256(script.model_dump(mode='json'))
+                                  if isinstance(script, ShortsScript) else None),
                 "production_mode": self.mode,
                 "paired_comparison_eligible": not bool(manual_paths),
                 "scenes": [
