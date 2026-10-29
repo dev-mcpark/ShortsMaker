@@ -1,6 +1,6 @@
 # Sillim publication candidate
 
-Updated: 2026-10-26. This is the editorial handoff for the current private review cut. It is **not** approval to change YouTube visibility. [STATUS.md](STATUS.md) owns the current decision state; [SILLIM_VISUAL_ALIGNMENT_REVIEW.md](SILLIM_VISUAL_ALIGNMENT_REVIEW.md) owns the source and scene evidence.
+Updated: 2026-10-29. This is the editorial handoff for the current private review cut. It is **not** approval to change YouTube visibility. [STATUS.md](STATUS.md) owns the current decision state; [SILLIM_VISUAL_ALIGNMENT_REVIEW.md](SILLIM_VISUAL_ALIGNMENT_REVIEW.md) owns the source and scene evidence.
 
 ## Current evidence
 
@@ -8,6 +8,7 @@ Updated: 2026-10-26. This is the editorial handoff for the current private revie
 - The saved MP4 still passes the technical gate and matches its production-record SHA-256. The record has the primary source URL, the selected Arulo “RnB 2” music, and a private YouTube ID. The music file matches its local license/hash record.
 - YouTube Studio showed the current title and description, **private** visibility, completed SD/HD processing, “not made for kids,” and AI-use disclosure set to **yes**. The description names the [Seoul City release](https://www.seoul.go.kr/news/news_report.do?nttNo=457013&srchCtgry=465), identifies the footage as AI explanation, and attributes the approximately 10 cm stream effect to the city rather than a measured reduction in flood damage.
 - The city page marks its own images and document as Korea Open Government License Type 4, including noncommercial and no-derivative conditions. The cut uses generated scenes and local editor graphics, not those source images. [Mixkit's music license](https://mixkit.co/license/modal/musicFree/) permits its music in commercial YouTube videos; a platform claim remains possible.
+- On 2026-10-29, the saved MP4 again passed `check_video_quality`, matched the sidecar's SHA-256, and `BGMManager.get_track_path("candidate_rnb_2.mp3")` accepted the local music file against its tracked hash. The [Seoul release](https://www.seoul.go.kr/news/news_report.do?nttNo=457013&srchCtgry=465) still states the ground/B1 bus space, B2 35,000-ton reservoir, and approximately 10 cm stream-level effect. [Mixkit's listing](https://mixkit.co/free-stock-music/tag/soft/) still identifies “RnB 2” by Arulo, and its [free music license](https://mixkit.co/license/modal/musicFree/) still allows commercial YouTube use. This local/source check did not revisit the video's current Studio visibility or claim status; the last Studio check above was on 2026-10-26.
 
 ## Proposed public metadata — not applied
 
