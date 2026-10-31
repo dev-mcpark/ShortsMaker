@@ -33,7 +33,9 @@ from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.editor.quality_check import check_video_quality
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
 from shorts_maker.services.visual_review import verified_first_frame
-from shorts_maker.services.raw_review import verified_raw_clip
+from shorts_maker.services.raw_review import (
+    begin_raw_request, complete_raw_request, retained_raw_request, verified_raw_clip,
+)
 from shorts_maker.services.google_budget import check_google_budget
 
 
@@ -346,7 +348,8 @@ class ProductionService:
         self._update_progress(ProductionPhase.FAILED, 0, f"오류: {error}")
         return ProductionResult(success=False, video_path=video_path, clips=clips or [], error=error)
 
-    def _scene_cache_dir(self, scene, mode: str, first_frame_sha256: str | None = None) -> Path:
+    def _scene_cache_dir(self, scene, mode: str, first_frame_sha256: str | None = None,
+                         *, model_id: str | None = None, duration_seconds: int | None = None) -> Path:
         overlay = (self.character_overlay_config or CharacterOverlayConfig()).to_dict()
         for key in ("character_image", "character_video"):
             path = overlay.get(key)
@@ -357,9 +360,10 @@ class ProductionService:
             "visual_description": scene.visual_description,
             "motion_instruction": scene.motion_instruction if mode == "video" else None,
             "mode": mode,
-            "model": settings.veo_model_id if mode == "video" else settings.image_model_id,
+            "model": model_id or (settings.veo_model_id if mode == "video" else settings.image_model_id),
             "format": "720p-silent" if mode == "video" else "1K-vertical",
-            "duration": (settings.hybrid_veo_duration_seconds if self.mode == "hybrid"
+            "duration": (duration_seconds if duration_seconds is not None else
+                         settings.hybrid_veo_duration_seconds if self.mode == "hybrid"
                          else settings.veo_duration_seconds) if mode == "video" else None,
             "overlay": overlay,
         }
@@ -411,6 +415,17 @@ class ProductionService:
         if scene_mode(self.mode, scene, scene_index) != 'video':
             raise ValueError('Veo 장면만 원본 검토할 수 있습니다.')
         _, frame_hash = verified_first_frame(script, scene)
+        retained = retained_raw_request(script, scene, frame_hash)
+        if retained:
+            original_directory = self._scene_cache_dir(
+                scene, 'video', frame_hash, model_id=retained['model'],
+                duration_seconds=retained['duration_seconds'],
+            )
+            if Path(retained['clip_path']).resolve() != (original_directory / 'clip.mp4').resolve():
+                raise ValueError('RAW_CLIP_CONFIG_CHANGED: 저장된 원본의 오버레이·캐시 설정을 확인하세요.')
+            if not self._valid_clip(Path(retained['clip_path']), 'video'):
+                raise ValueError('RAW_CLIP_REQUEST_UNVERIFIED: 저장된 원본 파일을 읽을 수 없습니다.')
+            return retained['clip_path'], frame_hash
         directory = self._scene_cache_dir(scene, 'video', frame_hash)
         return self._cached_clip(directory, 'video'), frame_hash
 
@@ -426,6 +441,8 @@ class ProductionService:
                     _, frame_hash = verified_first_frame(script, scene)
                 except ValueError:
                     pass
+                if frame_hash and self.review_clip_path(script, index)[0]:
+                    continue
             directory = self._scene_cache_dir(scene, mode, frame_hash)
             if self._cached_clip(directory, mode):
                 continue
@@ -437,12 +454,15 @@ class ProductionService:
         return total, requests
 
     async def generate_review_clip(self, script: ShortsScript, scene_index: int,
-                                   *, request_budget_usd: float | None = None) -> str:
+                                   *, request_budget_usd: float | None = None,
+                                   expected_frame_sha256: str | None = None) -> str:
         """Generate at most one new Veo scene for a separate muted raw verdict."""
         if self.max_veo_attempts != 1:
             raise ValueError('원본 검토용 Veo 요청은 자동 재시도 없이 1회만 허용됩니다.')
         scene = script.scenes[scene_index]
         frame_path, frame_hash = verified_first_frame(script, scene)
+        if expected_frame_sha256 is not None and expected_frame_sha256 != frame_hash:
+            raise ValueError('FIRST_FRAME_CHANGED: 원본 검토 화면을 다시 확인한 뒤 요청하세요.')
         cached, _ = self.review_clip_path(script, scene_index)
         if cached:
             return cached
@@ -460,6 +480,8 @@ class ProductionService:
             raise ValueError(self.PAID_WORK_DISABLED)
         directory = self._scene_cache_dir(scene, 'video', frame_hash)
         directory.mkdir(parents=True, exist_ok=True)
+        begin_raw_request(script, scene, str(directory / 'clip.mp4'), frame_hash,
+                          settings.veo_model_id, duration)
         marker = directory / 'request.pending.json'
         try:
             descriptor = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
@@ -479,6 +501,7 @@ class ProductionService:
             kwargs['mode_override'] = 'video'
         generated = await self._get_generator().generate_scene_clip(scene, **kwargs)
         saved = await asyncio.to_thread(self._save_clip, directory, 'video', generated)
+        complete_raw_request(script, scene, frame_hash)
         marker.unlink()
         return saved
 
@@ -710,12 +733,13 @@ class ProductionService:
             ]
             cached_paths = []
             raw_hashes = {}
+            raw_requests = {}
             visual_request_count = 0
-            for scene, mode, directory in zip(script.scenes, visual_modes, cache_dirs):
-                cached = (
-                    await asyncio.to_thread(self._cached_clip, directory, mode)
-                    if directory and scene.scene_number not in manual_paths else None
-                )
+            for index, (scene, mode, directory) in enumerate(zip(script.scenes, visual_modes, cache_dirs)):
+                cached = None
+                if directory and scene.scene_number not in manual_paths:
+                    cached = (self.review_clip_path(script, index)[0] if mode == 'video' else
+                              await asyncio.to_thread(self._cached_clip, directory, mode))
                 cached_paths.append(cached)
                 if mode == 'video' and scene.scene_number not in manual_paths:
                     if not cached:
@@ -725,6 +749,9 @@ class ProductionService:
                     raw_hashes[scene.scene_number] = verified_raw_clip(
                         script, scene, cached, first_frames[scene.scene_number][1],
                     )
+                    raw_requests[scene.scene_number] = retained_raw_request(
+                        script, scene, first_frames[scene.scene_number][1],
+                    ) or {}
                 if scene.scene_number not in manual_paths and not cached:
                     model = settings.veo_model_id if mode == "video" else settings.image_model_id
                     duration = (settings.hybrid_veo_duration_seconds if self.mode == "hybrid"
@@ -895,7 +922,8 @@ class ProductionService:
                         "number": scene.scene_number,
                         "visual_mode": mode,
                         "model_id": None if scene.scene_number in manual_paths else (
-                            settings.veo_model_id if mode == "video" else settings.image_model_id
+                            raw_requests.get(scene.scene_number, {}).get('model', settings.veo_model_id)
+                            if mode == "video" else settings.image_model_id
                         ),
                         "source": "manual" if scene.scene_number in manual_paths else (
                             "cache" if cached_paths[index] else "generated"

@@ -128,28 +128,35 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                 duration = (settings.hybrid_veo_duration_seconds if state.mode == 'hybrid'
                             else settings.veo_duration_seconds)
                 reserve = service.max_veo_attempts * estimated_scene_cost('video', settings.veo_model_id, duration)
-                ui.label(f'새 원본 요청: {settings.veo_model_id} · {duration}초 · 예약 추정 ${reserve:.3f}').classes(
+                cost_label = ui.label(f'새 원본 요청: {settings.veo_model_id} · {duration}초 · 예약 추정 ${reserve:.3f}').classes(
                     'text-xs text-amber-200')
                 status = ui.label('첫 프레임 승인 후 원본을 생성하세요.').classes('text-xs text-slate-300')
                 preview_area = ui.column().classes('w-full')
                 note = ui.input('원본 판정 의견').classes('w-full').props('dark')
+                displayed_frame = {'sha256': None}
+                request_label = cost_label.text
 
                 def refresh(scene_index=index, label=status, area=preview_area,
-                            criteria_display=criteria_area, note_input=note):
+                            criteria_display=criteria_area, note_input=note, cost=cost_label,
+                            shown=displayed_frame, new_request_label=request_label):
                     area.clear()
                     criteria_display.clear()
+                    shown['sha256'] = None
+                    cost.text = new_request_label
                     try:
                         clip, frame_hash = state.get_or_create_service().review_clip_path(state.script, scene_index)
                         criteria = json.loads(review_path(state.script, state.script.scenes[scene_index]).read_text(encoding='utf-8'))
-                    except (OSError, ValueError, KeyError, TypeError):
-                        label.text = '첫 프레임 승인 후 원본을 생성하세요.'
+                    except (OSError, ValueError, KeyError, TypeError) as error:
+                        label.text = f'원본 검토 중단: {error}'
                         return
+                    shown['sha256'] = frame_hash
                     with criteria_display:
                         ui.label('보여야 할 내용: ' + ' · '.join(criteria['must_show'])).classes('text-xs text-slate-200')
                         ui.label('피해야 할 묘사: ' + ' · '.join(criteria['must_avoid'])).classes('text-xs text-slate-300')
                     if not clip:
                         label.text = '무음 원본 생성 대기'
                         return
+                    cost.text = '저장된 무음 원본 재사용 · 새 API 요청 없음'
                     verdict = raw_review_status(state.script, state.script.scenes[scene_index], clip, frame_hash)
                     label.text = {'approved': '무음 원본 승인됨', 'rejected': '무음 원본 제외됨 · 새 첫 프레임 또는 장면 설명 필요',
                                   'stale': '원본 판정 무효 · 변경된 파일 확인 필요'}.get(verdict, '무음 원본 판정 대기')
@@ -161,18 +168,25 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                     with area:
                         ui.video(clip).props('controls muted').classes('w-full max-w-[230px]')
 
-                async def generate(scene_index=index, update=refresh, request_cap=reserve):
+                async def generate(scene_index=index, update=refresh, request_cap=reserve,
+                                   shown=displayed_frame):
                     if not state.is_script_reviewed() or state.pipeline_running:
                         safe_notify('현재 각본 검토를 완료하고 다른 제작이 끝난 뒤 진행하세요.', type='warning')
+                        return
+                    if not shown['sha256']:
+                        update()
+                        safe_notify('현재 첫 프레임과 요청 비용을 확인한 뒤 다시 진행하세요.', type='warning')
                         return
                     state.pipeline_running = True
                     try:
                         clip = await state.get_or_create_service().generate_review_clip(
                             state.script, scene_index, request_budget_usd=request_cap,
+                            expected_frame_sha256=shown['sha256'],
                         )
                         update()
                         safe_notify(f'무음 원본을 저장했습니다: {clip}', type='positive')
                     except Exception as error:
+                        update()
                         logger.error('Veo 원본 생성 실패: %s', error)
                         safe_notify(f'원본 생성 중단: {error}', type='negative')
                     finally:

@@ -166,7 +166,7 @@ def render_planning_tab(state: 'AppState') -> None:
                             except ValueError:
                                 return '가격 미등록'
                         ui.label().bind_text_from(state, 'mode', backward=cost_label).classes('text-xl font-extrabold text-amber-400 tracking-tight')
-                        ui.label('새 비주얼 출력 추정').classes('text-[10px] text-slate-500 font-bold')
+                        ui.label('전체 비주얼 추정 · 저장분 차감 전').classes('text-[10px] text-slate-500 font-bold')
 
     # ── 메인 레이아웃 ────────────────────────────────────────
     with ui.row().classes('w-full h-auto lg:h-full gap-0 flex flex-col lg:flex-row flex-nowrap overflow-visible lg:overflow-hidden'):
