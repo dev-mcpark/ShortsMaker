@@ -161,13 +161,15 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                     with area:
                         ui.video(clip).props('controls muted').classes('w-full max-w-[230px]')
 
-                async def generate(scene_index=index, update=refresh):
+                async def generate(scene_index=index, update=refresh, request_cap=reserve):
                     if not state.is_script_reviewed() or state.pipeline_running:
                         safe_notify('현재 각본 검토를 완료하고 다른 제작이 끝난 뒤 진행하세요.', type='warning')
                         return
                     state.pipeline_running = True
                     try:
-                        clip = await state.get_or_create_service().generate_review_clip(state.script, scene_index)
+                        clip = await state.get_or_create_service().generate_review_clip(
+                            state.script, scene_index, request_budget_usd=request_cap,
+                        )
                         update()
                         safe_notify(f'무음 원본을 저장했습니다: {clip}', type='positive')
                     except Exception as error:

@@ -140,16 +140,21 @@ class VisualReviewTests(unittest.TestCase):
             settings, 'clips_dir', Path(directory) / 'clips',
         ), patch.object(settings, 'paid_production_enabled', True), patch.object(
             settings, 'max_visual_cost_usd', 1.0,
+        ), patch.object(settings, 'veo_model_id', 'veo-3.1-lite-generate-001'), patch.object(
+            settings, 'veo_duration_seconds', 8,
         ), patch('shorts_maker.services.production_service.verified_first_frame',
                  return_value=('reviewed.png', 'frame-hash')), patch.object(
             ProductionService, '_save_clip', return_value='cached.mp4',
         ), patch('shorts_maker.services.production_service.check_google_budget') as budget:
             service = ProductionService(mode='video')
             service._generator = SimpleNamespace(generate_scene_clip=AsyncMock(return_value='raw.mp4'))
-            self.assertEqual(asyncio.run(service.generate_review_clip(sample_script(), 0)), 'cached.mp4')
+            self.assertEqual(asyncio.run(service.generate_review_clip(
+                sample_script(), 0, request_budget_usd=0.24,
+            )), 'cached.mp4')
             service._generator.generate_scene_clip.assert_awaited_once()
             self.assertEqual(service._generator.generate_scene_clip.await_args.kwargs['first_frame_path'],
                              'reviewed.png')
+            self.assertEqual(service._generator.generate_scene_clip.await_args.kwargs['request_budget_usd'], 0.24)
             budget.assert_called_once()
             self.assertIsNone(service._editor)
             directory_path = service._scene_cache_dir(sample_script().scenes[0], 'video', 'frame-hash')
@@ -174,6 +179,46 @@ class VisualReviewTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'RAW_CLIP_REQUEST_UNVERIFIED'):
                 asyncio.run(service.generate_review_clip(script, 0))
             service._generator.generate_scene_clip.assert_awaited_once()
+
+    def test_staged_request_cap_rejects_before_creating_attempt_marker(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            settings, 'clips_dir', Path(directory) / 'clips',
+        ), patch.object(settings, 'veo_model_id', 'veo-3.1-lite-generate-001'), patch.object(
+            settings, 'veo_duration_seconds', 8,
+        ), patch('shorts_maker.services.production_service.verified_first_frame',
+                 return_value=('reviewed.png', 'frame-hash')):
+            service = ProductionService(mode='video')
+            service._generator = SimpleNamespace(generate_scene_clip=AsyncMock())
+            for cap in (0.23, -1, True, float('nan'), float('inf')):
+                with self.subTest(cap=cap), self.assertRaisesRegex(ValueError, 'VISUAL_REQUEST_CAP'):
+                    asyncio.run(service.generate_review_clip(sample_script(), 0, request_budget_usd=cap))
+            self.assertFalse(list(Path(directory).rglob('request.pending.json')))
+            service._generator.generate_scene_clip.assert_not_awaited()
+
+    def test_scene_cap_reaches_veo_boundary_in_video_and_hybrid_modes(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            settings, 'temp_dir', Path(directory),
+        ), patch.object(settings, 'veo_model_id', 'veo-3.1-lite-generate-001'), patch.object(
+            settings, 'veo_duration_seconds', 8,
+        ), patch.object(settings, 'hybrid_veo_duration_seconds', 8), patch.object(
+            settings, 'max_visual_cost_usd', 1.0,
+        ), patch('shorts_maker.generator.video_generator.check_google_budget'):
+            for mode in ('video', 'hybrid'):
+                with self.subTest(mode=mode):
+                    generator = object.__new__(VideoGenerator)
+                    generator.mode = mode
+                    generator.max_veo_attempts = 1
+                    generator.character_overlay = None
+                    generator.client = Mock()
+                    generator.logger = Mock()
+                    generator._retry_veo_call = Mock(side_effect=lambda *args, **kwargs:
+                                                     Path(args[2]).write_bytes(b'raw clip'))
+                    asyncio.run(generator.generate_scene_clip(
+                        sample_script().scenes[0], mode_override='video',
+                        first_frame_path='reviewed.png', request_budget_usd=0.24,
+                    ))
+                    self.assertEqual(generator._retry_veo_call.call_args.kwargs['request_budget_usd'], 0.24)
+                    self.assertEqual(generator._retry_veo_call.call_args.kwargs['max_attempts'], 1)
 
     def test_first_staged_request_checks_the_whole_remaining_visual_round(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(

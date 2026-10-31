@@ -6,6 +6,7 @@ GUI와 비즈니스 로직을 분리하여 유지보수성과 테스트 용이�
 import asyncio
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -435,7 +436,8 @@ class ProductionService:
             requests += 1
         return total, requests
 
-    async def generate_review_clip(self, script: ShortsScript, scene_index: int) -> str:
+    async def generate_review_clip(self, script: ShortsScript, scene_index: int,
+                                   *, request_budget_usd: float | None = None) -> str:
         """Generate at most one new Veo scene for a separate muted raw verdict."""
         if self.max_veo_attempts != 1:
             raise ValueError('원본 검토용 Veo 요청은 자동 재시도 없이 1회만 허용됩니다.')
@@ -445,6 +447,11 @@ class ProductionService:
         if cached:
             return cached
         duration = settings.hybrid_veo_duration_seconds if self.mode == 'hybrid' else settings.veo_duration_seconds
+        estimate = estimated_scene_cost('video', settings.veo_model_id, duration)
+        cap = estimate if request_budget_usd is None else request_budget_usd
+        if (not isinstance(cap, (int, float)) or isinstance(cap, bool)
+                or not math.isfinite(cap) or cap < 0 or estimate > cap):
+            raise ValueError('VISUAL_REQUEST_CAP_EXCEEDED: 장면 요청의 유효한 예산 상한이 필요하며 현재 추정액 이상이어야 합니다.')
         reserve, requests = self._remaining_visual_reserve(script)
         if reserve > settings.max_visual_cost_usd:
             raise ValueError('VISUAL_COST_CAP_EXCEEDED: 남은 장면 전체의 예상 비주얼 비용이 설정 상한을 초과합니다.')
@@ -461,12 +468,13 @@ class ProductionService:
         with os.fdopen(descriptor, 'w', encoding='utf-8') as file:
             json.dump({'scene_number': scene.scene_number, 'source_url': script.source_url,
                        'first_frame_sha256': frame_hash, 'model': settings.veo_model_id,
-                       'duration_seconds': duration}, file, ensure_ascii=False)
+                       'duration_seconds': duration, 'request_budget_usd': cap}, file, ensure_ascii=False)
             file.flush()
             os.fsync(file.fileno())
         kwargs = {'source_url': script.source_url,
                   'first_frame_path': frame_path,
-                  'expected_first_frame_sha256': frame_hash}
+                  'expected_first_frame_sha256': frame_hash,
+                  'request_budget_usd': cap}
         if self.mode == 'hybrid':
             kwargs['mode_override'] = 'video'
         generated = await self._get_generator().generate_scene_clip(scene, **kwargs)

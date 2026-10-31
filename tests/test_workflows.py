@@ -712,6 +712,7 @@ class WorkflowTests(unittest.TestCase):
         generator._generate_background_video.assert_awaited_once_with(
             scene, source_url=None, first_frame_path="reviewed.png",
             expected_first_frame_sha256="frame-hash",
+            request_budget_usd=generator._scene_output_reserve('video'),
         )
         generator._generate_image_gemini.assert_awaited_once_with(scene, None)
 

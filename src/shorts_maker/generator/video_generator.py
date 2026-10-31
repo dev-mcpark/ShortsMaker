@@ -119,7 +119,8 @@ class VideoGenerator:
     async def generate_scene_clip(self, scene, mode_override: Optional[str] = None,
                                   *, source_url: str | None = None,
                                   first_frame_path: str | None = None,
-                                  expected_first_frame_sha256: str | None = None) -> str:
+                                  expected_first_frame_sha256: str | None = None,
+                                  request_budget_usd: float | None = None) -> str:
         """현재 생성 모드에 맞는 단일 씬 클립을 만듭니다."""
         mode = mode_override or self.mode
         reserve = self._scene_output_reserve(mode)
@@ -128,12 +129,14 @@ class VideoGenerator:
         if mode == "video":
             if not first_frame_path:
                 raise ValueError("FIRST_FRAME_REVIEW_REQUIRED: Veo 첫 프레임 검토가 필요합니다.")
+            cap = reserve if request_budget_usd is None else request_budget_usd
             path = (await self._generate_background_video(
                 scene, settings.hybrid_veo_duration_seconds, source_url,
-                first_frame_path, expected_first_frame_sha256,
+                first_frame_path, expected_first_frame_sha256, cap,
             ) if self.mode == "hybrid" else await self._generate_background_video(
                 scene, source_url=source_url, first_frame_path=first_frame_path,
                 expected_first_frame_sha256=expected_first_frame_sha256,
+                request_budget_usd=cap,
             ))
             if self.character_overlay:
                 return await self._composite_character_on_video(path, scene)
@@ -204,7 +207,8 @@ class VideoGenerator:
     async def _generate_background_video(self, scene, duration_seconds: Optional[int] = None,
                                          source_url: str | None = None,
                                          first_frame_path: str | None = None,
-                                         expected_first_frame_sha256: str | None = None) -> str:
+                                         expected_first_frame_sha256: str | None = None,
+                                         request_budget_usd: float | None = None) -> str:
         """Stage 1: 배경 영상만 생성 (캐릭터 없이)."""
         output_path = str(settings.temp_dir / f"bg_scene_{scene.scene_number}_{uuid.uuid4().hex}.mp4")
 
@@ -221,7 +225,7 @@ class VideoGenerator:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None, self._run_veo_background_only, model_id, scene, output_path, duration_seconds,
-                source_url, first_frame_path, expected_first_frame_sha256,
+                source_url, first_frame_path, expected_first_frame_sha256, request_budget_usd,
             )
             if os.path.exists(output_path):
                 self.logger.info(f"    ✅ Background video generated: {output_path}")
@@ -437,6 +441,7 @@ class VideoGenerator:
         source_url: str | None = None,
         first_frame_path: str | None = None,
         expected_first_frame_sha256: str | None = None,
+        request_budget_usd: float | None = None,
     ) -> None:
         """Veo로 배경 영상만 생성 (캐릭터 언급 없음)."""
         self.logger.info(
@@ -464,7 +469,7 @@ class VideoGenerator:
             max_attempts=self.max_veo_attempts,
             duration_seconds=duration_seconds,
             scene_number=scene.scene_number,
-            request_budget_usd=settings.max_visual_cost_usd,
+            request_budget_usd=settings.max_visual_cost_usd if request_budget_usd is None else request_budget_usd,
             source_url=source_url,
             first_frame_path=first_frame_path,
             expected_first_frame_sha256=expected_first_frame_sha256,
