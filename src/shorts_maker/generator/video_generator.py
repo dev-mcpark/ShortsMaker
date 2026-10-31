@@ -67,6 +67,7 @@ class VideoGenerator:
                 vertexai=True,
                 project=self.project_id,
                 location=self.location,
+                http_options=types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1)),
             )
             self.logger.info(f"✅ Google GenAI Client initialized (Mode: {mode})")
             if self.character_overlay:
@@ -506,6 +507,7 @@ class VideoGenerator:
         if self.image_client is None:
             self.image_client = genai.Client(
                 vertexai=True, project=self.project_id, location="global",
+                http_options=types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1)),
             )
         status = "unknown"
         try:

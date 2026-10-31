@@ -72,7 +72,8 @@ class CharacterVideoGenerator:
             self.client = genai.Client(
                 vertexai=True,
                 project=self.project_id,
-                location=self.location
+                location=self.location,
+                http_options=types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1)),
             )
             self.logger.info("✅ CharacterVideoGenerator initialized")
         except Exception as e:
