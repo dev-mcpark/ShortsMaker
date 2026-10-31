@@ -9,7 +9,7 @@ from shorts_maker.utils.config import settings
 
 
 class SessionManager:
-    # ponytail: process-local state; use persistent storage if reloads across server restarts matter.
+    # shortcut: sessions stay process-local; recover saved scripts and their audio choices after restart.
     _sessions: dict[str, AppState] = {}
 
     @classmethod

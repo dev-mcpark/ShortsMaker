@@ -280,10 +280,7 @@ def render_planning_tab(state: 'AppState') -> None:
                                     with (script_dir / script_select.value).open('r', encoding='utf-8') as f:
                                         data = json.load(f)
                                     loaded_script = ShortsScript.model_validate(data)
-                                    state.reset_manual_mode()
-                                    state.script = loaded_script
-                                    state.script_context = None
-                                    state.topic_candidates = []
+                                    state.load_saved_script(loaded_script)
                                     update_script_preview()
                                     update_candidates_panel()
                                     feedback_section.visible = False

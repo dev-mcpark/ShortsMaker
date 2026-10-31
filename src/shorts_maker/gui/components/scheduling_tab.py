@@ -352,15 +352,10 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 def load_pending_script(data=schedule.get('last_script')):
                                                     try:
                                                         script = ShortsScript.model_validate(data)
+                                                        state.load_saved_script(script)
                                                     except (TypeError, ValueError) as error:
                                                         safe_notify(f'저장된 각본 확인 실패: {error}', type='negative')
                                                         return
-                                                    state.reset_manual_mode()
-                                                    state.script = script
-                                                    state.script_context = None
-                                                    state.topic_candidates = []
-                                                    state.reviewed_script_sha256 = None
-                                                    state.final_video_path = None
                                                     safe_notify('각본을 불러왔습니다. Workspace의 Script Editor에서 장면을 검토하고 확인하세요.', type='info')
 
                                                 ui.button('검토할 각본 불러오기', on_click=load_pending_script).props(

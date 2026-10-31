@@ -274,7 +274,16 @@ def render_main_page() -> None:
                 bgm_slider = ui.slider(min=0, max=1, step=0.05, value=state.bgm_volume).props('color=violet aria-label="BGM 음량"')
                 bgm_label = ui.label(f'{int(state.bgm_volume * 100)}%').classes('text-xs text-slate-400 self-end -mt-2 mb-3')
                 bgm_slider.bind_value(state, 'bgm_volume')
-                bgm_slider.on('change', lambda e: bgm_label.set_text(f'{int(e.value * 100)}%'))
+                bgm_label.bind_text_from(state, 'bgm_volume', backward=lambda value: f'{int(value * 100)}%')
+                def save_audio_choices():
+                    try:
+                        state.save_audio_choices()
+                        ui.notify('현재 각본의 음성·음악 설정을 저장했습니다.', type='positive')
+                    except (OSError, ValueError) as error:
+                        ui.notify(f'설정 저장 실패: {error}', type='negative')
+
+                ui.button('각본별 음성·음악 설정 저장', on_click=save_audio_choices).props(
+                    'flat dense icon=save').classes('w-full').bind_enabled_from(state, 'script', bool)
 
                 ui.separator().classes('bg-slate-800 my-2')
 

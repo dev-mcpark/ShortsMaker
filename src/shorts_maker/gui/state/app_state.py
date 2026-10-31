@@ -141,6 +141,32 @@ class AppState:
 
     # ── State mutators ────────────────────────────────────────────────────────
 
+    def save_audio_choices(self):
+        from shorts_maker.services.audio_choices import save_audio_choices
+
+        if self.script is None:
+            raise ValueError('설정을 저장할 각본이 없습니다.')
+        return save_audio_choices(self.script, {
+            key: getattr(self, key) for key in ('tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume')
+        })
+
+    def load_saved_script(self, script) -> None:
+        from shorts_maker.services.audio_choices import load_audio_choices
+
+        choices = load_audio_choices(script)
+        if choices is None:
+            defaults = AppState()
+            choices = {key: getattr(defaults, key)
+                       for key in ('tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume')}
+        for key, value in choices.items():
+            setattr(self, key, value)
+        self.reset_manual_mode()
+        self.script = script
+        self.script_context = None
+        self.topic_candidates = []
+        self.reviewed_script_sha256 = None
+        self.final_video_path = None
+
     def confirm_script_review(self) -> None:
         if self.script is None:
             raise ValueError("검토할 각본이 없습니다.")
