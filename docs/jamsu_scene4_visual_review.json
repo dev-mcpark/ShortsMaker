@@ -1,0 +1,22 @@
+{
+  "scene_number": 4,
+  "source_urls": [
+    "https://mediahub.seoul.go.kr/archives/2019683",
+    "https://mediahub.seoul.go.kr/archives/2011129"
+  ],
+  "script_text": "대신 보행 공간을 넓히고, 스물두 곳의 조망 공간과 배가 지나는 두 구간의 투명 데크를 계획했습니다.",
+  "frame_sha256": "b6d82866dfc53e3f86b26767ac6d0f1dc0ce35590e648d3a97a5edbc9a76939b",
+  "motion_prompt_sha256": "b0fb9ebfe777d75c430cb30e1f22424be9fe32812cf364fb23a6f9b2d1178f09",
+  "must_show": [
+    "넓어진 한 높이의 보행면과 측면 조망 공간이 읽힌다",
+    "두 파란 투명 바닥 예시가 보행면과 같은 높이로 유지된다",
+    "난간과 교각을 기준으로 옆으로 이동하는 카메라 시차가 분명하다"
+  ],
+  "must_avoid": [
+    "상부 공중길이나 철거·홍수·시공 장면을 추가한다",
+    "유리 바닥을 물웅덩이나 뚫린 구멍으로 바꾼다",
+    "모형 구조·패널 개수·위치가 바뀌거나 글자가 생성된다"
+  ],
+  "decision": "pending",
+  "reviewer_note": "2026-10-30 owner verdict: 정지 시안의 투명 바닥은 읽힘. 2026-10-31 원본 움직임 프롬프트와 유료 호출은 별도 검토 대기."
+}
