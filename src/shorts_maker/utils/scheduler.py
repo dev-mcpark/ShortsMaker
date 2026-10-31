@@ -28,6 +28,10 @@ _BGM_SELECTION_REQUIRED = "BGM_SELECTION_REQUIRED"
 _ARTICLE_ANALYSIS_UNVERIFIED = "ARTICLE_ANALYSIS_UNVERIFIED"
 _TOPIC_SCORING_UNVERIFIED = "TOPIC_SCORING_UNVERIFIED"
 _PLANNING_UNVERIFIED = "PLANNING_UNVERIFIED"
+_RUN_FIELDS = (
+    'last_run', 'run_count', 'last_result', 'last_script', 'last_planned_url',
+    'last_rendered_url', 'last_video_path', 'last_video_sha256', 'last_youtube_id', 'accepted_at',
+)
 
 
 class ScheduleManager:
@@ -111,6 +115,10 @@ class ScheduleManager:
             raise ValueError(f"일정 파일을 읽을 수 없습니다: {self.filename}") from e
         if not isinstance(schedules, list) or any(not isinstance(item, dict) for item in schedules):
             raise ValueError(f"일정 파일 형식이 잘못되었습니다: {self.filename}")
+        for schedule in schedules:
+            history = schedule.get('run_history', [])
+            if not isinstance(history, list) or any(not isinstance(run, dict) for run in history):
+                raise ValueError(f"일정 실행 이력 형식이 잘못되었습니다: {self.filename}")
         return schedules
 
     def save_schedules(self, schedules: List[Dict[str, Any]]):
@@ -217,6 +225,14 @@ class ScheduleManager:
         for i, schedule in enumerate(schedules):
             if schedule['id'] == schedule_id:
                 updated = {**schedule, **updates}
+                if updates.get('run_count', 0) > schedule.get('run_count', 0):
+                    if schedule.get('last_run'):
+                        previous_run = {key: schedule[key] for key in _RUN_FIELDS if key in schedule}
+                        updated['run_history'] = [*schedule.get('run_history', []), previous_run]
+                    # A new attempt must not inherit another episode's script or review copy.
+                    for key in _RUN_FIELDS:
+                        if key not in updates:
+                            updated.pop(key, None)
                 self._validate_schedule(updated['name'], updated['time'], updated['frequency'],
                                         updated['mode'], updated.get('direct_url'))
                 if (updated['frequency'] == 'Every 4 Weeks' and updated.get('enabled')
@@ -356,6 +372,7 @@ class ScheduleManager:
         updated = self.update_schedule(schedule_id, {
             'last_result': 'private_review_accepted',
             'last_video_path': str(video),
+            'last_video_sha256': video_sha256,
             'last_youtube_id': video_id,
             'accepted_at': datetime.now().isoformat(),
             'enabled': not bool(schedule.get('direct_url')),
@@ -363,6 +380,17 @@ class ScheduleManager:
         if updated is None:
             raise ValueError("일정이 사라져 완료 기록을 저장하지 못했습니다.")
         return updated
+
+    def get_execution_history(self) -> List[Dict[str, Any]]:
+        """Return retained attempts and the current review state, newest first."""
+        history = []
+        for schedule in self.load_schedules():
+            runs = list(schedule.get('run_history', []))
+            if schedule.get('last_run'):
+                runs.append({key: schedule[key] for key in _RUN_FIELDS if key in schedule})
+            history.extend({**run, 'schedule_id': schedule['id'], 'name': schedule['name']}
+                           for run in runs)
+        return sorted(history, key=lambda run: run.get('last_run', ''), reverse=True)
 
     def get_schedule(self, schedule_id: str) -> Optional[Dict[str, Any]]:
         """

@@ -186,6 +186,73 @@ class ReviewRegressions(unittest.TestCase):
                 "유료 제작 스위치 꺼짐", "Google 월 장부 확인 필요", "OpenAI 월 장부 확인 필요",
             ])
 
+    def test_new_scheduled_attempt_preserves_previous_review_and_clears_its_assets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            filename = str(Path(directory) / "schedules.json")
+            manager = ScheduleManager(filename)
+            schedule = manager.create_schedule("Four-week pilot", "09:00", frequency="Every 4 Weeks")
+            previous_script = {"source_url": "https://example.com/first", "title": "First"}
+            manager.update_schedule(schedule["id"], {
+                "run_count": 1, "last_run": "2026-10-01T09:00:00",
+                "last_result": "private_review_accepted", "last_script": previous_script,
+                "last_video_path": "outputs/first.mp4", "last_youtube_id": "private_12345",
+                "accepted_at": "2026-10-02T12:00:00", "last_video_sha256": "first-hash",
+            })
+            with patch.object(settings, "paid_production_enabled", False):
+                asyncio.run(manager._execute_pipeline(schedule))
+            restarted = ScheduleManager(filename)
+            current = restarted.get_schedule(schedule["id"])
+            self.assertEqual(current["last_result"], "paid_production_disabled")
+            for field in ("last_script", "last_video_path", "last_youtube_id", "accepted_at",
+                          "last_video_sha256"):
+                self.assertNotIn(field, current)
+            history = restarted.get_execution_history()
+            self.assertEqual([item["last_result"] for item in history],
+                             ["paid_production_disabled", "private_review_accepted"])
+            self.assertEqual(history[1]["last_script"], previous_script)
+            self.assertEqual(history[1]["last_youtube_id"], "private_12345")
+            self.assertEqual(history[1]["last_video_sha256"], "first-hash")
+
+    def test_scheduled_review_updates_one_attempt_and_retains_rejection_next_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("RSS", "09:00")
+            first = ShortsScript(title="First", description="Source", tags=[], mood="calm",
+                                 style="documentary", source_name="Source", generation_mode="hybrid",
+                                 source_url="https://example.com/first",
+                                 scenes=[VideoScene(scene_number=1, script_text="First story",
+                                                    visual_description="First scene")])
+            second = first.model_copy(update={"source_url": "https://example.com/second"})
+            with patch("shorts_maker.utils.bgm_manager.BGMManager.has_documented_track", return_value=True), patch(
+                "shorts_maker.services.production_service.ProductionService.full_pipeline",
+                new_callable=AsyncMock, side_effect=[
+                    ProductionResult(success=True, script=first, review_pending=True),
+                    ProductionResult(success=True, script=second, review_pending=True),
+                ],
+            ):
+                asyncio.run(manager._execute_pipeline(schedule))
+                manager.reject_pending_script(schedule["id"])
+                self.assertEqual(len(manager.get_execution_history()), 1)
+                asyncio.run(manager._execute_pipeline(schedule))
+            history = manager.get_execution_history()
+            self.assertEqual([item["run_count"] for item in history], [2, 1])
+            self.assertEqual([item["last_result"] for item in history],
+                             ["script_review_pending", "script_rejected"])
+            self.assertEqual([item["last_script"]["source_url"] for item in history],
+                             [second.source_url, first.source_url])
+
+    def test_corrupt_run_history_is_not_overwritten(self):
+        with tempfile.TemporaryDirectory() as directory:
+            filename = Path(directory) / "schedules.json"
+            manager = ScheduleManager(str(filename))
+            schedule = manager.create_schedule("RSS", "09:00")
+            for corrupt_history in ({"run_count": 1}, ["not a run"]):
+                original = json.dumps([{**schedule, "run_history": corrupt_history}])
+                filename.write_text(original, encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "실행 이력"):
+                    manager.update_schedule(schedule["id"], {"enabled": False})
+                self.assertEqual(filename.read_text(encoding="utf-8"), original)
+
     def test_corrupt_schedule_does_not_leave_scheduler_running(self):
         async def exercise():
             with tempfile.TemporaryDirectory() as directory:
@@ -689,6 +756,7 @@ class ReviewRegressions(unittest.TestCase):
                 self.assertEqual(accepted["last_result"], "private_review_accepted")
                 self.assertEqual(accepted["last_video_path"], str(video.resolve()))
                 self.assertEqual(accepted["last_youtube_id"], "private_12345")
+                self.assertEqual(accepted["last_video_sha256"], report["video_sha256"])
                 self.assertTrue(accepted["enabled"])
                 self.assertEqual(ScheduleManager(str(Path(directory) / "schedules.json")).get_schedule(
                     schedule["id"])["last_result"], "private_review_accepted")

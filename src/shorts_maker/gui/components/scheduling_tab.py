@@ -500,9 +500,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
 
                 @ui.refreshable
                 def history_list():
-                    schedules = schedule_manager.load_schedules()
-                    run_schedules = [s for s in schedules if s.get('last_run')]
-                    run_schedules.sort(key=lambda x: x.get('last_run', ''), reverse=True)
+                    run_schedules = schedule_manager.get_execution_history()
 
                     if not run_schedules:
                         with ui.element('div').classes('p-8'):
@@ -516,26 +514,30 @@ def render_scheduling_tab(state: 'AppState') -> None:
                         with ui.element('div').classes('p-4 space-y-2'):
                             for schedule in run_schedules[:10]:
                                 last_result = schedule.get('last_result', 'unknown')
-                                is_success = last_result == 'success'
+                                is_success = last_result in {'success', 'private_review_accepted'}
+                                is_pending = last_result in {'script_review_pending', 'run_in_progress'}
                                 run_count = schedule.get('run_count', 0)
 
-                                result_class = 'border-l-4 '
-                                result_class += 'border-green-500 bg-green-900/10' if is_success else 'border-red-500 bg-red-900/10'
+                                color = 'green' if is_success else 'amber' if is_pending else 'red'
+                                result_class = f'border-l-4 border-{color}-500 bg-{color}-900/10'
 
                                 with ui.element('div').classes(f'w-full p-3 rounded-r-lg {result_class}'):
                                     with ui.row().classes('w-full items-center justify-between'):
                                         with ui.row().classes('items-center gap-3'):
-                                            icon_name = 'check_circle' if is_success else 'error'
-                                            icon_class = 'text-green-400' if is_success else 'text-red-400'
+                                            icon_name = 'check_circle' if is_success else 'hourglass_empty' if is_pending else 'error'
+                                            icon_class = f'text-{color}-400'
                                             ui.icon(icon_name, size='sm').classes(icon_class)
 
                                             with ui.column().classes('gap-0'):
                                                 ui.label(schedule['name']).classes('text-sm font-medium text-white')
                                                 ui.label(schedule.get('last_run', '')[:19].replace('T', ' ')).classes('text-xs text-gray-300')
+                                                script = schedule.get('last_script')
+                                                if isinstance(script, dict) and script.get('title'):
+                                                    ui.label(script['title']).classes('text-xs text-gray-300')
 
                                         with ui.row().classes('items-center gap-2'):
                                             ui.badge(f'#{run_count}').props('color=blue-grey-8 text-color=white').classes('text-xs')
-                                            ui.badge(last_result[:15]).props(f'color={"green-9" if is_success else "red-9"} text-color=white').classes('text-xs')
+                                            ui.badge(last_result).props(f'color={color}-9 text-color=white').classes('text-xs')
 
                 history_list()
 
