@@ -135,6 +135,44 @@ class ReviewRegressions(unittest.TestCase):
 
         asyncio.run(exercise())
 
+    def test_four_week_schedule_uses_persisted_start_anchor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("Monthly pilot", "09:00", frequency="Every 4 Weeks")
+            schedule["interval_anchor_at"] = "2026-10-31T10:30:00"
+            backend = Mock()
+            manager._scheduler = backend
+
+            manager._register_job(schedule)
+            manager._register_job(schedule)
+
+            self.assertEqual(backend.add_job.call_count, 2)
+            for call in backend.add_job.call_args_list:
+                self.assertEqual(call.args[1], "interval")
+                self.assertEqual(call.kwargs["weeks"], 4)
+                self.assertEqual(call.kwargs["start_date"].isoformat(), "2026-11-01T09:00:00")
+
+    def test_disabled_four_week_schedule_anchors_on_first_enable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScheduleManager(str(Path(directory) / "schedules.json"))
+            schedule = manager.create_schedule("Later pilot", "09:00", frequency="Every 4 Weeks",
+                                               enabled=False)
+            self.assertNotIn("interval_anchor_at", schedule)
+
+            enabled = manager.update_schedule(schedule["id"], {"enabled": True})
+            self.assertIsNotNone(enabled.get("interval_anchor_at"))
+            first_anchor = enabled["interval_anchor_at"]
+            manager.update_schedule(schedule["id"], {"enabled": False})
+            resumed = manager.update_schedule(schedule["id"], {"enabled": True})
+            self.assertEqual(resumed["interval_anchor_at"], first_anchor)
+
+            daily = manager.update_schedule(schedule["id"], {
+                "frequency": "Daily", "interval_anchor_at": "2020-01-01T00:00:00",
+            })
+            self.assertEqual(daily["frequency"], "Daily")
+            converted = manager.update_schedule(schedule["id"], {"frequency": "Every 4 Weeks"})
+            self.assertNotEqual(converted["interval_anchor_at"], "2020-01-01T00:00:00")
+
     def test_schedule_status_shows_missing_paid_prerequisites(self):
         self.assertEqual(_schedule_readiness_messages(), [])
         with patch.object(settings, "paid_production_enabled", False), patch(
@@ -230,6 +268,8 @@ class ReviewRegressions(unittest.TestCase):
                 manager.create_schedule("Broken", "25:99")
             with self.assertRaises(ValueError):
                 manager.create_schedule("Blank direct URL", "09:00", direct_url="")
+            with self.assertRaises(ValueError):
+                manager.create_schedule("Wrong interval", "09:00", frequency="Every 5 Weeks")
             self.assertFalse(path.exists())
             schedule = manager.create_schedule("Valid", "09:00",
                                                direct_url="https://example.com/article")

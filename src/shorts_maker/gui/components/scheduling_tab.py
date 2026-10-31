@@ -138,7 +138,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                     # Schedule Name
                     with ui.column().classes('w-full gap-1 mb-4'):
                         ui.label('Schedule Name').classes('text-xs text-gray-400 uppercase tracking-wider')
-                        schedule_name = ui.input('Schedule Name', value='Daily RSS Shorts').props('outlined dense dark').classes('w-full')
+                        schedule_name = ui.input('Schedule Name', value='4주 Shorts 기획').props('outlined dense dark').classes('w-full')
 
                     # Time & Frequency
                     with ui.row().classes('w-full gap-4 mb-4'):
@@ -160,6 +160,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                             frequency_select = ui.select(
                                 options={
                                     'Daily': '📅 Daily',
+                                    'Every 4 Weeks': '📅 Every 4 Weeks',
                                     'Weekly (Mon)': '📆 Mon',
                                     'Weekly (Tue)': '📆 Tue',
                                     'Weekly (Wed)': '📆 Wed',
@@ -168,7 +169,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                     'Weekly (Sat)': '📆 Sat',
                                     'Weekly (Sun)': '📆 Sun',
                                 },
-                                value='Daily'
+                                value='Every 4 Weeks'
                             ).props('outlined dense dark aria-label="반복 주기"').classes('w-full')
 
                     ui.separator().classes('bg-slate-600 my-4')

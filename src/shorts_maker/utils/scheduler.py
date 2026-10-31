@@ -13,7 +13,7 @@ import tempfile
 import uuid
 from pathlib import Path
 from typing import List, Dict, Optional, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.source_manager import SourceManager
@@ -156,7 +156,7 @@ class ScheduleManager:
         Args:
             name: 스케줄 이름
             time: 실행 시간 (HH:MM 형식)
-            frequency: 반복 주기 ('Daily', 'Weekly (Mon)', 'Weekly (Fri)', 등)
+            frequency: 반복 주기 ('Daily', 'Weekly (Mon)', 'Every 4 Weeks' 등)
             topic: 등록된 RSS 분야 (선택, None이면 전체)
             direct_url: 직접 URL (선택)
             auto_upload: YouTube 자동 업로드 여부
@@ -167,6 +167,7 @@ class ScheduleManager:
             생성된 스케줄 딕셔너리
         """
         self._validate_schedule(name, time, frequency, mode, direct_url)
+        created_at = datetime.now().isoformat()
         schedule = {
             'id': str(uuid.uuid4()),
             'name': name,
@@ -177,10 +178,12 @@ class ScheduleManager:
             'auto_upload': auto_upload,
             'mode': mode,
             'enabled': enabled,
-            'created_at': datetime.now().isoformat(),
+            'created_at': created_at,
             'last_run': None,
             'run_count': 0
         }
+        if frequency == 'Every 4 Weeks' and enabled:
+            schedule['interval_anchor_at'] = created_at
 
         # 저장
         schedules = self.load_schedules()
@@ -216,6 +219,10 @@ class ScheduleManager:
                 updated = {**schedule, **updates}
                 self._validate_schedule(updated['name'], updated['time'], updated['frequency'],
                                         updated['mode'], updated.get('direct_url'))
+                if (updated['frequency'] == 'Every 4 Weeks' and updated.get('enabled')
+                        and (schedule['frequency'] != 'Every 4 Weeks'
+                             or not updated.get('interval_anchor_at'))):
+                    updated['interval_anchor_at'] = datetime.now().isoformat()
                 reschedule = any(schedule.get(key) != updated.get(key)
                                  for key in ('enabled', 'time', 'frequency'))
                 schedule = updated
@@ -247,7 +254,7 @@ class ScheduleManager:
         if not isinstance(time, str) or not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', time):
             raise ValueError("시간은 HH:MM 형식이어야 합니다.")
         days = {'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'}
-        if frequency != 'Daily' and frequency not in {f'Weekly ({day})' for day in days}:
+        if frequency not in {'Daily', 'Every 4 Weeks'} and frequency not in {f'Weekly ({day})' for day in days}:
             raise ValueError("지원하지 않는 반복 주기입니다.")
         if mode not in {'hybrid', 'image', 'video'}:
             raise ValueError("지원하지 않는 생성 모드입니다.")
@@ -382,12 +389,15 @@ class ScheduleManager:
             hour, minute = map(int, schedule['time'].split(':'))
             frequency = schedule.get('frequency', 'Daily')
 
-            # 주기 설정
-            trigger_kwargs = {'hour': hour, 'minute': minute}
-
-            if frequency == 'Daily':
-                pass  # 매일 실행
-            elif 'Weekly' in frequency:
+            if frequency == 'Every 4 Weeks':
+                created = datetime.fromisoformat(schedule.get('interval_anchor_at') or schedule['created_at'])
+                first_run = created.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                if first_run <= created:
+                    first_run += timedelta(days=1)
+                trigger, trigger_kwargs = 'interval', {'weeks': 4, 'start_date': first_run}
+            else:
+                trigger, trigger_kwargs = 'cron', {'hour': hour, 'minute': minute}
+            if frequency.startswith('Weekly'):
                 # Weekly (Mon), Weekly (Fri) 등에서 요일 추출
                 day_map = {
                     'Mon': 0, 'Tue': 1, 'Wed': 2, 'Thu': 3,
@@ -400,7 +410,7 @@ class ScheduleManager:
 
             self._scheduler.add_job(
                 self._execute_pipeline,
-                'cron',
+                trigger,
                 id=schedule['id'],
                 args=[schedule],
                 replace_existing=True,
