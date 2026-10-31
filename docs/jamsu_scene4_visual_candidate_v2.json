@@ -22,7 +22,7 @@
     "정확한 조망 공간 22곳의 배치나 완공된 실제 다리로 오인하게 한다"
   ],
   "decision": "approved",
-  "reviewer_note": "2026-10-31 owner approved still readability, exact motion and one new $0.24 request. That one attempt is now consumed. Agent sampled-frame inspection rejects full-duration use because the near pane leaves frame; owner playback remains pending. No retry, speech, editing or upload.",
+  "reviewer_note": "2026-10-31 owner approved still, exact motion and one $0.24 request; that request is consumed. Owner subsequently approved the exact saved raw after full playback, accepting later framing despite the near pane leaving frame. No new paid call, editing or upload is authorized by this raw verdict.",
   "generation_method": "built-in image_gen edit; outside project Google/OpenAI clients and ledgers",
   "visual_description": "Fictional unbuilt revised-plan miniature, a single widened walking deck with representative side viewing bays and two coplanar transparent walkable glass floor examples. Keep a small pedestrian standing on the near glass pane; the calm river stays below the floor. This is not the exact announced 22-site layout. Preserve the supplied image geometry, with unobstructed river in the foreground.",
   "production_script_sha256": "3d55ea6af1eb30330ceff80fcdd552314e8ac73e4d27ec68dd0fced717ae549d",
@@ -54,9 +54,12 @@
     "clip_path": "outputs/evaluation/jamsu_scene4_seed_v2_20261031/scene_4.mp4",
     "clip_sha256": "886851e738eb8ab61a85908a473d08c60e67e7b8e4b263eb7f1fb4fd689e3867",
     "agent_raw_decision": "rejected",
-    "owner_raw_decision": "pending",
+    "owner_raw_decision": "approved",
     "reason": "Near transparent pane leaves frame at about four seconds; both panes are not retained throughout.",
     "google_local_remaining_krw": 2440,
-    "actual_billed_cost": "unverified"
+    "actual_billed_cost": "unverified",
+    "owner_review_date": "2026-10-31",
+    "owner_quote": "바닥으로 읽히고 후반 구도도 괜찮음",
+    "accepted_deviation": "Near pane leaves frame after about four seconds; owner accepts later framing."
   }
 }
