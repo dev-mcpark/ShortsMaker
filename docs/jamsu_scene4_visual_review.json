@@ -17,6 +17,6 @@
     "유리 바닥을 물웅덩이나 뚫린 구멍으로 바꾼다",
     "모형 구조·패널 개수·위치가 바뀌거나 글자가 생성된다"
   ],
-  "decision": "pending",
-  "reviewer_note": "2026-10-30 owner verdict: 정지 시안의 투명 바닥은 읽힘. 2026-10-31 원본 움직임 프롬프트와 유료 호출은 별도 검토 대기."
+  "decision": "approved",
+  "reviewer_note": "2026-10-30 owner verdict: 정지 시안의 투명 바닥은 읽힘. 2026-10-31 owner approved this exact first frame and camera-track prompt, plus one new silent Veo Lite 8-second request within $0.24; no retry or upload. Raw motion remains unreviewed."
 }
