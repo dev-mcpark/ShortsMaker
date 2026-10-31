@@ -22,8 +22,30 @@
     "정확한 조망 공간 22곳의 배치나 완공된 실제 다리로 오인하게 한다"
   ],
   "decision": "pending",
-  "reviewer_note": "First-frame content and proposed motion await owner review. No new Veo request or spending approval. Prior one-shot approvals are spent.",
+  "reviewer_note": "Owner approved still-content readability only. Exact motion/configuration and new spend remain pending; prior one-shot approvals are consumed.",
   "generation_method": "built-in image_gen edit; outside project Google/OpenAI clients and ledgers",
   "visual_description": "Fictional unbuilt revised-plan miniature, a single widened walking deck with representative side viewing bays and two coplanar transparent walkable glass floor examples. Keep a small pedestrian standing on the near glass pane; the calm river stays below the floor. This is not the exact announced 22-site layout. Preserve the supplied image geometry, with unobstructed river in the foreground.",
-  "production_script_sha256": "3d55ea6af1eb30330ceff80fcdd552314e8ac73e4d27ec68dd0fced717ae549d"
+  "production_script_sha256": "3d55ea6af1eb30330ceff80fcdd552314e8ac73e4d27ec68dd0fced717ae549d",
+  "first_frame_content_decision": "approved",
+  "first_frame_content_reviewer_note": "2026-10-31 owner: 걸을 수 있는 바닥과 조망 공간이 읽힘",
+  "request_plan": {
+    "model": "veo-3.1-lite-generate-001",
+    "duration_seconds": 8,
+    "resolution": "720p",
+    "generate_audio": false,
+    "number_of_videos": 1,
+    "max_attempts": 1,
+    "request_cap_usd": 0.24,
+    "estimated_output_usd": 0.24,
+    "full_prompt": "One continuous vertical shot. Fictional unbuilt revised-plan miniature, a single widened walking deck with representative side viewing bays and two coplanar transparent walkable glass floor examples. Keep a small pedestrian standing on the near glass pane; the calm river stays below the floor. This is not the exact announced 22-site layout. Preserve the supplied image geometry, with unobstructed river in the foreground. Motion: One continuous silent portrait shot of the supplied fictional unbuilt-design miniature. Keep the initial viewing angle and make only a small lateral camera translation, retaining both flush transparent floor panels and the side viewing bays throughout. The deck, panel seams, railings, supports and model figures stay fixed. The river remains below the solid glass floor, never on top of it. Keep the foreground as unobstructed water. No pan to an unseen part of the bridge, new structure, raised glass wall, enclosure, foreground beam, cable, lifting, demolition, flood, writing, logo or audio. Plain unlettered surfaces and an uncluttered lower third for captions added in editing. Silent background footage.",
+    "full_prompt_sha256": "e53fb9999abb44a01df439859e8dc1f811ce8b30d302088de810cbc64fd34ab9",
+    "remaining_visual_preflight_usd": 0.376,
+    "preflight_requests": 5,
+    "google_local_room_krw": 2920,
+    "planned_request_reserve_krw": 480,
+    "spending_decision": "pending",
+    "motion_decision": "pending",
+    "pricing_source": "https://cloud.google.com/model-garden/pricing",
+    "pricing_checked_date": "2026-10-31"
+  }
 }
