@@ -21,8 +21,8 @@
     "전경 테이블·보·케이블·추가 상부 구조 또는 글자를 생성한다",
     "정확한 조망 공간 22곳의 배치나 완공된 실제 다리로 오인하게 한다"
   ],
-  "decision": "pending",
-  "reviewer_note": "Owner approved still-content readability only. Exact motion/configuration and new spend remain pending; prior one-shot approvals are consumed.",
+  "decision": "approved",
+  "reviewer_note": "2026-10-31 owner approved still readability, exact motion and one new $0.24 request. That one attempt is now consumed. Agent sampled-frame inspection rejects full-duration use because the near pane leaves frame; owner playback remains pending. No retry, speech, editing or upload.",
   "generation_method": "built-in image_gen edit; outside project Google/OpenAI clients and ledgers",
   "visual_description": "Fictional unbuilt revised-plan miniature, a single widened walking deck with representative side viewing bays and two coplanar transparent walkable glass floor examples. Keep a small pedestrian standing on the near glass pane; the calm river stays below the floor. This is not the exact announced 22-site layout. Preserve the supplied image geometry, with unobstructed river in the foreground.",
   "production_script_sha256": "3d55ea6af1eb30330ceff80fcdd552314e8ac73e4d27ec68dd0fced717ae549d",
@@ -43,9 +43,20 @@
     "preflight_requests": 5,
     "google_local_room_krw": 2920,
     "planned_request_reserve_krw": 480,
-    "spending_decision": "pending",
-    "motion_decision": "pending",
+    "spending_decision": "consumed_one_attempt",
+    "motion_decision": "approved",
     "pricing_source": "https://cloud.google.com/model-garden/pricing",
-    "pricing_checked_date": "2026-10-31"
+    "pricing_checked_date": "2026-10-31",
+    "approval_date": "2026-10-31"
+  },
+  "request_result": {
+    "date": "2026-10-31",
+    "clip_path": "outputs/evaluation/jamsu_scene4_seed_v2_20261031/scene_4.mp4",
+    "clip_sha256": "886851e738eb8ab61a85908a473d08c60e67e7b8e4b263eb7f1fb4fd689e3867",
+    "agent_raw_decision": "rejected",
+    "owner_raw_decision": "pending",
+    "reason": "Near transparent pane leaves frame at about four seconds; both panes are not retained throughout.",
+    "google_local_remaining_krw": 2440,
+    "actual_billed_cost": "unverified"
   }
 }
