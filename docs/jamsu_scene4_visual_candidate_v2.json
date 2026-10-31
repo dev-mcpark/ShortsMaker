@@ -1,0 +1,29 @@
+{
+  "scene_number": 4,
+  "source_urls": [
+    "https://mediahub.seoul.go.kr/archives/2019683",
+    "https://mediahub.seoul.go.kr/archives/2011129"
+  ],
+  "source_rechecked_date": "2026-10-31",
+  "script_text": "대신 보행 공간을 넓히고, 스물두 곳의 조망 공간과 배가 지나는 두 구간의 투명 데크를 계획했습니다.",
+  "frame_path": "assets/jamsu_scene4_seed_v2.png",
+  "frame_sha256": "728948afc23dcfbafea52c38a3c97395c570268b1034ff8792ebfbe07c488801",
+  "image_edit_prompt": "Use case: precise-object-edit.\nAsset type: one portrait 9:16 first-frame candidate for a source-attributed Korean architecture explainer; fictional miniature of an unbuilt plan, never documentary footage.\nInput image 1 is the EDIT TARGET. Keep its single-level pedestrian bridge, three representative side viewing bays, two rectangular transparent floor examples, cream deck, simple railings, concrete supports, calm river, daylight, and miniature visual style. Preserve their relative arrangement. These are representative features, not the city's exact 22-site layout.\nChange only the clarity and framing needed for an image-to-video input: remove the blank cream studio-table rim in the foreground and continue the calm river naturally to the bottom edge. Keep both existing rectangular floor panels completely flat and coplanar with the surrounding walking surface. Make them clearly SOLID TRANSPARENT WALKABLE GLASS panes, with thin flush metal seams and restrained glass reflections, through which the river below remains visible. Reposition one of the existing tiny pedestrians onto the nearer glass pane, feet resting on the same level as the deck, to demonstrate a glass FLOOR rather than an uncovered pool. Keep other figures, supports, bays and panel locations unchanged. No extra floor panel, no raised glass wall, booth, enclosure, steps, second level or overhead structure. Retain a readable view of both panes and side bays in the middle portion of the portrait, with water below for later editor captions. Preserve the original portrait 9:16 canvas ratio. Do not add any words, numbers, labels, logo, watermark, caption card, page edge, crane, cable, bridge arch, flood, damage or construction. One clean complete illustration, not a layout or contact sheet.",
+  "motion_prompt": "One continuous silent portrait shot of the supplied fictional unbuilt-design miniature. Keep the initial viewing angle and make only a small lateral camera translation, retaining both flush transparent floor panels and the side viewing bays throughout. The deck, panel seams, railings, supports and model figures stay fixed. The river remains below the solid glass floor, never on top of it. Keep the foreground as unobstructed water. No pan to an unseen part of the bridge, new structure, raised glass wall, enclosure, foreground beam, cable, lifting, demolition, flood, writing, logo or audio.",
+  "motion_prompt_sha256": "644e3650015418975a48c39a89b33fa808d48aa238a2ade47dca19810801ab8c",
+  "must_show": [
+    "넓어진 한 높이의 보행면과 측면 조망 공간이 구분된다",
+    "두 투명판은 보행면과 같은 높이이며 가까운 판 위의 보행자로 걷는 바닥임이 읽힌다",
+    "영상화 시 두 판과 기존 배치를 유지하며 작은 카메라 시차만 나타난다"
+  ],
+  "must_avoid": [
+    "물웅덩이·빈 구멍·유리 부스나 돌출 유리벽으로 바뀐다",
+    "전경 테이블·보·케이블·추가 상부 구조 또는 글자를 생성한다",
+    "정확한 조망 공간 22곳의 배치나 완공된 실제 다리로 오인하게 한다"
+  ],
+  "decision": "pending",
+  "reviewer_note": "First-frame content and proposed motion await owner review. No new Veo request or spending approval. Prior one-shot approvals are spent.",
+  "generation_method": "built-in image_gen edit; outside project Google/OpenAI clients and ledgers",
+  "visual_description": "Fictional unbuilt revised-plan miniature, a single widened walking deck with representative side viewing bays and two coplanar transparent walkable glass floor examples. Keep a small pedestrian standing on the near glass pane; the calm river stays below the floor. This is not the exact announced 22-site layout. Preserve the supplied image geometry, with unobstructed river in the foreground.",
+  "production_script_sha256": "3d55ea6af1eb30330ceff80fcdd552314e8ac73e4d27ec68dd0fced717ae549d"
+}
