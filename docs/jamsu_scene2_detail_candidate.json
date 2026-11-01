@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-01",
+  "asset_path": "assets/jamsu_scene2_detail_seed_v1.png",
+  "asset_sha256": "6c5bfe4a4b1fc465a83d46fe18e90fbf69639516cd96b52538afc3adcee2aa32",
+  "input_reference": "assets/jamsu_scene3_seed_v3.png",
+  "source_urls": [
+    "https://mediahub.seoul.go.kr/archives/2011129",
+    "https://mediahub.seoul.go.kr/archives/2019683"
+  ],
+  "generation_method": "built-in image_gen edit; outside project Google/OpenAI API clients and ledgers",
+  "prompt": "Use case: precise-object-edit. Asset type: portrait 9:16 image-to-video first frame for a Korean source-grounded architecture Short. Input image is the edit target: a fictional unbuilt 2024 bridge proposal miniature, not actual built infrastructure or an official rendering. Make a new detail-camera view of the SAME miniature, bringing the camera closer and slightly toward the right end so the pink elevated pedestrian path fills the upper-middle half and the retained lower cream walking bridge remains plainly visible beneath it. Preserve the two walking heights, pink upper deck on its same two columns, simple guardrails, lower bridge and its concrete supports, calm blue river, blurred Seoul skyline, soft daylight, model materials and scale. Keep the lower bridge and the water visible together with the upper path, not an isolated pink bar. Do not change the bridge design, add another level, add stairs or extra columns, add a roadway, or place a full-size real scene. Crop out most blank tabletop foreground while retaining the fact this is a small conceptual model. The two heights should occupy substantially more of the portrait than the original wide shot. No words, letters, numbers, date, watermark, logo, title card, split screen, demolition, rising structure, flood, or destruction. Leave the bottom fifth calm river/neutral miniature base for editor captions. One clean complete image.",
+  "still_review": "Agent inspected two separate walking heights and retained model geometry. Left end is intentionally cropped in this detail variant. Still review does not establish returned video quality.",
+  "outcome_owner": "docs/STATUS.md"
+}

@@ -31,3 +31,7 @@ Example for the NASA pilot: `A clearly stylized top-down diagram of one scouting
 - Timed multi-shot prompts may be useful for longer video, but the current six-second hook benefits from the provider's single-moment guidance.
 
 Any prompt wording or model wrapper change that alters generated visuals must change the scene cache identity. Existing saved outputs remain on disk but must not silently stand in for a new prompt's result.
+
+## Bounded model shots (2026-11-01)
+
+Keep a concept model and its relevant ends inside the first frame, and prefer a bounded push toward known geometry over a traversal that reveals unseen surroundings. This is a planning heuristic, not a quality guarantee: in the Jamsu round, neither “very small lateral” nor switching to a wider input prevented newly invented structures. Inspect the returned full-duration framing before use; source-contradicting bridges or access structures must be excluded. Stop at the authorized version limit. A separately reviewed crop or dated design-page cut using an already accepted native shot may be a better edit than another paid attempt; record the repeated footage and judge the whole cut. Do not hide a failed shot’s cost or describe a derived edit as a distinct new native generation. [STATUS.md](STATUS.md) owns the current episode evidence.

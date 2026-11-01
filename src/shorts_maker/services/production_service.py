@@ -429,11 +429,20 @@ class ProductionService:
         directory = self._scene_cache_dir(scene, 'video', frame_hash)
         return self._cached_clip(directory, 'video'), frame_hash
 
-    def _remaining_visual_reserve(self, script: ShortsScript) -> tuple[float, int]:
+    def _remaining_visual_reserve(self, script: ShortsScript,
+                                  manual_clip_paths: Optional[Dict[int, str]] = None) -> tuple[float, int]:
         """Price all still-missing outputs before the first staged Veo request."""
+        manual = manual_clip_paths or {}
+        numbers = {scene.scene_number for scene in script.scenes}
+        if any(type(number) is not int or number not in numbers
+               or not path or not self._valid_clip(Path(path), 'video')
+               for number, path in manual.items()):
+            raise ValueError('수동 편집 장면의 번호와 재생 가능한 로컬 클립을 확인하세요.')
         total = 0.0
         requests = 0
         for index, scene in enumerate(script.scenes):
+            if scene.scene_number in manual:
+                continue
             mode = scene_mode(self.mode, scene, index)
             frame_hash = None
             if mode == 'video':
@@ -455,11 +464,14 @@ class ProductionService:
 
     async def generate_review_clip(self, script: ShortsScript, scene_index: int,
                                    *, request_budget_usd: float | None = None,
-                                   expected_frame_sha256: str | None = None) -> str:
+                                   expected_frame_sha256: str | None = None,
+                                   manual_clip_paths: Optional[Dict[int, str]] = None) -> str:
         """Generate at most one new Veo scene for a separate muted raw verdict."""
         if self.max_veo_attempts != 1:
             raise ValueError('원본 검토용 Veo 요청은 자동 재시도 없이 1회만 허용됩니다.')
         scene = script.scenes[scene_index]
+        if manual_clip_paths and scene.scene_number in manual_clip_paths:
+            raise ValueError('이미 로컬 편집 클립이 지정된 장면입니다.')
         frame_path, frame_hash = verified_first_frame(script, scene)
         if expected_frame_sha256 is not None and expected_frame_sha256 != frame_hash:
             raise ValueError('FIRST_FRAME_CHANGED: 원본 검토 화면을 다시 확인한 뒤 요청하세요.')
@@ -472,7 +484,7 @@ class ProductionService:
         if (not isinstance(cap, (int, float)) or isinstance(cap, bool)
                 or not math.isfinite(cap) or cap < 0 or estimate > cap):
             raise ValueError('VISUAL_REQUEST_CAP_EXCEEDED: 장면 요청의 유효한 예산 상한이 필요하며 현재 추정액 이상이어야 합니다.')
-        reserve, requests = self._remaining_visual_reserve(script)
+        reserve, requests = self._remaining_visual_reserve(script, manual_clip_paths)
         if reserve > settings.max_visual_cost_usd:
             raise ValueError('VISUAL_COST_CAP_EXCEEDED: 남은 장면 전체의 예상 비주얼 비용이 설정 상한을 초과합니다.')
         check_google_budget(reserve, requests)

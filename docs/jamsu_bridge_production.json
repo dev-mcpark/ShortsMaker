@@ -1,0 +1,61 @@
+{
+  "title": "잠수교 위의 분홍 공중길은 왜 사라졌을까?",
+  "description": "서울시의 2024년 잠수교 공모 당선안과 2026년 수정 설계 발표를 비교합니다. 공중보행데크는 홍수 시 안전성 등을 고려해 수정 설계에서 제외됐으며, 보행 공간 확대·조망 공간 22곳·항로 2곳의 투명데크가 계획됐습니다. 개통 목표는 2027년 하반기입니다. 화면은 실제 현장이나 공식 도면이 아닌 AI로 만든 가상의 설계 개념 모형이며, 정확한 배치·치수는 표현하지 않습니다.\n출처(서울시): https://mediahub.seoul.go.kr/archives/2019683\n2024년 공모 발표: https://mediahub.seoul.go.kr/archives/2011129",
+  "tags": [
+    "잠수교",
+    "도시설계",
+    "한강",
+    "보행교"
+  ],
+  "mood": "calm",
+  "style": "source-grounded design revision story",
+  "music_direction": "2026-10-31 사용자 선택: Serene View — Arulo (candidate_serene_view.mp3). Yuna 임시 음성 비교본은 -14 LUFS로 정규화한 음악을 15%로 믹스했다. 설계가 바뀐 이유를 궁금하게 하되 완공된 성과나 재난처럼 극적으로 들리지 않게 한다. 최종 nova 음성 아래의 말 가림과 전체 음악 적합성은 다시 검토한다.",
+  "source_name": "서울시 — 잠수교 설계공모 당선안 (2024)·보행교 수정 설계 발표 (2026)",
+  "source_url": "https://mediahub.seoul.go.kr/archives/2019683",
+  "supporting_source_urls": [
+    "https://mediahub.seoul.go.kr/archives/2011129"
+  ],
+  "generation_mode": "video",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "visual_description": "Fictional unbuilt 2024 proposal miniature: separate pink elevated pedestrian path on two columns above a retained lower cream bridge, calm river and miniature base. Preserve the supplied original model and the visibly separate walking heights. This is not built infrastructure or an exact official design.",
+      "motion_instruction": "One continuous silent portrait shot. Very slowly push the camera closer to the supplied miniature, keeping the pink upper path, the lower bridge and both pink supports clearly separated and fully in frame. The model, columns, decks and miniature figures remain fixed. Only a small camera parallax and subtle water reflections. No structural movement, lifting, disappearing deck, demolition, construction, flooding, new structure, extra levels, text or logos.",
+      "script_text": "잠수교 위에 분홍색 공중 산책길이 생길 뻔했습니다. 그런데 2026년 수정안에서는 사라졌죠. 왜일까요?",
+      "duration_seconds": 8.0,
+      "visual_mode": "video"
+    },
+    {
+      "scene_number": 2,
+      "visual_description": "Closer detail view of the same fictional unbuilt 2024 model: a pink pedestrian path clearly above the lower cream walking deck, supported on pink columns. Preserve both separate heights, lower concrete supports, calm river and small model figures. Not an official drawing or a completed project.",
+      "motion_instruction": "One continuous silent portrait shot. Very small smooth lateral camera slide across the supplied detail model, keeping the pink upper walking surface and the lower cream walking surface visible together throughout. Keep the two existing pink columns, guardrails, concrete supports and model figures fixed. No tilt that hides the lower deck, no morphing, new levels, extra structural parts, removal, rising structure, flood, text, logo or audio.",
+      "script_text": "2024년 서울시 공모 당선안은 다리 위에 떠 있는 길을 더해, 한강을 다른 높이에서 보게 하는 구상이었습니다.",
+      "duration_seconds": 8.0,
+      "visual_mode": "video"
+    },
+    {
+      "scene_number": 3,
+      "visual_description": "Local editorial comparison of two separate dated design pages, using reviewed native miniature footage: the 2024 pink elevated-path concept first, then the 2026 single-level wider-deck concept. Show each whole design at readable size. The editor changes the complete page; no structure moves, disappears, lifts or is demolished. Seoul City attributes the change to flood-time safety considerations; do not visualize an actual flood or structural failure.",
+      "motion_instruction": "Editorially cut between independently reviewed unbuilt design states, with a visible page/date boundary. Never animate removing a structure. Reuse accepted native footage; no new scene-3 provider request.",
+      "script_text": "하지만 서울시는 홍수 때 안전성 등을 고려해, 그 공중 데크를 수정 설계에서 제외했다고 밝혔습니다.",
+      "duration_seconds": 8.0,
+      "visual_mode": "video"
+    },
+    {
+      "scene_number": 4,
+      "visual_description": "Fictional unbuilt revised-plan miniature, a single widened walking deck with representative side viewing bays and two coplanar transparent walkable glass floor examples. Keep a small pedestrian standing on the near glass pane; the calm river stays below the floor. This is not the exact announced 22-site layout. Preserve the supplied image geometry, with unobstructed river in the foreground.",
+      "motion_instruction": "One continuous silent portrait shot of the supplied fictional unbuilt-design miniature. Keep the initial viewing angle and make only a small lateral camera translation, retaining both flush transparent floor panels and the side viewing bays throughout. The deck, panel seams, railings, supports and model figures stay fixed. The river remains below the solid glass floor, never on top of it. Keep the foreground as unobstructed water. No pan to an unseen part of the bridge, new structure, raised glass wall, enclosure, foreground beam, cable, lifting, demolition, flood, writing, logo or audio.",
+      "script_text": "대신 보행 공간을 넓히고, 스물두 곳의 조망 공간과 배가 지나는 두 구간의 투명 데크를 계획했습니다.",
+      "duration_seconds": 8.0,
+      "visual_mode": "video"
+    },
+    {
+      "scene_number": 5,
+      "visual_description": "Fictional unbuilt revised-plan miniature, a single widened walking deck with representative side viewing bays and two coplanar transparent walkable glass floor examples. Keep a small pedestrian standing on the near glass pane; the calm river stays below the floor. This is not the exact announced 22-site layout. Preserve the supplied image geometry, with unobstructed river in the foreground.",
+      "motion_instruction": "One continuous silent portrait shot of the supplied fictional revised-design miniature. Slowly ease the camera slightly backward, keeping the single-level cream pedestrian deck, representative side viewing bays and flush glass floor visible. Preserve the initial architecture and all model parts without additions or transformations. Tiny figures stay fixed and river remains below the solid glass floor. Only gentle camera parallax and water reflections. No pink upper path, raised glass walls, holes, enclosure, crane, construction, completed-site claim, text, date, logo or sound.",
+      "script_text": "결국 한 층 위로 올리던 길은 빠지고, 기존 다리의 보행 공간을 넓히는 설계로 바뀌었습니다. 개통 목표는 2027년 하반기입니다.",
+      "duration_seconds": 8.0,
+      "visual_mode": "video"
+    }
+  ]
+}

@@ -36,6 +36,12 @@ def _binding(script, scene, clip_path: str, frame_sha256: str) -> dict:
     }
 
 
+def _verdict_path(script, scene, clip_path: str) -> Path:
+    path = _review_path(clip_path)
+    script_hash = hashlib.sha256(script.model_dump_json().encode('utf-8')).hexdigest()
+    return path.with_name(f'{path.stem}.{script_hash}.scene_{scene.scene_number}.json')
+
+
 def _request_path(script, scene, frame_sha256: str) -> Path:
     review = review_path(script, scene)
     return review.with_name(f'{review.stem}_{frame_sha256[:20]}.raw.json')
@@ -117,7 +123,7 @@ def complete_raw_request(script, scene, frame_sha256: str) -> None:
 
 def save_raw_verdict(script, scene, clip_path: str, frame_sha256: str,
                      decision: str, note: str) -> Path:
-    path = _review_path(clip_path)
+    path = _verdict_path(script, scene, clip_path)
     if decision not in {'approved', 'rejected'} or not isinstance(note, str) or not note.strip():
         raise ValueError('원본 승인 또는 제외 판정과 검토 의견이 필요합니다.')
     if verified_first_frame(script, scene)[1] != frame_sha256:
@@ -148,7 +154,9 @@ def raw_review_status(script, scene, clip_path: str, frame_sha256: str) -> str:
     try:
         if verified_first_frame(script, scene)[1] != frame_sha256:
             return 'stale'
-        path = _review_path(clip_path)
+        path = _verdict_path(script, scene, clip_path)
+        if not path.exists():
+            path = _review_path(clip_path)
         record = json.loads(path.read_text(encoding='utf-8'))
         expected = _binding(script, scene, clip_path, frame_sha256)
     except (OSError, ValueError, KeyError, TypeError):

@@ -79,6 +79,23 @@ class VisualReviewTests(unittest.TestCase):
             self.assertIsNone(service._generator)
             budget.assert_not_called()
 
+    def test_staged_preflight_prices_only_missing_outputs_with_local_edit_scenes(self):
+        script = sample_script()
+        script.scenes.append(script.scenes[0].model_copy(update={'scene_number': 2}))
+        local = self.directory / 'edited.mp4'
+        local.write_bytes(b'local edit')
+        service = ProductionService(mode='video')
+        with patch.object(service, '_valid_clip', side_effect=lambda path, mode: path == local), patch.object(
+            settings, 'veo_model_id', 'veo-3.1-lite-generate-001',
+        ), patch.object(settings, 'veo_duration_seconds', 8):
+            self.assertEqual(service._remaining_visual_reserve(script, {2: str(local)}), (.24, 1))
+            for invalid in ({3: str(local)}, {True: str(local)}, {2: 'missing.mp4'}):
+                with self.assertRaises(ValueError):
+                    service._remaining_visual_reserve(script, invalid)
+            with self.assertRaisesRegex(ValueError, '로컬 편집 클립'):
+                asyncio.run(service.generate_review_clip(script, 1, manual_clip_paths={2: str(local)}))
+        self.assertIsNone(service._generator)
+
     def test_retained_raw_tampering_stops_instead_of_regenerating(self):
         script, clip, frame_hash = self.saved_scene()
         receipt = next((settings.output_dir / 'evaluation' / 'visual_reviews').glob('*.raw.json'))
@@ -275,6 +292,35 @@ class VisualReviewTests(unittest.TestCase):
             self.assertIn('RAW_CLIP_REVIEW_REQUIRED', result.error)
             self.assertIsNone(service._editor)
             service._generator.generate_scene_clip.assert_not_awaited()
+
+    def test_shared_clip_keeps_independent_verdicts_and_does_not_hide_corrupt_review(self):
+        script, clip, frame_hash = self.saved_scene()
+        revised = script.model_copy(deep=True)
+        revised.description = 'Revised publication metadata'
+        frame, _ = verified_first_frame(script, script.scenes[0])
+        approve_first_frame(revised, revised.scenes[0], frame, ['two levels'], ['demolition'],
+                            'Separate source-bound review', frame_hash)
+        video = MagicMock()
+        video.__enter__.return_value = SimpleNamespace(duration=8, audio=None, size=(540, 960))
+        with patch('shorts_maker.services.raw_review.VideoFileClip', return_value=video):
+            original = save_raw_verdict(script, script.scenes[0], str(clip), frame_hash,
+                                        'approved', 'Owner approval')
+            legacy = clip.with_suffix('.review.json')
+            original.replace(legacy)
+            self.assertEqual(raw_review_status(script, script.scenes[0], str(clip), frame_hash), 'approved')
+            new = save_raw_verdict(revised, revised.scenes[0], str(clip), frame_hash,
+                                  'rejected', 'Does not fit revised context')
+            self.assertEqual(raw_review_status(script, script.scenes[0], str(clip), frame_hash), 'approved')
+            self.assertEqual(raw_review_status(revised, revised.scenes[0], str(clip), frame_hash), 'rejected')
+            original = save_raw_verdict(script, script.scenes[0], str(clip), frame_hash,
+                                        'rejected', 'Later owner exclusion')
+        self.assertNotEqual(original, new)
+        self.assertEqual(json.loads(legacy.read_text())['decision'], 'approved')
+        self.assertEqual(raw_review_status(script, script.scenes[0], str(clip), frame_hash), 'rejected')
+        original.write_text('{broken')
+        self.assertEqual(raw_review_status(script, script.scenes[0], str(clip), frame_hash), 'pending')
+        with self.assertRaisesRegex(ValueError, 'RAW_CLIP_REVIEW_REQUIRED'):
+            verified_raw_clip(script, script.scenes[0], str(clip), frame_hash)
 
     def test_generate_review_clip_requests_one_scene_without_narration(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(
