@@ -248,6 +248,45 @@ class ScorecardTests(unittest.TestCase):
                 writer.writerows(rows)
             self.assertEqual(summarize(outputs, reviews)["source_stories"]["complete_cost_stories"], 1)
 
+    def test_owner_acceptance_survives_missing_bill_without_changing_cost_denominator(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outputs = Path(directory)
+            reviews = outputs / 'reviews.csv'
+            for name in ('accepted', 'rejected', 'pending'):
+                (outputs / f'{name}.production.json').write_text(json.dumps({
+                    'schema_version': 1, 'script_key': name, 'production_mode': 'video',
+                    'quality_passed': True, 'youtube_id': name,
+                }))
+            init_reviews(outputs, reviews)
+            with reviews.open(newline='') as file:
+                rows = list(csv.DictReader(file))
+            for row in rows:
+                name = Path(row['report_path']).name.split('.')[0]
+                if name == 'accepted':
+                    row['accepted'] = 'yes'
+                elif name == 'rejected':
+                    row.update(accepted='no', billed_cost_usd='.1')
+
+            def summary():
+                with reviews.open('w', newline='') as file:
+                    writer = csv.DictWriter(file, fieldnames=FIELDS)
+                    writer.writeheader()
+                    writer.writerows(rows)
+                return summarize(outputs, reviews)
+
+            result = summary()
+            self.assertEqual(result['editorial_reviews'], {
+                'reviewed': 2, 'accepted': 1, 'pending': 1, 'accepted_pending_cost': 1,
+            })
+            self.assertEqual(result['editorial_cuts']['complete_cost_reviews'], 1)
+            self.assertIsNone(result['editorial_cuts']['billed_cost_per_accepted_usd'])
+            self.assertIsNone(result['editorial_outcomes_7d'])
+            next(row for row in rows if row['accepted'] == 'yes')['billed_cost_usd'] = '.2'
+            result = summary()
+            self.assertEqual(result['editorial_reviews']['accepted'], 1)
+            self.assertEqual(result['editorial_reviews']['accepted_pending_cost'], 0)
+            self.assertAlmostEqual(result['editorial_cuts']['billed_cost_per_accepted_usd'], .3)
+
     def test_init_adds_public_release_column_without_losing_existing_reviews(self):
         with tempfile.TemporaryDirectory() as directory:
             outputs = Path(directory)

@@ -154,6 +154,7 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
 
     editorial_paths = [path for path in reports if path not in paired_paths]
     editorial_complete = editorial_accepted = 0
+    editorial_reviewed = editorial_selected = 0
     editorial_cost = 0.0
     editorial_outcome_count = editorial_revenue_count = 0
     editorial_views = editorial_watch_seconds = editorial_revenue = 0.0
@@ -164,6 +165,8 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
         accepted = row["accepted"].strip().lower() == "yes"
         if accepted and not reports[path].get("quality_passed"):
             raise ValueError("품질 검사를 통과하지 못한 영상을 채택할 수 없습니다.")
+        editorial_reviewed += 1
+        editorial_selected += accepted
         cost = _number(row, "billed_cost_usd")
         if cost is not None:
             editorial_complete += 1
@@ -214,6 +217,12 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
                     totals[mode]["cost"] / totals[mode]["accepted"], 4,
                 ) if totals[mode]["accepted"] else None,
             } for mode in totals
+        },
+        "editorial_reviews": {
+            "reviewed": editorial_reviewed,
+            "accepted": editorial_selected,
+            "pending": len(editorial_paths) - editorial_reviewed,
+            "accepted_pending_cost": editorial_selected - editorial_accepted,
         },
         "editorial_cuts": {
             "rendered": len(editorial_paths),
