@@ -5,6 +5,7 @@ from openai import AsyncOpenAI, RateLimitError
 from typing import Optional, Dict, List
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
+from shorts_maker.services.openai_models import ModelMigrationRequired, PRIMARY_CHAT_MODEL
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.services.openai_budget import OpenAIBudgetExceeded, reserve_openai_chat
 from shorts_maker.planner.models import ArticleContent, ContentAnalysis
@@ -21,7 +22,7 @@ class ContentAnalyzer:
             raise ValueError("OPENAI_API_KEY is not configured.")
             
         self.client = AsyncOpenAI(api_key=settings.openai_api_key, max_retries=0)
-        self.model = "gpt-4o"  # 분석을 위해 강력한 모델 사용
+        self.model = PRIMARY_CHAT_MODEL  # 분석을 위해 강력한 모델 사용
 
     async def analyze_content(self, content: ArticleContent) -> Optional[ContentAnalysis]:
         """기사 내용을 바탕으로 심층 분석 수행
@@ -102,7 +103,7 @@ class ContentAnalyzer:
             
         except RateLimitError:
             raise
-        except OpenAIBudgetExceeded:
+        except (OpenAIBudgetExceeded, ModelMigrationRequired):
             raise
         except Exception as e:
             self.logger.error(f"Error during content analysis: {e}")

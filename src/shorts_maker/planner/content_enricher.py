@@ -8,6 +8,7 @@ from typing import Optional, List, Dict
 import requests
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
+from shorts_maker.services.openai_models import ModelMigrationRequired, FAST_CHAT_MODEL
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.services.openai_budget import OpenAIBudgetExceeded, reserve_openai_chat
 
@@ -78,9 +79,9 @@ class ContentEnricher:
         
         require_paid_production_enabled()
         messages = [{"role": "user", "content": prompt}]
-        reserve_openai_chat("gpt-4o-mini", messages, 128, source_url=source_url)
+        reserve_openai_chat(FAST_CHAT_MODEL, messages, 128, source_url=source_url)
         response = await self.client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=FAST_CHAT_MODEL,
             messages=messages,
             temperature=0.3,
             max_completion_tokens=128,
@@ -157,9 +158,9 @@ class ContentEnricher:
         try:
             require_paid_production_enabled()
             messages = [{"role": "user", "content": prompt}]
-            reserve_openai_chat("gpt-4o-mini", messages, 1000, source_url=source_url)
+            reserve_openai_chat(FAST_CHAT_MODEL, messages, 1000, source_url=source_url)
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=FAST_CHAT_MODEL,
                 messages=messages,
                 response_format={"type": "json_object"},
                 max_completion_tokens=1000,
@@ -177,7 +178,7 @@ class ContentEnricher:
             return []
         except RateLimitError:
             raise
-        except OpenAIBudgetExceeded:
+        except (OpenAIBudgetExceeded, ModelMigrationRequired):
             raise
         except Exception as e:
             self.logger.error(f"Error summarizing search results: {e}")

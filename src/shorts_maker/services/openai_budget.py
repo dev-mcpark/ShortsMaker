@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_CEILING
 
 from shorts_maker.utils.config import settings
+from shorts_maker.services.openai_models import require_model_active
 
 
 # shortcut: these standard-tier list prices were checked on 2026-10-23; recheck before changing models or enabling a new month.
@@ -108,6 +109,7 @@ def _reserve(model: str, amount: Decimal, source_url: str | None = None) -> str 
 def reserve_openai_chat(model: str, messages: list[dict], max_completion_tokens: int,
                         *, source_url: str | None = None) -> str | None:
     """Reserve a text request before submission, including its full output-token ceiling."""
+    require_model_active(model)
     if _configured_period() is None:
         return None
     if model not in _CHAT_PRICES or type(max_completion_tokens) is not int or max_completion_tokens < 1:
@@ -122,6 +124,7 @@ def reserve_openai_chat(model: str, messages: list[dict], max_completion_tokens:
 
 def reserve_openai_speech(model: str, text: str, *, source_url: str | None = None) -> str | None:
     """Reserve each speech attempt separately; failures continue to count."""
+    require_model_active(model)
     if _configured_period() is None:
         return None
     if model not in _SPEECH_PRICES or not isinstance(text, str) or not text:
@@ -131,6 +134,7 @@ def reserve_openai_speech(model: str, text: str, *, source_url: str | None = Non
 
 def check_openai_speech_budget(model: str, texts: list[str], attempts: int) -> None:
     """Check the whole narration's possible requests without reserving them."""
+    require_model_active(model)
     if _configured_period() is None:
         return
     if (model not in _SPEECH_PRICES or type(attempts) is not int or attempts < 1

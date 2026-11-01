@@ -16,6 +16,7 @@ from openai import AsyncOpenAI, RateLimitError
 from typing import List, Dict, Optional, Tuple
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
+from shorts_maker.services.openai_models import ModelMigrationRequired, PRIMARY_CHAT_MODEL, FAST_CHAT_MODEL
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.services.openai_budget import OpenAIBudgetExceeded, reserve_openai_chat
 from shorts_maker.planner.script_validator import ScriptValidator
@@ -371,9 +372,9 @@ class ScriptPlanner:
         try:
             require_paid_production_enabled()
             messages = [{"role": "user", "content": prompt}]
-            reserve_openai_chat("gpt-4o-mini", messages, 4000)
+            reserve_openai_chat(FAST_CHAT_MODEL, messages, 4000)
             response = await self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=FAST_CHAT_MODEL,
                 messages=messages,
                 response_format={"type": "json_object"},
                 max_completion_tokens=4000,
@@ -405,7 +406,7 @@ class ScriptPlanner:
             return result
         except RateLimitError:
             raise
-        except OpenAIBudgetExceeded:
+        except (OpenAIBudgetExceeded, ModelMigrationRequired):
             raise
         except Exception as e:
             self.logger.warning(f"토픽 점수화 실패, 이번 제작을 중단: {e}")
@@ -785,9 +786,9 @@ class ScriptPlanner:
 
         require_paid_production_enabled()
         messages = [{"role": "user", "content": prompt}]
-        reserve_openai_chat("gpt-4o", messages, 4000, source_url=item.get('url'))
+        reserve_openai_chat(PRIMARY_CHAT_MODEL, messages, 4000, source_url=item.get('url'))
         response = await self.client.chat.completions.create(
-            model="gpt-4o",
+            model=PRIMARY_CHAT_MODEL,
             messages=messages,
             response_format={"type": "json_object"},
             max_completion_tokens=4000,

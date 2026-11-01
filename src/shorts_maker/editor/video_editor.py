@@ -22,6 +22,7 @@ from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.services.openai_budget import check_openai_speech_budget, reserve_openai_speech
+from shorts_maker.services.openai_models import SPEECH_MODEL
 
 # [CRITICAL FIX] Manually set ImageMagick path for macOS Homebrew install
 if os.path.exists("/opt/homebrew/bin/magick"):
@@ -29,7 +30,7 @@ if os.path.exists("/opt/homebrew/bin/magick"):
 
 
 class VideoEditor:
-    TTS_MODEL = "tts-1"
+    TTS_MODEL = SPEECH_MODEL
     TTS_MAX_ATTEMPTS = 2  # One request plus one explicit transient retry; SDK retries are off.
     BGM_TARGET_LUFS = -14
 

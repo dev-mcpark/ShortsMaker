@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
+from shorts_maker.services.openai_models import ModelMigrationRequired, PRIMARY_CHAT_MODEL
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.services.openai_budget import OpenAIBudgetExceeded, reserve_openai_chat
 
@@ -126,9 +127,9 @@ class ScriptValidator:
                     "source_excerpt": source_excerpt,
                 }, ensure_ascii=False)},
             ]
-            reserve_openai_chat("gpt-4o", messages, 1500, source_url=getattr(script, "source_url", None))
+            reserve_openai_chat(PRIMARY_CHAT_MODEL, messages, 1500, source_url=getattr(script, "source_url", None))
             response = await self.client.chat.completions.create(
-                model="gpt-4o",
+                model=PRIMARY_CHAT_MODEL,
                 messages=messages,
                 response_format={"type": "json_object"},
                 max_completion_tokens=1500,
@@ -176,7 +177,7 @@ class ScriptValidator:
             
         except RateLimitError:
             raise
-        except OpenAIBudgetExceeded:
+        except (OpenAIBudgetExceeded, ModelMigrationRequired):
             raise
         except Exception as e:
             self.logger.error(f"Validation failed due to error: {e}")

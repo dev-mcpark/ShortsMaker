@@ -5,12 +5,14 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from scripts.prepare_narration import prepare
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.services import openai_budget
+from shorts_maker.services import openai_models
 from shorts_maker.utils.config import settings
 
 
@@ -104,6 +106,26 @@ class PrepareNarrationTests(unittest.TestCase):
                 tts.assert_not_called()
                 self.assertFalse(output.exists())
                 self.assertEqual(openai_budget.budget_status()["local_reserved_usd"], 0)
+
+    def test_retirement_blocks_missing_voice_but_allows_completed_set(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = self._script(root)
+            output = root / 'narration'
+            with patch.object(settings, 'output_dir', root), patch.object(
+                openai_models, 'datetime', **{
+                    'now.return_value': datetime(2027, 1, 6, tzinfo=timezone.utc),
+                },
+            ), patch.object(VideoEditor, '_generate_tts') as tts:
+                with self.assertRaises(openai_models.ModelMigrationRequired):
+                    asyncio.run(prepare(script, output, 'nova', .02, 15, plan_only=True))
+                self.assertFalse(output.exists())
+                # Only the cache-routing contract is mocked, not media quality.
+                with patch('scripts.prepare_narration._scene_state', return_value='complete'):
+                    plan = asyncio.run(prepare(script, output, 'nova', .02, 15, plan_only=True))
+                self.assertEqual(plan['missing_scenes'], [])
+                self.assertEqual(plan['additional_request_reserve_usd'], 0)
+                tts.assert_not_called()
 
     @staticmethod
     def _script(root: Path) -> Path:

@@ -23,6 +23,7 @@ _PROVIDER_LIMIT = re.compile(r"(?<!\d)429(?!\d)|RESOURCE_EXHAUSTED", re.IGNORECA
 _VEO_RESULT_UNVERIFIED = "VEO_RESULT_UNVERIFIED"
 _GOOGLE_BUDGET_EXCEEDED = "GOOGLE_BUDGET_EXCEEDED"
 _OPENAI_BUDGET_EXCEEDED = "OPENAI_BUDGET_EXCEEDED"
+_OPENAI_MODEL_RETIRED = "OPENAI_MODEL_RETIRED"
 _VISUAL_COST_CAP_EXCEEDED = "VISUAL_COST_CAP_EXCEEDED"
 _BGM_SELECTION_REQUIRED = "BGM_SELECTION_REQUIRED"
 _ARTICLE_ANALYSIS_UNVERIFIED = "ARTICLE_ANALYSIS_UNVERIFIED"
@@ -713,6 +714,8 @@ class ScheduleManager:
                 last_result = 'google_budget_exceeded'
             elif openai_budget_exceeded:
                 last_result = 'openai_budget_exceeded'
+            elif _OPENAI_MODEL_RETIRED in (result.error or ''):
+                last_result = 'model_migration_required'
             elif visual_cost_cap_exceeded:
                 last_result = 'visual_cost_cap_exceeded'
             elif music_selection_required:
@@ -764,6 +767,8 @@ class ScheduleManager:
                 updates['last_result'] = 'google_budget_exceeded'
             elif _OPENAI_BUDGET_EXCEEDED in str(e):
                 updates['last_result'] = 'openai_budget_exceeded'
+            elif _OPENAI_MODEL_RETIRED in str(e):
+                updates['last_result'] = 'model_migration_required'
             elif _VISUAL_COST_CAP_EXCEEDED in str(e):
                 updates['last_result'] = 'visual_cost_cap_exceeded'
             elif _BGM_SELECTION_REQUIRED in str(e):

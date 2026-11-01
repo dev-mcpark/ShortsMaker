@@ -12,6 +12,7 @@ from pathlib import Path
 
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.services.openai_budget import check_openai_speech_budget
+from shorts_maker.services.openai_models import require_model_active
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
@@ -101,6 +102,8 @@ async def prepare(script_path: Path, output_dir: Path, voice: str, max_cost_usd:
     manifest = _manifest(script_path, output_dir, voice, usd_per_million_characters)
     states = [_scene_state(scene, manifest, output_dir) for scene in script.scenes]
     missing = [scene for scene, state in zip(script.scenes, states) if state == "missing"]
+    if missing:
+        require_model_active(VideoEditor.TTS_MODEL)
     def scene_reserve(scene) -> float:
         return (len(scene.script_text) * usd_per_million_characters / 1_000_000
                 * VideoEditor.TTS_MAX_ATTEMPTS)

@@ -32,6 +32,7 @@ from shorts_maker.utils.config import settings
 from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.editor.quality_check import check_video_quality
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
+from shorts_maker.services.openai_models import ModelMigrationRequired, require_production_models_active
 from shorts_maker.services.visual_review import verified_first_frame
 from shorts_maker.services.raw_review import (
     begin_raw_request, complete_raw_request, retained_raw_request, verified_raw_clip,
@@ -1170,6 +1171,10 @@ class ProductionService:
         script = approved_script
         if script is None:
             if settings.paid_production_enabled:
+                try:
+                    require_production_models_active()
+                except ModelMigrationRequired as error:
+                    return self._failed_result(str(error))
                 # shortcut: future cache hits are unknown; use approved_script to reuse existing visuals.
                 try:
                     if self.mode == "hybrid":
