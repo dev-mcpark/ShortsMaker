@@ -31,6 +31,8 @@ _PLANNING_UNVERIFIED = "PLANNING_UNVERIFIED"
 _RUN_FIELDS = (
     'last_run', 'run_count', 'last_result', 'last_script', 'last_planned_url',
     'last_rendered_url', 'last_video_path', 'last_video_sha256', 'last_youtube_id', 'accepted_at',
+    'queued_at', 'last_episode_id',
+    'scheduled_for', 'late_by_seconds', 'skipped_slots',
 )
 
 
@@ -42,7 +44,7 @@ class ScheduleManager:
     APScheduler는 선택적으로 통합됩니다.
     """
 
-    def __init__(self, filename: str = "schedules.json"):
+    def __init__(self, filename: str = "schedules.json", *, queue_only: bool = False):
         """
         ScheduleManager 초기화
 
@@ -51,6 +53,7 @@ class ScheduleManager:
         """
         self.logger = get_logger(__name__)
         self.filename = Path(filename)
+        self.queue_only = queue_only
         self._scheduler = None
         self._scheduler_running = False
         self._production_lock = asyncio.Lock()
@@ -60,7 +63,7 @@ class ScheduleManager:
         if self._scheduler is None:
             try:
                 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-                self._scheduler = AsyncIOScheduler()
+                self._scheduler = AsyncIOScheduler(timezone='Asia/Seoul') if self.queue_only else AsyncIOScheduler()
                 self.logger.info("APScheduler initialized")
             except ImportError:
                 self.logger.warning("APScheduler not installed. Scheduling features disabled.")
@@ -97,8 +100,57 @@ class ScheduleManager:
         """저장된 스케줄을 로드하여 작업 등록"""
         schedules = self.load_schedules()
         for schedule in schedules:
-            if schedule.get('enabled', True):
+            if schedule.get('enabled', True) and (not self.queue_only or schedule.get('review_operator') == 'agent'):
                 self._register_job(schedule)
+
+    def sync_jobs(self):
+        """Reload external review changes without replacing an unchanged clock trigger."""
+        if not self._scheduler_running:
+            return
+        desired = {s['id']: s for s in self.load_schedules() if s.get('enabled', True)
+                   and (not self.queue_only or s.get('review_operator') == 'agent')}
+        jobs = {job.id: job for job in self._scheduler.get_jobs()}
+        for job_id in jobs.keys() - desired.keys():
+            self._unregister_job(job_id)
+        for job_id, schedule in desired.items():
+            previous = jobs[job_id].args[0] if job_id in jobs else {}
+            if not previous or any(previous.get(key) != schedule.get(key) for key in (
+                'time', 'frequency', 'interval_anchor_at', 'first_run_at', 'review_operator',
+            )):
+                self._register_job(schedule)
+
+    @staticmethod
+    def _interval_start(schedule):
+        if schedule.get('first_run_at'):
+            return datetime.fromisoformat(schedule['first_run_at'])
+        created = datetime.fromisoformat(schedule.get('interval_anchor_at') or schedule['created_at'])
+        hour, minute = map(int, schedule['time'].split(':'))
+        first = created.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        return first + timedelta(days=1) if first <= created else first
+
+    @classmethod
+    def _due_slot(cls, schedule):
+        from zoneinfo import ZoneInfo
+
+        now = datetime.now(ZoneInfo('Asia/Seoul')).replace(tzinfo=None)
+        first = cls._interval_start(schedule)
+        if now < first:
+            return None
+        slot = first + ((now - first) // timedelta(weeks=4)) * timedelta(weeks=4)
+        previous = schedule.get('scheduled_for')
+        if previous and slot <= datetime.fromisoformat(previous):
+            return None
+        missed_start = datetime.fromisoformat(previous) + timedelta(weeks=4) if previous else first
+        count = max(0, (slot - missed_start) // timedelta(weeks=4))
+        return {'scheduled_for': slot.isoformat(), 'late_by_seconds': round((now - slot).total_seconds(), 3),
+                'skipped_slots': [(missed_start + i * timedelta(weeks=4)).isoformat() for i in range(count)]}
+
+    async def queue_overdue(self):
+        """Recover at most the latest due slot, recording skipped slots without paying or replaying them."""
+        for schedule in self.load_schedules():
+            if (schedule.get('enabled') and schedule.get('review_operator') == 'agent'
+                    and self._due_slot(schedule)):
+                await self._execute_pipeline(schedule)
 
     def load_schedules(self) -> List[Dict[str, Any]]:
         """
@@ -235,12 +287,18 @@ class ScheduleManager:
                             updated.pop(key, None)
                 self._validate_schedule(updated['name'], updated['time'], updated['frequency'],
                                         updated['mode'], updated.get('direct_url'))
+                if updated.get('review_operator') == 'agent' and updated['frequency'] != 'Every 4 Weeks':
+                    raise ValueError('에이전트 운영 일정은 승인된 4주 주기를 사용하세요.')
+                if updated.get('first_run_at'):
+                    first = datetime.fromisoformat(updated['first_run_at'])
+                    if updated['frequency'] != 'Every 4 Weeks' or first.tzinfo is not None:
+                        raise ValueError('첫 회차 시작은 4주 일정의 로컬 날짜·시간이어야 합니다.')
                 if (updated['frequency'] == 'Every 4 Weeks' and updated.get('enabled')
                         and (schedule['frequency'] != 'Every 4 Weeks'
                              or not updated.get('interval_anchor_at'))):
                     updated['interval_anchor_at'] = datetime.now().isoformat()
                 reschedule = any(schedule.get(key) != updated.get(key)
-                                 for key in ('enabled', 'time', 'frequency'))
+                                 for key in ('enabled', 'time', 'frequency', 'first_run_at', 'review_operator'))
                 schedule = updated
                 schedules[i] = schedule
                 self.save_schedules(schedules)
@@ -313,6 +371,9 @@ class ScheduleManager:
         schedules = self.load_schedules()
         for schedule in schedules:
             if schedule['id'] == schedule_id:
+                if (schedule.get('review_operator') == 'agent' and not schedule.get('enabled')
+                        and schedule.get('last_result') in {'operator_pending', 'run_in_progress'}):
+                    raise ValueError('제작 인계·실행 결과를 먼저 확인하세요. 새 회차로 건너뛸 수 없습니다.')
                 if not schedule.get('enabled', True) and schedule.get('last_result') == 'script_review_pending':
                     raise ValueError("검토 대기 각본은 바로 재개할 수 없습니다. 다음 소재를 찾으려면 각본을 제외하세요.")
                 new_state = not schedule.get('enabled', True)
@@ -334,6 +395,30 @@ class ScheduleManager:
 
     def accept_pending_video(self, schedule_id: str, video_path: str) -> Dict[str, Any]:
         """Resume RSS discovery only after a reviewed private upload is bound to its saved source."""
+        schedule, video, video_sha256, video_id = self._verified_pending_video(schedule_id, video_path)
+        updated = self.update_schedule(schedule_id, {
+            'last_result': 'private_review_accepted',
+            'last_video_path': str(video),
+            'last_video_sha256': video_sha256,
+            'last_youtube_id': video_id,
+            'accepted_at': datetime.now().isoformat(),
+            'enabled': not bool(schedule.get('direct_url')),
+        })
+        if updated is None:
+            raise ValueError('일정이 사라져 완료 기록을 저장하지 못했습니다.')
+        return updated
+
+    def record_private_review_copy(self, schedule_id: str, video_path: str) -> Dict[str, Any]:
+        """Attach a matching upload without claiming owner acceptance or re-enabling the next slot."""
+        _, video, video_hash, video_id = self._verified_pending_video(schedule_id, video_path)
+        updated = self.update_schedule(schedule_id, {
+            'last_video_path': str(video), 'last_video_sha256': video_hash, 'last_youtube_id': video_id,
+        })
+        if updated is None:
+            raise ValueError('일정이 사라져 업로드 기록을 연결하지 못했습니다.')
+        return updated
+
+    def _verified_pending_video(self, schedule_id: str, video_path: str) -> tuple:
         from shorts_maker.services.production_service import script_sha256
         from shorts_maker.utils.config import settings
 
@@ -369,17 +454,7 @@ class ScheduleManager:
                 or not isinstance(report.get('uploaded_at_utc'), str)
                 or not report['uploaded_at_utc']):
             raise ValueError("확인된 YouTube 비공개 업로드 기록이 필요합니다.")
-        updated = self.update_schedule(schedule_id, {
-            'last_result': 'private_review_accepted',
-            'last_video_path': str(video),
-            'last_video_sha256': video_sha256,
-            'last_youtube_id': video_id,
-            'accepted_at': datetime.now().isoformat(),
-            'enabled': not bool(schedule.get('direct_url')),
-        })
-        if updated is None:
-            raise ValueError("일정이 사라져 완료 기록을 저장하지 못했습니다.")
-        return updated
+        return schedule, video, video_sha256, video_id
 
     def get_execution_history(self) -> List[Dict[str, Any]]:
         """Return retained attempts and the current review state, newest first."""
@@ -418,10 +493,7 @@ class ScheduleManager:
             frequency = schedule.get('frequency', 'Daily')
 
             if frequency == 'Every 4 Weeks':
-                created = datetime.fromisoformat(schedule.get('interval_anchor_at') or schedule['created_at'])
-                first_run = created.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                if first_run <= created:
-                    first_run += timedelta(days=1)
+                first_run = self._interval_start(schedule)
                 trigger, trigger_kwargs = 'interval', {'weeks': 4, 'start_date': first_run}
             else:
                 trigger, trigger_kwargs = 'cron', {'hour': hour, 'minute': minute}
@@ -462,7 +534,7 @@ class ScheduleManager:
         except Exception as e:
             self.logger.debug(f"Job {schedule_id} not found for removal: {e}")
 
-    async def _execute_pipeline(self, schedule: Dict[str, Any]):
+    async def _execute_pipeline(self, schedule: Dict[str, Any], *, operator: bool = False):
         """스케줄된 파이프라인 실행"""
         # The saved schedule must be re-read after both in-process and cross-process waiting.
         async with self._production_lock:
@@ -478,11 +550,11 @@ class ScheduleManager:
                         if error.sqlite_errorcode not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
                             raise
                         await asyncio.sleep(0.1)
-                await self._execute_pipeline_serial(schedule)
+                await self._execute_pipeline_serial(schedule, operator=operator)
             finally:
                 connection.close()
 
-    async def _execute_pipeline_serial(self, schedule: Dict[str, Any]):
+    async def _execute_pipeline_serial(self, schedule: Dict[str, Any], *, operator: bool = False):
         from shorts_maker.services.production_service import ProductionService
         from shorts_maker.services.google_budget import budget_status as google_budget_status
         from shorts_maker.services.openai_budget import budget_status as openai_budget_status
@@ -490,12 +562,34 @@ class ScheduleManager:
         from shorts_maker.utils.config import settings
 
         schedule = self.get_schedule(schedule['id'])
-        if schedule is None or not schedule.get('enabled', True):
+        if schedule is None:
             return
+        if operator:
+            if (schedule.get('enabled') or schedule.get('review_operator') != 'agent'
+                    or schedule.get('last_result') != 'operator_pending'
+                    or not schedule.get('last_episode_id')
+                    or os.getenv('SHORTSMAKER_EPISODE_ID') != schedule['last_episode_id']):
+                raise ValueError('저장된 에이전트 회차와 제작 대기가 일치하지 않습니다.')
+        else:
+            if not schedule.get('enabled', True):
+                return
+            if schedule.get('review_operator') == 'agent':
+                slot = self._due_slot(schedule)
+                if slot is None:
+                    return
+                now = datetime.now().isoformat()
+                self.update_schedule(schedule['id'], {
+                    'last_run': now, 'queued_at': now, 'run_count': schedule.get('run_count', 0) + 1,
+                    'last_result': 'operator_pending', 'enabled': False, **slot,
+                })
+                return
+            if self.queue_only:
+                return
         if schedule.get('last_result') == 'script_review_pending':
             self.update_schedule(schedule['id'], {'enabled': False})
             return
         self.logger.info(f"=== Executing scheduled pipeline: {schedule['name']} ===")
+        run_count = schedule.get('run_count', 0) + (0 if operator else 1)
 
         try:
             # A fixed article URL is one story; use topic discovery for a repeating source.
@@ -516,7 +610,7 @@ class ScheduleManager:
                         and schedule.get('last_result') == 'success'))):
                 self.update_schedule(schedule['id'], {
                     'last_run': datetime.now().isoformat(),
-                    'run_count': schedule.get('run_count', 0) + 1,
+                    'run_count': run_count,
                     'last_result': 'duplicate_url',
                     'last_planned_url': article_url,
                     'enabled': False,
@@ -525,7 +619,7 @@ class ScheduleManager:
             if not settings.paid_production_enabled:
                 self.update_schedule(schedule['id'], {
                     'last_run': datetime.now().isoformat(),
-                    'run_count': schedule.get('run_count', 0) + 1,
+                    'run_count': run_count,
                     'last_result': 'paid_production_disabled',
                     'enabled': False,
                 })
@@ -543,7 +637,7 @@ class ScheduleManager:
                     pass
                 self.update_schedule(schedule['id'], {
                     'last_run': datetime.now().isoformat(),
-                    'run_count': schedule.get('run_count', 0) + 1,
+                    'run_count': run_count,
                     'last_result': reason,
                     'enabled': False,
                 })
@@ -552,7 +646,7 @@ class ScheduleManager:
             if not BGMManager().has_documented_track():
                 self.update_schedule(schedule['id'], {
                     'last_run': datetime.now().isoformat(),
-                    'run_count': schedule.get('run_count', 0) + 1,
+                    'run_count': run_count,
                     'last_result': 'music_missing',
                     'enabled': False,
                 })
@@ -564,7 +658,7 @@ class ScheduleManager:
             # Persist the pause before the first paid call; a killed process cannot save a final result.
             self.update_schedule(schedule['id'], {
                 'last_run': datetime.now().isoformat(),
-                'run_count': schedule.get('run_count', 0) + 1,
+                'run_count': run_count,
                 'last_result': 'run_in_progress',
                 'enabled': False,
             })
@@ -578,7 +672,7 @@ class ScheduleManager:
             if getattr(result, 'review_pending', False):
                 self.update_schedule(schedule['id'], {
                     'last_run': datetime.now().isoformat(),
-                    'run_count': schedule.get('run_count', 0) + 1,
+                    'run_count': run_count,
                     'last_result': 'script_review_pending',
                     'last_planned_url': schedule.get('direct_url') or result.script.source_url,
                     'last_script': result.script.model_dump(),
@@ -635,7 +729,7 @@ class ScheduleManager:
                 last_result = 'rendered_failed'
             updates = {
                 'last_run': datetime.now().isoformat(),
-                'run_count': schedule.get('run_count', 0) + 1,
+                'run_count': run_count,
                 'last_result': last_result,
                 'enabled': source_unavailable or (
                     not result.success and result.error == "스크립트 생성 실패" and not result.video_path),
@@ -658,7 +752,7 @@ class ScheduleManager:
             self.logger.error(f"Scheduled pipeline error: {e}")
             updates = {
                 'last_run': datetime.now().isoformat(),
-                'run_count': schedule.get('run_count', 0) + 1,
+                'run_count': run_count,
                 'last_result': 'error_paused',
                 'enabled': False,
             }

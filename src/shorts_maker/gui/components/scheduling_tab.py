@@ -79,7 +79,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                         with ui.row().classes('items-center gap-3'):
                             status_icon = ui.icon('pause_circle', size='md').classes('text-white')
                             with ui.column().classes('gap-0'):
-                                ui.label('Scheduler').classes('text-sm text-white/70')
+                                ui.label('Studio Scheduler').classes('text-sm text-white/70')
                                 status_label = ui.label('Stopped').classes('text-lg font-bold text-white')
 
                         with ui.row().classes('gap-2'):
@@ -90,8 +90,10 @@ def render_scheduling_tab(state: 'AppState') -> None:
                 def readiness_notice():
                     messages = _schedule_readiness_messages()
                     if messages:
-                        ui.label('예약 제작 준비 필요: ' + ' · '.join(messages)).classes(
+                        ui.label('Studio 직접 제작 준비 필요: ' + ' · '.join(messages)).classes(
                             'px-4 py-3 text-sm text-amber-300')
+                    ui.label('상태·등록 수는 이 Studio 기준입니다. 에이전트 인계는 별도 대기 호스트를 사용합니다.').classes(
+                        'px-4 pb-3 text-xs text-gray-300')
 
                 readiness_notice()
 
@@ -274,7 +276,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                     with ui.row().classes('items-center justify-between'):
                         with ui.row().classes('items-center gap-2'):
                             ui.icon('event_available', size='sm').classes('text-teal-400')
-                            ui.label('Active Schedules').classes('text-lg font-bold text-white')
+                        ui.label('Studio Registered Jobs').classes('text-lg font-bold text-white')
 
                         schedule_count_badge = ui.badge('0').props('color=teal-9 text-color=white')
 
@@ -317,6 +319,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 ui.element('div').classes(indicator_class)
 
                                                 ui.label(schedule['name']).classes('font-bold text-white text-lg')
+                                                if schedule.get('review_operator') == 'agent':
+                                                    ui.badge('에이전트 인계').props('color=amber-9 text-color=white')
 
                                                 mode = schedule.get('mode', 'image')
                                                 mode_color = 'purple-9' if mode == 'video' else 'teal-9' if mode == 'hybrid' else 'blue-9'
@@ -339,14 +343,21 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 '직접 URL' if schedule.get('direct_url')
                                                 else f"RSS: {schedule.get('topic') or '전체 분야'}"
                                             ).classes('text-xs text-gray-400')
+                                            if schedule.get('first_run_at'):
+                                                ui.label('첫 제작 예약: ' + schedule['first_run_at'][:16].replace('T', ' ')).classes(
+                                                    'text-xs text-gray-400')
 
                                             review_path = _reviewable_video_path(schedule.get('last_video_path'))
                                             if not enabled and schedule.get('last_result') == 'success':
                                                 message = ('영상 검토 대기 · 확인 후 일정 재개' if review_path else
                                                            '최근 성공 기록 · 영상은 출력 폴더에서 확인')
                                                 ui.label(message).classes('text-xs text-amber-300')
+                                            elif not enabled and schedule.get('last_result') == 'operator_pending':
+                                                ui.label('예약 시각 도달 · 에이전트 제작 인계 대기 · API 호출 없음').classes(
+                                                    'text-xs text-amber-300')
                                             elif not enabled and schedule.get('last_result') == 'script_review_pending':
-                                                ui.label('각본·장면 검토 대기 · 영상 API와 업로드는 실행되지 않음').classes(
+                                                ui.label('비공개 완성본 사용자 채택 대기' if schedule.get('last_youtube_id')
+                                                         else '각본·장면 검토 대기 · 영상 API와 업로드는 실행되지 않음').classes(
                                                     'text-xs text-amber-300')
 
                                                 def load_pending_script(data=schedule.get('last_script')):
@@ -380,7 +391,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 ui.label('최근 영상 파일을 찾을 수 없습니다. 출력 폴더를 확인하세요.').classes('text-xs text-amber-300')
                                             youtube_url = _reviewable_youtube_url(schedule.get('last_youtube_id'))
                                             if youtube_url and (
-                                                schedule.get('last_result') == 'private_review_accepted'
+                                                schedule.get('last_result') in {'private_review_accepted', 'script_review_pending'}
                                                 or (schedule.get('auto_upload') and schedule.get('last_result') == 'success')
                                             ):
                                                 ui.link('YouTube 비공개 검토본 보기', youtube_url, new_tab=True).classes(
@@ -393,7 +404,10 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                         ui.label('Next run:').classes('text-xs text-teal-400')
                                                         ui.label(next_run[:16].replace('T', ' ')).classes('text-sm text-teal-300 font-medium')
                                             elif enabled:
-                                                ui.label('Scheduler stopped or job not registered').classes('text-xs text-amber-300')
+                                                ui.label('별도 대기 호스트 사용 · 운영 상태 별도 확인'
+                                                         if schedule.get('review_operator') == 'agent'
+                                                         else 'Studio Scheduler stopped or job not registered').classes(
+                                                    'text-xs text-amber-300')
 
                                         with ui.column().classes('gap-2'):
                                             def toggle_schedule(sid=schedule['id']):
@@ -424,7 +438,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                         ui.button('각본 제외', on_click=confirm_rejection).props('color=amber')
                                                 dialog.open()
 
-                                            def accept_pending_video(sid=schedule['id'], name=schedule['name']):
+                                            def accept_pending_video(sid=schedule['id'], name=schedule['name'],
+                                                                     video_path=schedule.get('last_video_path')):
                                                 with ui.dialog() as dialog, ui.card():
                                                     ui.label('비공개 영상 검토 완료').classes('text-lg font-medium')
                                                     ui.label(f'일정: {name}')
@@ -432,7 +447,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                         'text-xs text-gray-400')
                                                     ui.label('유료 제작 스위치와 월 장부가 활성화돼 있으면 다음 예약에서 기획 비용이 발생할 수 있습니다.').classes(
                                                         'text-xs text-amber-300')
-                                                    path_input = ui.input('완성 MP4 경로', value=state.final_video_path or '').classes(
+                                                    path_input = ui.input('완성 MP4 경로', value=video_path or state.final_video_path or '').classes(
                                                         'w-full min-w-[320px]')
                                                     with ui.row():
                                                         ui.button('취소', on_click=dialog.close)
@@ -515,7 +530,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                             for schedule in run_schedules[:10]:
                                 last_result = schedule.get('last_result', 'unknown')
                                 is_success = last_result in {'success', 'private_review_accepted'}
-                                is_pending = last_result in {'script_review_pending', 'run_in_progress'}
+                                is_pending = last_result in {'operator_pending', 'script_review_pending', 'run_in_progress'}
                                 run_count = schedule.get('run_count', 0)
 
                                 color = 'green' if is_success else 'amber' if is_pending else 'red'
