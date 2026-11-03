@@ -1,6 +1,6 @@
 # Visual prompt practice
 
-Reviewed: 2026-10-26. This guide records public techniques selected for ShortsMaker's source-grounded, low-cost workflow. [STATUS.md](STATUS.md) owns current production evidence; [DECISIONS.md](DECISIONS.md) owns durable choices. A well-written prompt improves direction but cannot prove that a generated frame is accurate.
+Reviewed: 2026-10-26; image-to-video guidance and implementation rechecked 2026-11-03. This guide records public techniques selected for ShortsMaker's source-grounded, low-cost workflow. [STATUS.md](STATUS.md) owns current production evidence; [DECISIONS.md](DECISIONS.md) owns durable choices. A well-written prompt improves direction but cannot prove that a generated frame is accurate.
 
 ## Evidence and application
 
@@ -35,3 +35,9 @@ Any prompt wording or model wrapper change that alters generated visuals must ch
 ## Bounded model shots (2026-11-01)
 
 Keep a concept model and its relevant ends inside the first frame, and prefer a bounded push toward known geometry over a traversal that reveals unseen surroundings. This is a planning heuristic, not a quality guarantee: in the Jamsu round, neither “very small lateral” nor switching to a wider input prevented newly invented structures. Inspect the returned full-duration framing before use; source-contradicting bridges or access structures must be excluded. Stop at the authorized version limit. A separately reviewed crop or dated design-page cut using an already accepted native shot may be a better edit than another paid attempt; record the repeated footage and judge the whole cut. Do not hide a failed shot’s cost or describe a derived edit as a distinct new native generation. [STATUS.md](STATUS.md) owns the current episode evidence.
+
+## Image-first request boundary (2026-11-03)
+
+The v2 generator wrapper repeated `visual_description` and requested unlettered surfaces/caption space even with a reviewed first frame. That contradicted this guide and [Google's motion-only image-to-video advice](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/video/best-practice#prompt_for_motion_only). The v3 wrapper uses the input image for the scene/style, retains the complete reviewed motion instruction, and asks to preserve the scene outside that motion. Both normal and fallback image-first prompts omit the static description and caption-space redesign. Text-only requests still require the original scene description. This fixes request construction; it does not prove the earlier staircase/extra-bridge failures were caused solely by repeated descriptions or that the next output will pass.
+
+The prompt-version change invalidates earlier first-frame/cache bindings for a new staged generation. Old receipts and files stay intact; an old or pending receipt cannot silently authorize resubmission or be relabelled as v3. Recheck the frame and reconcile the request identity before any future paid request. Already accepted clips can still be supplied explicitly to the local-edit path without buying replacements. Keep existing exclusions, version limits and spending authority; the consumed Jamsu scene-2 allowance does not reopen for this change.

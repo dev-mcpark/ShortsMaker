@@ -23,7 +23,7 @@ from shorts_maker.services.google_budget import (
     check_google_budget, mark_google_result, reserve_google_output,
 )
 
-VIDEO_PROMPT_VERSION = 2
+VIDEO_PROMPT_VERSION = 3
 
 
 class VideoGenerator:
@@ -449,21 +449,35 @@ class VideoGenerator:
             f"--> Generating background-only video for Scene {scene.scene_number}"
         )
 
-        original_prompt = scene.visual_description.strip().rstrip(".")
         motion_desc = (getattr(scene, "motion_instruction", "") or "").strip().rstrip(".")
         motion_clause = motion_desc + "." if motion_desc else "Steady camera."
 
-        initial_prompt = (
-            f"One continuous vertical shot. {original_prompt}. "
-            f"Motion: {motion_clause} "
-            "Plain unlettered surfaces and an uncluttered lower third for captions added in editing. "
-            "Silent background footage."
-        )
-        fallback_prompt = (
-            f"One simple vertical shot. {original_prompt}. "
-            f"Motion: {motion_clause} "
-            "Plain unlettered surfaces, uncluttered lower third."
-        )
+        if first_frame_path is not None:
+            # The reviewed image supplies the scene; re-description can redirect image-to-video.
+            initial_prompt = (
+                "One continuous vertical shot from the supplied first frame. "
+                f"Motion: {motion_clause} "
+                "Preserve the existing scene and style outside the requested motion. "
+                "Silent background footage."
+            )
+            fallback_prompt = (
+                "One simple vertical shot from the supplied first frame. "
+                f"Motion: {motion_clause} "
+                "Preserve the existing scene and style outside the requested motion."
+            )
+        else:
+            original_prompt = scene.visual_description.strip().rstrip(".")
+            initial_prompt = (
+                f"One continuous vertical shot. {original_prompt}. "
+                f"Motion: {motion_clause} "
+                "Plain unlettered surfaces and an uncluttered lower third for captions added in editing. "
+                "Silent background footage."
+            )
+            fallback_prompt = (
+                f"One simple vertical shot. {original_prompt}. "
+                f"Motion: {motion_clause} "
+                "Plain unlettered surfaces, uncluttered lower third."
+            )
 
         self._retry_veo_call(
             model_id, initial_prompt, output_path, fallback_prompt,

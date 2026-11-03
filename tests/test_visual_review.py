@@ -96,6 +96,22 @@ class VisualReviewTests(unittest.TestCase):
                 asyncio.run(service.generate_review_clip(script, 1, manual_clip_paths={2: str(local)}))
         self.assertIsNone(service._generator)
 
+    def test_older_prompt_receipt_blocks_resubmission_and_preserves_the_saved_clip(self):
+        script, clip, frame_hash = self.saved_scene()
+        receipt = next((settings.output_dir / 'evaluation' / 'visual_reviews').glob('*.raw.json'))
+        record = json.loads(receipt.read_text())
+        record['prompt_version'] -= 1
+        receipt.write_text(json.dumps(record))
+        original_receipt = receipt.read_bytes()
+        with patch('shorts_maker.services.production_service.check_google_budget') as budget:
+            service = ProductionService(mode='video')
+            with self.assertRaisesRegex(ValueError, 'RAW_CLIP_REQUEST_UNVERIFIED'):
+                asyncio.run(service.generate_review_clip(script, 0))
+            budget.assert_not_called()
+        self.assertIsNone(service._generator)
+        self.assertEqual(clip.read_bytes(), b'retained silent footage')
+        self.assertEqual(receipt.read_bytes(), original_receipt)
+
     def test_retained_raw_tampering_stops_instead_of_regenerating(self):
         script, clip, frame_hash = self.saved_scene()
         receipt = next((settings.output_dir / 'evaluation' / 'visual_reviews').glob('*.raw.json'))

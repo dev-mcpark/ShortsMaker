@@ -1524,6 +1524,11 @@ class ReviewRegressions(unittest.TestCase):
     def test_veo_first_frame_is_validated_and_audited_before_one_request(self):
         generator = object.__new__(VideoGenerator)
         generator.logger = Mock()
+        generator.max_veo_attempts = 1
+        scene = SimpleNamespace(
+            scene_number=1, visual_description='A pink upper path above a cream bridge deck',
+            motion_instruction='Slowly push toward the existing upper path',
+        )
         saved_video = Mock()
         saved_video.save.side_effect = lambda path: Path(path).write_bytes(b"clip")
         operation = SimpleNamespace(done=True, result=SimpleNamespace(
@@ -1537,14 +1542,17 @@ class ReviewRegressions(unittest.TestCase):
             frame = Path(directory) / "frame.png"
             Image.new("RGB", (720, 1280), "white").save(frame)
             output = str(Path(directory) / "clip.mp4")
-            generator._retry_veo_call(
-                "veo-3.1-lite-generate-001", "motion only", output, "fallback",
-                duration_seconds=8, scene_number=1, first_frame_path=str(frame),
+            generator._run_veo_background_only(
+                "veo-3.1-lite-generate-001", scene, output,
+                duration_seconds=8, first_frame_path=str(frame),
                 request_budget_usd=0.30, source_url="https://example.com/story",
             )
             record = json.loads(next((Path(directory) / "evaluation/visual_attempts").glob(
                 "*.json")).read_text(encoding="utf-8"))
             kwargs = request.call_args.kwargs
+            request.assert_called_once()
+            self.assertIn(scene.motion_instruction, kwargs['prompt'])
+            self.assertNotIn(scene.visual_description, kwargs['prompt'])
             self.assertEqual(kwargs["image"].image_bytes, frame.read_bytes())
             self.assertEqual(kwargs["image"].mime_type, "image/png")
             self.assertEqual(kwargs["config"]["number_of_videos"], 1)
@@ -1555,7 +1563,29 @@ class ReviewRegressions(unittest.TestCase):
             self.assertEqual(record["source_url"], "https://example.com/story")
             self.assertEqual(record["status"], "saved")
             self.assertEqual(len(record["input_image_sha256"]), 64)
-            self.assertNotIn("motion only", json.dumps(record))
+            self.assertNotIn(scene.motion_instruction, json.dumps(record))
+
+    def test_first_frame_fallback_also_keeps_motion_without_redescribing_the_image(self):
+        generator = object.__new__(VideoGenerator)
+        generator.logger = Mock()
+        generator.max_veo_attempts = 1
+        generator._retry_veo_call = Mock()
+        scene = SimpleNamespace(scene_number=2,
+                                visual_description='A specific bridge model on a cream base',
+                                motion_instruction='Slide slightly toward the existing subject')
+        generator._run_veo_background_only('model', scene, 'clip.mp4', 8,
+                                          first_frame_path='reviewed.png',
+                                          expected_first_frame_sha256='f' * 64,
+                                          request_budget_usd=.24)
+        call = generator._retry_veo_call.call_args
+        for prompt in (call.args[1], call.args[3]):
+            self.assertIn(scene.motion_instruction, prompt)
+            self.assertNotIn(scene.visual_description, prompt)
+            self.assertNotIn('uncluttered lower third', prompt)
+        self.assertEqual(call.kwargs['first_frame_path'], 'reviewed.png')
+        self.assertEqual(call.kwargs['expected_first_frame_sha256'], 'f' * 64)
+        self.assertEqual(call.kwargs['max_attempts'], 1)
+        self.assertEqual(call.kwargs['request_budget_usd'], .24)
 
     def test_direct_veo_preflight_blocks_overspend_and_invalid_frame(self):
         generator = object.__new__(VideoGenerator)
