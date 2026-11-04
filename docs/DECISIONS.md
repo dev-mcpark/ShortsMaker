@@ -779,3 +779,7 @@ Increment the shared video prompt version so earlier first-frame approvals, raw-
 ## 2026-11-03 — Keep the local Studio available alongside development
 
 The owner expects the local server to remain available while feedback-driven development proceeds. Keep Studio in its own macOS user LaunchAgent using the existing GUI entry point, alongside the independent queue-only scheduler and Codex development heartbeat. Preserve localhost binding, paid production off on startup, existing review/budget gates and the production interval. Use the platform's unsuccessful-exit recovery rather than adding a custom supervisor or application dependency. Test code before restarting Studio to load it, avoid interrupting in-flight work, and retain the independent scheduling host. A running UI does not itself execute editorial development or prove completed scheduled production. Login/sleep/offline limitations and process-local UI state remain explicit; STATUS owns observed runtime evidence.
+
+## 2026-11-04 — Schedule production before the private review target
+
+Set the production trigger early enough to allow source review, generation and editing before the planned delivery window. Allow two weeks for the first scheduled cut and keep the 28-day interval between starts. The private review target depends on passing the existing quality and budget gates. STATUS owns the dates and runtime evidence.
