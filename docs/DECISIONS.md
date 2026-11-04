@@ -782,4 +782,4 @@ The owner expects the local server to remain available while feedback-driven dev
 
 ## 2026-11-04 — Schedule production before the private review target
 
-Set the production trigger early enough to allow source review, generation and editing before the planned delivery window. Allow two weeks for the first scheduled cut and keep the 28-day interval between starts. The private review target depends on passing the existing quality and budget gates. STATUS owns the dates and runtime evidence.
+Set the production trigger early enough to allow source review, generation and editing before the planned delivery window. The owner clarified that the first cycle should begin immediately. Anchor the 28-day interval to that first start and deliver the private review copy as soon as it passes review. The private review target depends on passing the existing quality and budget gates. STATUS owns the dates and runtime evidence.
