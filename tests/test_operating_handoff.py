@@ -210,7 +210,7 @@ class OperatingHandoffTests(unittest.TestCase):
 
     def test_host_sync_retains_anchor_and_tracks_external_pause_resume(self):
         first = datetime.now(ZoneInfo('Asia/Seoul')).replace(tzinfo=None) + timedelta(minutes=10)
-        self.manager.update_schedule(self.schedule['id'], {'first_run_at': first.isoformat()})
+        self.manager.update_schedule(self.schedule['id'], {'first_run_at': first.isoformat(), 'frequency': 'Every 2 Weeks'})
 
         async def check():
             self.manager.start_scheduler()
@@ -226,7 +226,7 @@ class OperatingHandoffTests(unittest.TestCase):
             self.manager.sync_jobs()
             restored = self.manager._scheduler.get_job(job.id)
             self.assertEqual(restored.next_run_time, initial)
-            self.assertEqual(restored.trigger.interval, timedelta(weeks=4))
+            self.assertEqual(restored.trigger.interval, timedelta(weeks=2))
             self.manager.stop_scheduler()
             await asyncio.sleep(0)
 
@@ -250,8 +250,8 @@ class OperatingHandoffTests(unittest.TestCase):
             pipeline.assert_awaited_once()
 
     def test_overdue_recovery_queues_latest_slot_once_and_records_missed_dates(self):
-        first = datetime.now(ZoneInfo('Asia/Seoul')).replace(tzinfo=None) - timedelta(weeks=8, minutes=10)
-        self.manager.update_schedule(self.schedule['id'], {'first_run_at': first.isoformat()})
+        first = datetime.now(ZoneInfo('Asia/Seoul')).replace(tzinfo=None) - timedelta(weeks=4, minutes=10)
+        self.manager.update_schedule(self.schedule['id'], {'first_run_at': first.isoformat(), 'frequency': 'Every 2 Weeks'})
         with patch('shorts_maker.services.production_service.ProductionService.full_pipeline',
                    new_callable=AsyncMock) as pipeline:
             asyncio.run(self.manager.queue_overdue())
@@ -259,8 +259,8 @@ class OperatingHandoffTests(unittest.TestCase):
             pipeline.assert_not_awaited()
         queued = self.manager.get_schedule(self.schedule['id'])
         self.assertEqual(queued['run_count'], 1)
-        self.assertEqual(queued['scheduled_for'], (first + timedelta(weeks=8)).isoformat())
-        self.assertEqual(queued['skipped_slots'], [first.isoformat(), (first + timedelta(weeks=4)).isoformat()])
+        self.assertEqual(queued['scheduled_for'], (first + timedelta(weeks=4)).isoformat())
+        self.assertEqual(queued['skipped_slots'], [first.isoformat(), (first + timedelta(weeks=2)).isoformat()])
         self.assertGreater(queued['late_by_seconds'], 599)
 
     def test_attaching_private_copy_does_not_accept_or_reenable_it(self):

@@ -783,3 +783,7 @@ The owner expects the local server to remain available while feedback-driven dev
 ## 2026-11-04 — Schedule production before the private review target
 
 Set the production trigger early enough to allow source review, generation and editing before the planned delivery window. The owner clarified that the first cycle should begin immediately. Anchor the 28-day interval to that first start and deliver the private review copy as soon as it passes review. The private review target depends on passing the existing quality and budget gates. STATUS owns the dates and runtime evidence.
+
+## 2026-11-04 — Use a 14-day cadence for the operating schedule
+
+Use the selected interval for both the queue host trigger and overdue recovery. Keep the original first-slot anchor and the paused attempt when migrating this schedule from four weeks to two weeks. The shorter cadence shares the existing monthly limits and owner acceptance gates. Model access and a higher episode ceiling require separate verification and authorization.

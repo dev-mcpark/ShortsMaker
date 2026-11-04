@@ -162,6 +162,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                             frequency_select = ui.select(
                                 options={
                                     'Daily': '📅 Daily',
+                                    'Every 2 Weeks': '📅 Every 2 Weeks',
                                     'Every 4 Weeks': '📅 Every 4 Weeks',
                                     'Weekly (Mon)': '📆 Mon',
                                     'Weekly (Tue)': '📆 Tue',
@@ -171,7 +172,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                     'Weekly (Sat)': '📆 Sat',
                                     'Weekly (Sun)': '📆 Sun',
                                 },
-                                value='Every 4 Weeks'
+                                value='Every 2 Weeks'
                             ).props('outlined dense dark aria-label="반복 주기"').classes('w-full')
 
                     ui.separator().classes('bg-slate-600 my-4')

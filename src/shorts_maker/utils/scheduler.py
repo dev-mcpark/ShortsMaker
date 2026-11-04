@@ -19,6 +19,9 @@ from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.source_manager import SourceManager
 
 
+_INTERVAL_WEEKS = {"Every 2 Weeks": 2, "Every 4 Weeks": 4}
+
+
 _PROVIDER_LIMIT = re.compile(r"(?<!\d)429(?!\d)|RESOURCE_EXHAUSTED", re.IGNORECASE)
 _VEO_RESULT_UNVERIFIED = "VEO_RESULT_UNVERIFIED"
 _GOOGLE_BUDGET_EXCEEDED = "GOOGLE_BUDGET_EXCEEDED"
@@ -137,14 +140,15 @@ class ScheduleManager:
         first = cls._interval_start(schedule)
         if now < first:
             return None
-        slot = first + ((now - first) // timedelta(weeks=4)) * timedelta(weeks=4)
+        interval = timedelta(weeks=_INTERVAL_WEEKS[schedule["frequency"]])
+        slot = first + ((now - first) // interval) * interval
         previous = schedule.get('scheduled_for')
         if previous and slot <= datetime.fromisoformat(previous):
             return None
-        missed_start = datetime.fromisoformat(previous) + timedelta(weeks=4) if previous else first
-        count = max(0, (slot - missed_start) // timedelta(weeks=4))
+        missed_start = datetime.fromisoformat(previous) + interval if previous else first
+        count = max(0, (slot - missed_start) // interval)
         return {'scheduled_for': slot.isoformat(), 'late_by_seconds': round((now - slot).total_seconds(), 3),
-                'skipped_slots': [(missed_start + i * timedelta(weeks=4)).isoformat() for i in range(count)]}
+                'skipped_slots': [(missed_start + i * interval).isoformat() for i in range(count)]}
 
     async def queue_overdue(self):
         """Recover at most the latest due slot, recording skipped slots without paying or replaying them."""
@@ -243,7 +247,7 @@ class ScheduleManager:
             'last_run': None,
             'run_count': 0
         }
-        if frequency == 'Every 4 Weeks' and enabled:
+        if frequency in _INTERVAL_WEEKS and enabled:
             schedule['interval_anchor_at'] = created_at
 
         # 저장
@@ -288,14 +292,14 @@ class ScheduleManager:
                             updated.pop(key, None)
                 self._validate_schedule(updated['name'], updated['time'], updated['frequency'],
                                         updated['mode'], updated.get('direct_url'))
-                if updated.get('review_operator') == 'agent' and updated['frequency'] != 'Every 4 Weeks':
-                    raise ValueError('에이전트 운영 일정은 승인된 4주 주기를 사용하세요.')
+                if updated.get('review_operator') == 'agent' and updated['frequency'] not in _INTERVAL_WEEKS:
+                    raise ValueError('에이전트 운영 일정은 2주 또는 4주 주기를 사용하세요.')
                 if updated.get('first_run_at'):
                     first = datetime.fromisoformat(updated['first_run_at'])
-                    if updated['frequency'] != 'Every 4 Weeks' or first.tzinfo is not None:
-                        raise ValueError('첫 회차 시작은 4주 일정의 로컬 날짜·시간이어야 합니다.')
-                if (updated['frequency'] == 'Every 4 Weeks' and updated.get('enabled')
-                        and (schedule['frequency'] != 'Every 4 Weeks'
+                    if updated['frequency'] not in _INTERVAL_WEEKS or first.tzinfo is not None:
+                        raise ValueError('첫 회차 시작은 2주 또는 4주 일정의 로컬 날짜·시간이어야 합니다.')
+                if (updated['frequency'] in _INTERVAL_WEEKS and updated.get('enabled')
+                        and (schedule['frequency'] not in _INTERVAL_WEEKS
                              or not updated.get('interval_anchor_at'))):
                     updated['interval_anchor_at'] = datetime.now().isoformat()
                 reschedule = any(schedule.get(key) != updated.get(key)
@@ -329,7 +333,7 @@ class ScheduleManager:
         if not isinstance(time, str) or not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', time):
             raise ValueError("시간은 HH:MM 형식이어야 합니다.")
         days = {'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'}
-        if frequency not in {'Daily', 'Every 4 Weeks'} and frequency not in {f'Weekly ({day})' for day in days}:
+        if frequency != 'Daily' and frequency not in _INTERVAL_WEEKS and frequency not in {f'Weekly ({day})' for day in days}:
             raise ValueError("지원하지 않는 반복 주기입니다.")
         if mode not in {'hybrid', 'image', 'video'}:
             raise ValueError("지원하지 않는 생성 모드입니다.")
@@ -493,9 +497,9 @@ class ScheduleManager:
             hour, minute = map(int, schedule['time'].split(':'))
             frequency = schedule.get('frequency', 'Daily')
 
-            if frequency == 'Every 4 Weeks':
+            if frequency in _INTERVAL_WEEKS:
                 first_run = self._interval_start(schedule)
-                trigger, trigger_kwargs = 'interval', {'weeks': 4, 'start_date': first_run}
+                trigger, trigger_kwargs = 'interval', {'weeks': _INTERVAL_WEEKS[frequency], 'start_date': first_run}
             else:
                 trigger, trigger_kwargs = 'cron', {'hour': hour, 'minute': minute}
             if frequency.startswith('Weekly'):
