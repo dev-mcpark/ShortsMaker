@@ -11,11 +11,12 @@ from pathlib import Path
 
 
 PUBLIC_FIELD = "public_release_confirmed"
+ENGAGED_FIELD = "engaged_views_7d"
 FIELDS = (
     "report_path", "video_path", "script_key", "production_mode", "quality_passed",
     "estimated_visual_output_cost_usd", "accepted", "billed_cost_usd", "views_7d",
     "average_view_duration_seconds_7d", "revenue_usd_7d", "review_note",
-    PUBLIC_FIELD,
+    ENGAGED_FIELD, PUBLIC_FIELD,
 )
 
 
@@ -40,12 +41,13 @@ def init_reviews(outputs_dir: Path, review_file: Path) -> int:
         with review_file.open(encoding="utf-8", newline="") as file:
             reader = csv.DictReader(file)
             columns = reader.fieldnames or []
-            if not set(FIELDS[:-1]).issubset(columns):
+            if not (set(FIELDS) - {PUBLIC_FIELD, ENGAGED_FIELD}).issubset(columns):
                 raise ValueError("검토 CSV의 열이 누락되었습니다.")
             rows = list(reader)
             known = {str(Path(row["report_path"]).resolve()) for row in rows}
-        if PUBLIC_FIELD not in columns:
-            columns.append(PUBLIC_FIELD)
+        missing = [field for field in (PUBLIC_FIELD, ENGAGED_FIELD) if field not in columns]
+        if missing:
+            columns.extend(missing)
             temporary = None
             try:
                 with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="",
@@ -84,12 +86,21 @@ def _number(row: dict, field: str):
     return number
 
 
+def _retention(row: dict) -> tuple:
+    views = _number(row, "views_7d")
+    engaged = _number(row, ENGAGED_FIELD)
+    duration = _number(row, "average_view_duration_seconds_7d")
+    if engaged is not None and (not engaged.is_integer() or (views is not None and engaged > views)):
+        raise ValueError("유효 조회수는 전체 조회수 이하의 정수여야 합니다.")
+    return views, engaged, duration
+
+
 def summarize(outputs_dir: Path, review_file: Path) -> dict:
     reports = _reports(outputs_dir)
     reviews = {}
     with review_file.open(encoding="utf-8", newline="") as file:
         reader = csv.DictReader(file)
-        if not set(FIELDS).issubset(reader.fieldnames or []):
+        if not (set(FIELDS) - {ENGAGED_FIELD}).issubset(reader.fieldnames or []):
             raise ValueError("검토 CSV의 열이 누락되었습니다.")
         for row in reader:
             path = str(Path(row["report_path"]).resolve())
@@ -108,7 +119,7 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
             grouped[report["script_key"]][report["production_mode"]].append(path)
 
     totals = {mode: {"accepted": 0, "cost": 0.0} for mode in ("image", "hybrid")}
-    outcomes = {mode: {"views": 0.0, "watch_seconds": 0.0, "revenue": 0.0}
+    outcomes = {mode: {"views": 0.0, "engaged_views": 0.0, "watch_seconds": 0.0, "revenue": 0.0}
                 for mode in ("image", "hybrid")}
     paired = complete = outcome_pairs = revenue_pairs = 0
     paired_paths = set()
@@ -135,29 +146,28 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
         metrics = {}
         for mode in totals:
             row = rows[mode]
-            metrics[mode] = tuple(_number(row, field) for field in (
-                "views_7d", "average_view_duration_seconds_7d", "revenue_usd_7d",
-            ))
+            metrics[mode] = (*_retention(row), _number(row, "revenue_usd_7d"))
         if any(not reports[modes[mode][0]].get("youtube_id")
                or rows[mode][PUBLIC_FIELD] != "yes" or
-               any(value is None for value in metrics[mode][:2]) for mode in totals):
+               any(value is None for value in metrics[mode][:3]) for mode in totals):
             continue
         outcome_pairs += 1
         for mode in totals:
-            views, duration, _revenue = metrics[mode]
+            views, engaged, duration, _revenue = metrics[mode]
             outcomes[mode]["views"] += views
-            outcomes[mode]["watch_seconds"] += views * duration
-        if all(metrics[mode][2] is not None for mode in totals):
+            outcomes[mode]["engaged_views"] += engaged
+            outcomes[mode]["watch_seconds"] += engaged * duration
+        if all(metrics[mode][3] is not None for mode in totals):
             revenue_pairs += 1
             for mode in totals:
-                outcomes[mode]["revenue"] += metrics[mode][2]
+                outcomes[mode]["revenue"] += metrics[mode][3]
 
     editorial_paths = [path for path in reports if path not in paired_paths]
     editorial_complete = editorial_accepted = 0
     editorial_reviewed = editorial_selected = 0
     editorial_cost = 0.0
     editorial_outcome_count = editorial_revenue_count = 0
-    editorial_views = editorial_watch_seconds = editorial_revenue = 0.0
+    editorial_views = editorial_engaged = editorial_watch_seconds = editorial_revenue = 0.0
     for path in editorial_paths:
         row = reviews.get(path)
         if row is None or row["accepted"].strip().lower() not in {"yes", "no"}:
@@ -175,13 +185,13 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
         if (not accepted or not reports[path].get("youtube_id")
                 or row[PUBLIC_FIELD] != "yes"):
             continue
-        views = _number(row, "views_7d")
-        duration = _number(row, "average_view_duration_seconds_7d")
-        if views is None or duration is None:
+        views, engaged, duration = _retention(row)
+        if views is None or engaged is None or duration is None:
             continue
         editorial_outcome_count += 1
         editorial_views += views
-        editorial_watch_seconds += views * duration
+        editorial_engaged += engaged
+        editorial_watch_seconds += engaged * duration
         revenue = _number(row, "revenue_usd_7d")
         if revenue is not None:
             editorial_revenue_count += 1
@@ -247,9 +257,10 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
         "editorial_outcomes_7d": {
             "complete_videos": editorial_outcome_count,
             "views": int(editorial_views),
+            "engaged_views": int(editorial_engaged),
             "average_view_duration_seconds": round(
-                editorial_watch_seconds / editorial_views, 2,
-            ) if editorial_views else None,
+                editorial_watch_seconds / editorial_engaged, 2,
+            ) if editorial_engaged else None,
             "complete_revenue_videos": editorial_revenue_count,
             "revenue_usd": round(editorial_revenue, 4)
             if editorial_revenue_count == editorial_outcome_count else None,
@@ -259,9 +270,10 @@ def summarize(outputs_dir: Path, review_file: Path) -> dict:
         "outcomes_7d": {
             mode: {
                 "views": int(outcomes[mode]["views"]),
+                "engaged_views": int(outcomes[mode]["engaged_views"]),
                 "average_view_duration_seconds": round(
-                    outcomes[mode]["watch_seconds"] / outcomes[mode]["views"], 2,
-                ) if outcomes[mode]["views"] else None,
+                    outcomes[mode]["watch_seconds"] / outcomes[mode]["engaged_views"], 2,
+                ) if outcomes[mode]["engaged_views"] else None,
                 "revenue_usd": round(outcomes[mode]["revenue"], 4) if revenue_pairs else None,
             } for mode in totals
         } if outcome_pairs else None,

@@ -795,3 +795,7 @@ The owner approved $0.30 per episode inside $1 per month. New episode records us
 ## 2026-11-05 — Retain draft review evidence before validation
 
 Preserve a draft, the exact validator source excerpt, their hashes and the configured model before sending another paid request. Use a separate unique request and atomic returned-verdict record for each attempt, retaining failed and interrupted work for local inspection. Keep recovery records in the scripts directory’s ignored reviews subdirectory. Absence of a verdict requires reconciliation and existing retry authority. The records do not auto-approve a draft, automatically replay a call or replace monthly and episode accounting.
+
+## 2026-11-05 — Weight Shorts duration by engaged views on matched reporting dates
+
+Use the provider-reported first seven reporting dates for manual baseline collection and retain their timezone and source export. Establish the publication reporting day from Studio and retain an exact 168-hour analysis separately if it becomes available. YouTube’s Shorts average duration uses engaged views. Keep total starts for reach and require the engaged-view denominator before combining durations in paired or editorial summaries. Migrate older private CSVs additively and leave missing denominators pending. Preserve independent owner acceptance and cost cohorts.

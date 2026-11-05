@@ -40,6 +40,7 @@ class ScorecardTests(unittest.TestCase):
                     row["public_release_confirmed"] = "yes"
                     row["views_7d"] = "100" if mode == "image" else "120"
                     row["average_view_duration_seconds_7d"] = "20" if mode == "image" else "22"
+                    row["engaged_views_7d"] = "80" if mode == "image" else "90"
                     row["revenue_usd_7d"] = "0.01" if mode == "image" else "0.02"
             with reviews.open("w", encoding="utf-8", newline="") as file:
                 writer = csv.DictWriter(file, fieldnames=FIELDS)
@@ -82,7 +83,7 @@ class ScorecardTests(unittest.TestCase):
             with reviews.open(encoding="utf-8", newline="") as file:
                 rows = list(csv.DictReader(file))
             for row in rows:
-                row.update(accepted="yes", billed_cost_usd="0.1", views_7d="100",
+                row.update(accepted="yes", billed_cost_usd="0.1", views_7d="100", engaged_views_7d="100",
                            average_view_duration_seconds_7d="20",
                            public_release_confirmed="yes")
             with reviews.open("w", encoding="utf-8", newline="") as file:
@@ -146,7 +147,7 @@ class ScorecardTests(unittest.TestCase):
             for row in rows:
                 name = Path(row["report_path"]).name.split(".")[0]
                 row.update(accepted="no" if name == "rejected" else "yes",
-                           views_7d="100", average_view_duration_seconds_7d="20")
+                           views_7d="100", engaged_views_7d="100", average_view_duration_seconds_7d="20")
                 if name in {"billed", "unbilled"}:
                     row["public_release_confirmed"] = "yes"
                 if name == "billed":
@@ -161,7 +162,7 @@ class ScorecardTests(unittest.TestCase):
             summary = summarize(outputs, reviews)
             self.assertEqual(summary["editorial_cuts"]["complete_cost_reviews"], 1)
             self.assertEqual(summary["editorial_outcomes_7d"], {
-                "complete_videos": 2, "views": 200,
+                "complete_videos": 2, "views": 200, "engaged_views": 200,
                 "average_view_duration_seconds": 25.0,
                 "complete_revenue_videos": 1, "revenue_usd": None,
             })
@@ -189,7 +190,7 @@ class ScorecardTests(unittest.TestCase):
                 name = Path(row["report_path"]).name.split(".")[0]
                 if name == "solo_hybrid":
                     row.update(accepted="yes", billed_cost_usd="0.5",
-                               public_release_confirmed="yes", views_7d="100",
+                               public_release_confirmed="yes", views_7d="100", engaged_views_7d="100",
                                average_view_duration_seconds_7d="20")
                 elif name == "solo_video":
                     row.update(accepted="no", billed_cost_usd="0.3")
@@ -247,6 +248,79 @@ class ScorecardTests(unittest.TestCase):
                 writer.writeheader()
                 writer.writerows(rows)
             self.assertEqual(summarize(outputs, reviews)["source_stories"]["complete_cost_stories"], 1)
+
+    def test_duration_uses_engaged_views_for_pairs_and_editorial_cuts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outputs = Path(directory)
+            reviews = outputs / "reviews.csv"
+            for story in ("many_starts", "many_engaged"):
+                for mode in ("image", "hybrid", "video"):
+                    (outputs / f"{story}_{mode}.production.json").write_text(json.dumps({
+                        "schema_version": 1, "script_key": story,
+                        "production_mode": mode, "quality_passed": True,
+                        "youtube_id": f"{story}_{mode}",
+                    }))
+            init_reviews(outputs, reviews)
+            with reviews.open(newline="") as file:
+                rows = list(csv.DictReader(file))
+            for row in rows:
+                many_starts = "many_starts" in row["report_path"]
+                row.update(accepted="yes", billed_cost_usd=".1", public_release_confirmed="yes",
+                           views_7d="1000" if many_starts else "100",
+                           engaged_views_7d="10" if many_starts else "100",
+                           average_view_duration_seconds_7d="10" if many_starts else "30")
+
+            def result():
+                with reviews.open("w", newline="") as file:
+                    writer = csv.DictWriter(file, fieldnames=FIELDS)
+                    writer.writeheader()
+                    writer.writerows(rows)
+                return summarize(outputs, reviews)
+
+            summary = result()
+            for outcome in (summary["editorial_outcomes_7d"], *summary["outcomes_7d"].values()):
+                self.assertEqual(outcome["views"], 1100)
+                self.assertEqual(outcome["engaged_views"], 110)
+                self.assertEqual(outcome["average_view_duration_seconds"], 28.18)
+            self.assertEqual(summary["complete_7d_outcome_pairs"], 2)
+            for row in rows:
+                if "many_starts" in row["report_path"]:
+                    row["engaged_views_7d"] = ""
+            summary = result()
+            self.assertEqual(summary["complete_7d_outcome_pairs"], 1)
+            self.assertEqual(summary["editorial_outcomes_7d"]["complete_videos"], 1)
+            self.assertEqual(summary["editorial_reviews"]["accepted"], 2)
+            for invalid in ("1001", "1.5", "-1", "nan"):
+                rows[0]["engaged_views_7d"] = invalid
+                with self.subTest(engaged=invalid), self.assertRaises(ValueError):
+                    result()
+
+    def test_legacy_csv_migrates_engaged_views_without_inventing_retention(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outputs = Path(directory)
+            reviews = outputs / "reviews.csv"
+            report = outputs / "published.production.json"
+            report.write_text(json.dumps({
+                "schema_version": 1, "script_key": "story", "production_mode": "video",
+                "quality_passed": True, "youtube_id": "published",
+            }))
+            old_fields = [field for field in FIELDS if field != "engaged_views_7d"]
+            old_fields.append("custom_note")
+            with reviews.open("w", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=old_fields)
+                writer.writeheader()
+                writer.writerow({"report_path": str(report.resolve()), "accepted": "yes",
+                                 "public_release_confirmed": "yes", "views_7d": "1286",
+                                 "average_view_duration_seconds_7d": "25", "custom_note": "keep"})
+            self.assertIsNone(summarize(outputs, reviews)["editorial_outcomes_7d"])
+            self.assertEqual(init_reviews(outputs, reviews), 0)
+            with reviews.open(newline="") as file:
+                row = next(csv.DictReader(file))
+            self.assertEqual(row["engaged_views_7d"], "")
+            self.assertEqual(row["views_7d"], "1286")
+            self.assertEqual(row["accepted"], "yes")
+            self.assertEqual(row["custom_note"], "keep")
+            self.assertIsNone(summarize(outputs, reviews)["editorial_outcomes_7d"])
 
     def test_owner_acceptance_survives_missing_bill_without_changing_cost_denominator(self):
         with tempfile.TemporaryDirectory() as directory:
