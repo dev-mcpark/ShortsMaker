@@ -791,3 +791,7 @@ Use the selected interval for both the queue host trigger and overdue recovery. 
 ## 2026-11-05 — Count the existing spend under the higher OpenAI episode cap
 
 The owner approved $0.30 per episode inside $1 per month. New episode records use that cap. An existing episode keeps its stored cap unless explicitly extended under this approval, preserving all ledger baseline IDs and prior spend. The first production attempt was extended in place. Keep review and uncertainty gates intact when continuing a terminal planning stop.
+
+## 2026-11-05 — Retain draft review evidence before validation
+
+Preserve a draft, the exact validator source excerpt, their hashes and the configured model before sending another paid request. Use a separate unique request and atomic returned-verdict record for each attempt, retaining failed and interrupted work for local inspection. Keep recovery records in the scripts directory’s ignored reviews subdirectory. Absence of a verdict requires reconciliation and existing retry authority. The records do not auto-approve a draft, automatically replay a call or replace monthly and episode accounting.

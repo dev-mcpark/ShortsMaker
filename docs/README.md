@@ -25,6 +25,8 @@ Earlier PDCA plans, designs, analyses, and reports under `01-plan/` through `04-
 
 The [Jamsu frozen production script](jamsu_bridge_production.json) keeps the five approved narration texts and the reviewed native-motion briefs for the delegated production round. Its [scene-2 detail variant](../assets/jamsu_scene2_detail_seed_v1.png) and [image prompt/provenance record](jamsu_scene2_detail_candidate.json) are retained for audit; STATUS owns the current selected frame and clip verdicts. Current episode authority is defined in [the approved operating scope](OPERATING_AUTHORIZATION_PROPOSAL.md).
 
+Before paid script validation, `ScriptPlanner._validate_and_save` retains the full draft, exact 5,000-character source excerpt, hashes and configured validator model under the scripts directory's ignored `reviews/` subdirectory. Each attempt has a unique `review_*.request.json` and, when returned, a matching `.verdict.json`. Rejections and validation-error feedback survive for local correction. Interrupted calls can leave a request without a verdict. These records support recovery inspection; saved acceptance and provider cost checks still follow the normal gates. `tests/test_review_regressions.py` covers retained evidence, repeated attempts, interruption and storage failure.
+
 ## Production flow
 
 ```text

@@ -571,7 +571,44 @@ class ScriptPlanner:
         if not source_text:
             self.logger.warning("Script rejected: no source material to verify claims against")
             return None
+        # Preserve paid work before another request so a rejection can be repaired locally.
+        review_dir = Path(self.script_output_dir) / "reviews"
+        review_dir.mkdir(parents=True, exist_ok=True)
+        script_data = script.model_dump()
+        script_json = json.dumps(script_data, ensure_ascii=False, sort_keys=True)
+        source_excerpt = source_text[:5000]
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=review_dir,
+            prefix="review_", suffix=".request.json", delete=False,
+        ) as file:
+            request_path = Path(file.name)
+            json.dump({
+                "script": script_data,
+                "script_json_sha256": hashlib.sha256(script_json.encode("utf-8")).hexdigest(),
+                "source_excerpt": source_excerpt,
+                "source_sha256": hashlib.sha256(source_excerpt.encode("utf-8")).hexdigest(),
+                "validator_model": PRIMARY_CHAT_MODEL,
+            }, file, ensure_ascii=False, indent=2)
+            file.flush()
+            os.fsync(file.fileno())
         validation = await self.validator.validate_script(script, source_text=source_text)
+        verdict_path = request_path.with_name(
+            request_path.name.removesuffix(".request.json") + ".verdict.json"
+        )
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=review_dir, suffix=".tmp", delete=False,
+            ) as file:
+                temporary = Path(file.name)
+                json.dump(validation.model_dump(), file, ensure_ascii=False, indent=2)
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(temporary, verdict_path)
+        finally:
+            if temporary:
+                temporary.unlink(missing_ok=True)
+        self.logger.info("각본 검토 기록: %s", request_path)
         if validation.reason == "validation_error":
             raise RuntimeError("각본 검증 응답을 확인할 수 없습니다.")
 

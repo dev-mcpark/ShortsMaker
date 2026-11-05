@@ -5,6 +5,7 @@ import hashlib
 import httpx
 import importlib
 import json
+import os
 import sqlite3
 import tempfile
 import threading
@@ -26,7 +27,7 @@ from shorts_maker.planner.content_enricher import ContentEnricher
 from shorts_maker.planner.content_analyzer import ContentAnalyzer
 from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.planner.script_planner import ScriptPlanner
-from shorts_maker.planner.script_validator import ScriptValidator
+from shorts_maker.planner.script_validator import ScriptValidator, ValidationResult
 from shorts_maker.services.production_service import ProductionResult, ProductionService, script_sha256
 from shorts_maker.utils.character_overlay import CharacterOverlay
 from shorts_maker.utils.character_video_generator import CharacterVideoGenerator
@@ -2005,8 +2006,8 @@ class ReviewRegressions(unittest.TestCase):
         )
         planner = object.__new__(ScriptPlanner)
         planner.logger = Mock()
-        planner.validator = SimpleNamespace(validate_script=AsyncMock(return_value=SimpleNamespace(
-            is_valid=True, reason="approved")))
+        planner.validator = SimpleNamespace(validate_script=AsyncMock(return_value=ValidationResult(
+            is_valid=True, reason="approved", score=90)))
         with tempfile.TemporaryDirectory() as directory:
             planner.script_output_dir = directory
             self.assertIsNone(asyncio.run(planner._validate_and_save(script, {"content": "  "})))
@@ -2017,10 +2018,12 @@ class ReviewRegressions(unittest.TestCase):
         planner.validator.validate_script.assert_awaited_once_with(
             script, source_text="The factory expanded.",
         )
-        planner.validator.validate_script.return_value = SimpleNamespace(
+        planner.validator.validate_script.return_value = ValidationResult(
             is_valid=False, reason="validation_error")
-        with self.assertRaisesRegex(RuntimeError, "검증 응답을 확인할 수 없습니다"):
-            asyncio.run(planner._validate_and_save(script, {"content": "The factory expanded."}))
+        with tempfile.TemporaryDirectory() as directory:
+            planner.script_output_dir = directory
+            with self.assertRaisesRegex(RuntimeError, "검증 응답을 확인할 수 없습니다"):
+                asyncio.run(planner._validate_and_save(script, {"content": "The factory expanded."}))
 
     def test_validated_scripts_with_same_title_and_second_keep_both_versions(self):
         script = ShortsScript(
@@ -2030,8 +2033,8 @@ class ReviewRegressions(unittest.TestCase):
         )
         planner = object.__new__(ScriptPlanner)
         planner.logger = Mock()
-        planner.validator = SimpleNamespace(validate_script=AsyncMock(return_value=SimpleNamespace(
-            is_valid=True, reason="approved")))
+        planner.validator = SimpleNamespace(validate_script=AsyncMock(return_value=ValidationResult(
+            is_valid=True, reason="approved", score=90)))
         with tempfile.TemporaryDirectory() as directory, patch(
             "shorts_maker.planner.script_planner.datetime"
         ) as clock:
@@ -2048,11 +2051,77 @@ class ReviewRegressions(unittest.TestCase):
             self.assertEqual({json.loads(path.read_text())["description"] for path in saved},
                              {"first", "revised"})
             unsaved = script.model_copy(update={"description": "unsaved"})
-            with patch("shorts_maker.planner.script_planner.os.replace", side_effect=OSError("disk error")):
+            original_replace = os.replace
+
+            def fail_accepted_script(source, destination):
+                if Path(destination).name.startswith("script_"):
+                    raise OSError("disk error")
+                return original_replace(source, destination)
+
+            with patch("shorts_maker.planner.script_planner.os.replace", side_effect=fail_accepted_script):
                 self.assertIs(asyncio.run(planner._validate_and_save(
                     unsaved, {"content": "The factory expanded."},
                 )), unsaved)
             self.assertEqual(list(Path(directory).glob("script_*.tmp")), [])
+
+    def test_rejected_and_interrupted_drafts_retain_exact_evidence(self):
+        script = ShortsScript(
+            title="Factory", description="", tags=[], mood="calm", style="news",
+            source_name="source", source_url="https://example.com", generation_mode="image",
+            scenes=[VideoScene(scene_number=1, visual_description="factory", script_text="The factory expanded")],
+        )
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        with tempfile.TemporaryDirectory() as directory:
+            planner.script_output_dir = directory
+            source = "The factory expanded. " * 300
+
+            async def reject_after_snapshot(candidate, source_text):
+                requests = list((Path(directory) / "reviews").glob("*.request.json"))
+                self.assertEqual(len(requests), 1)
+                saved = json.loads(requests[0].read_text())
+                self.assertEqual(saved["script"], candidate.model_dump())
+                self.assertEqual(saved["source_excerpt"], source_text[:5000])
+                self.assertEqual(saved["source_sha256"],
+                                 hashlib.sha256(source_text[:5000].encode()).hexdigest())
+                self.assertEqual(saved["script_json_sha256"], hashlib.sha256(
+                    json.dumps(candidate.model_dump(), ensure_ascii=False, sort_keys=True).encode()
+                ).hexdigest())
+                return ValidationResult(is_valid=False, score=65, reason="missing_visual_proof",
+                                        feedback="The test driver's role is not visible.")
+
+            planner.validator = SimpleNamespace(validate_script=AsyncMock(side_effect=reject_after_snapshot))
+            self.assertIsNone(asyncio.run(planner._validate_and_save(script, {"content": source})))
+            requests = list((Path(directory) / "reviews").glob("*.request.json"))
+            original = requests[0].read_bytes()
+            verdicts = list((Path(directory) / "reviews").glob("*.verdict.json"))
+            self.assertEqual(len(verdicts), 1)
+            self.assertEqual(json.loads(verdicts[0].read_text())["feedback"],
+                             "The test driver's role is not visible.")
+            planner.validator.validate_script.side_effect = asyncio.CancelledError
+            with self.assertRaises(asyncio.CancelledError):
+                asyncio.run(planner._validate_and_save(script, {"content": source}))
+            self.assertEqual(requests[0].read_bytes(), original)
+            self.assertEqual(len(list((Path(directory) / "reviews").glob("*.request.json"))), 2)
+            self.assertEqual(len(list((Path(directory) / "reviews").glob("*.verdict.json"))), 1)
+            self.assertEqual(list(Path(directory).glob("script_*.json")), [])
+
+    def test_review_snapshot_failure_stops_before_paid_validation(self):
+        script = ShortsScript(
+            title="Factory", description="", tags=[], mood="calm", style="news",
+            source_name="source", source_url="https://example.com", generation_mode="image",
+            scenes=[VideoScene(scene_number=1, visual_description="factory", script_text="Expanded")],
+        )
+        planner = object.__new__(ScriptPlanner)
+        planner.logger = Mock()
+        planner.validator = SimpleNamespace(validate_script=AsyncMock())
+        with tempfile.TemporaryDirectory() as directory:
+            planner.script_output_dir = directory
+            with patch("shorts_maker.planner.script_planner.tempfile.NamedTemporaryFile",
+                       side_effect=OSError("disk full")):
+                with self.assertRaisesRegex(OSError, "disk full"):
+                    asyncio.run(planner._validate_and_save(script, {"content": "Source evidence"}))
+        planner.validator.validate_script.assert_not_awaited()
 
     def test_subtitle_failure_is_not_silently_accepted(self):
         editor = object.__new__(VideoEditor)
