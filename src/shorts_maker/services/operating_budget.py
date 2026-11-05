@@ -14,6 +14,9 @@ from shorts_maker.services import google_budget, openai_budget
 from shorts_maker.utils.config import settings
 
 
+_OPENAI_EPISODE_CAP_MICRO_USD = 300_000
+
+
 def episode_path(episode_id: str) -> Path:
     if not isinstance(episode_id, str) or not re.fullmatch(r'[0-9a-f]{32}', episode_id):
         raise ValueError('유효한 제작 회차 ID가 필요합니다.')
@@ -41,7 +44,7 @@ def begin_episode(schedule_id: str, run_count: int) -> dict:
         'schema_version': 1, 'id': uuid.uuid4().hex,
         'schedule_id': schedule_id, 'run_count': run_count,
         'created_utc': datetime.now(timezone.utc).isoformat(),
-        'google_cap_krw': 3000, 'openai_cap_micro_usd': 100000,
+        'google_cap_krw': 3000, 'openai_cap_micro_usd': _OPENAI_EPISODE_CAP_MICRO_USD,
         'baseline': {provider: list(_reserves(provider)) for provider in ('google', 'openai')},
         'starting_periods': {'google': google['period'], 'openai': openai['period']},
     }
@@ -62,7 +65,7 @@ def load_episode(episode_id: str, schedule: dict) -> dict:
             or type(record.get('google_cap_krw')) is not int
             or not 0 < record['google_cap_krw'] <= 3000
             or type(record.get('openai_cap_micro_usd')) is not int
-            or not 0 < record['openai_cap_micro_usd'] <= 100000
+            or not 0 < record['openai_cap_micro_usd'] <= _OPENAI_EPISODE_CAP_MICRO_USD
             or not isinstance(record.get('baseline'), dict)):
         raise ValueError('제작 회차와 승인 상한 기록이 일치하지 않습니다.')
     for provider in ('google', 'openai'):

@@ -787,3 +787,7 @@ Set the production trigger early enough to allow source review, generation and e
 ## 2026-11-04 — Use a 14-day cadence for the operating schedule
 
 Use the selected interval for both the queue host trigger and overdue recovery. Keep the original first-slot anchor and the paused attempt when migrating this schedule from four weeks to two weeks. The shorter cadence shares the existing monthly limits and owner acceptance gates. Model access and a higher episode ceiling require separate verification and authorization.
+
+## 2026-11-05 — Count the existing spend under the higher OpenAI episode cap
+
+The owner approved $0.30 per episode inside $1 per month. New episode records use that cap. An existing episode keeps its stored cap unless explicitly extended under this approval, preserving all ledger baseline IDs and prior spend. The first production attempt was extended in place. Keep review and uncertainty gates intact when continuing a terminal planning stop.

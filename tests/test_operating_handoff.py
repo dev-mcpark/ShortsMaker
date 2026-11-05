@@ -66,13 +66,13 @@ class OperatingHandoffTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'GOOGLE_BUDGET_EXCEEDED'):
                 google_budget.reserve_google_output('video', 'veo-3.1-lite-generate-001', 8)
         with patch.object(settings, 'openai_monthly_budget_usd', float(env['OPENAI_MONTHLY_BUDGET_USD'])):
-            for _ in range(6):
+            for _ in range(20):
                 openai_budget.reserve_openai_speech('tts-1', 'a' * 1000)
             with self.assertRaises(openai_budget.OpenAIBudgetExceeded):
                 openai_budget.reserve_openai_speech('tts-1', 'a' * 1000)
         _, current = episode_environment(record)
         self.assertEqual(current['google_remaining_krw'], 120)
-        self.assertAlmostEqual(current['openai_remaining_usd'], .01)
+        self.assertEqual(current['openai_remaining_usd'], 0)
 
     def test_month_rollover_preserves_episode_spend_and_old_rows(self):
         old = google_budget.reserve_google_output('video', 'veo-3.1-lite-generate-001', 8)
@@ -91,7 +91,7 @@ class OperatingHandoffTests(unittest.TestCase):
             ):
                 env, current = episode_environment(record)
                 self.assertEqual(env['GOOGLE_MONTHLY_BUDGET_KRW'], '2520')
-                self.assertAlmostEqual(float(env['OPENAI_MONTHLY_BUDGET_USD']), .085)
+                self.assertAlmostEqual(float(env['OPENAI_MONTHLY_BUDGET_USD']), .285)
                 self.assertEqual(current['google_new_reserved_krw'], 480)
         with sqlite3.connect(google_budget._database_path()) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM requests WHERE id=?', (old,)).fetchone()[0], 1)
@@ -132,7 +132,7 @@ class OperatingHandoffTests(unittest.TestCase):
         self.assertEqual(settings.google_monthly_budget_krw, 10000)
         self.assertEqual(seen[0]['SHORTSMAKER_EPISODE_ID'], record['id'])
         self.assertEqual(seen[0]['GOOGLE_MONTHLY_BUDGET_KRW'], '6000')
-        self.assertEqual(seen[0]['OPENAI_MONTHLY_BUDGET_USD'], '0.3')
+        self.assertEqual(seen[0]['OPENAI_MONTHLY_BUDGET_USD'], '0.5')
         self.assertFalse(episode_path(record['id']).with_suffix('.operation.pending.json').exists())
         audit = next(episode_path(record['id']).parent.glob('*.operation.*.json'))
         self.assertEqual(json.loads(audit.read_text())['returncode'], 2)
@@ -142,7 +142,7 @@ class OperatingHandoffTests(unittest.TestCase):
         command = [sys.executable, '-c',
                    'from shorts_maker.utils.config import settings; '
                    'assert settings.google_monthly_budget_krw == 6000; '
-                   'assert settings.openai_monthly_budget_usd == .3; '
+                   'assert settings.openai_monthly_budget_usd == .5; '
                    'assert settings.google_usd_krw_rate == 2000; '
                    'assert settings.paid_production_enabled; '
                    'assert settings.veo_model_id == "veo-3.1-lite-generate-001"']
