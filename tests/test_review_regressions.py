@@ -1423,9 +1423,21 @@ class ReviewRegressions(unittest.TestCase):
         reserve.assert_called_once_with("image", "gemini-3.1-flash-lite-image",
                                         source_url="https://example.com/story")
         request = generator.image_client.models.generate_content.call_args.kwargs
-        self.assertEqual(request["contents"], scene.visual_description)
+        self.assertTrue(request["contents"].endswith(scene.visual_description))
+        self.assertIn("do not turn a route or action description into storyboard strips", request["contents"])
+        self.assertIn("Only if the brief explicitly", request["contents"])
+        self.assertIn("comparison or multiple conceptual views within one frame", request["contents"])
+        self.assertIn("Preserve the specified place, period and architectural context", request["contents"])
+        self.assertIn("Keep unspecified surroundings visually neutral", request["contents"])
         self.assertEqual(request["config"].image_config.aspect_ratio, "9:16")
         self.assertEqual(request["config"].image_config.image_size, "1K")
+        scene.visual_description = "Two clearly separate conceptual views of a Seoul market in one frame for comparison."
+        with patch("shorts_maker.generator.video_generator.reserve_google_output"), patch(
+            "shorts_maker.generator.video_generator.mark_google_result", return_value=True,
+        ):
+            generator._run_image_generation("gemini-3.1-flash-lite-image", scene, "comparison.png")
+        self.assertTrue(generator.image_client.models.generate_content.call_args.kwargs[
+            "contents"].endswith(scene.visual_description))
 
     def test_veo_polling_stops_after_bounded_wait(self):
         generator = object.__new__(VideoGenerator)

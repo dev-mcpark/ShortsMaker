@@ -527,7 +527,15 @@ class VideoGenerator:
         try:
             response = self.image_client.models.generate_content(
                 model=model_id,
-                contents=scene.visual_description,
+                contents=(
+                    "Create one vertical 9:16 image for this single scene. Keep one continuous "
+                    "composition; do not turn a route or action description into storyboard strips, "
+                    "a montage, repeated subjects, or multiple moments. Only if the brief explicitly "
+                    "requests a comparison or multiple conceptual views within one frame, retain "
+                    "those views in one image. Preserve the specified place, period and architectural "
+                    "context even in a stylized model. Keep unspecified surroundings visually neutral "
+                    "rather than inventing a distinctive locale.\nScene brief:\n" + scene.visual_description
+                ),
                 config=types.GenerateContentConfig(
                     response_modalities=["TEXT", "IMAGE"],
                     image_config=types.ImageConfig(aspect_ratio="9:16", image_size="1K"),
