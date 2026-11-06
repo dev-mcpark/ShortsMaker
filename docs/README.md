@@ -29,6 +29,8 @@ Before paid script validation, `ScriptPlanner._validate_and_save` retains the fu
 
 ## Production flow
 
+The planner's OpenAI clients propagate authentication and permission errors alongside rate limits. A denied article analysis or optional enrichment cannot become a fallback script request; validation access failures are operational errors rather than editorial rejections. Existing service error handling stops the run, while original reservations and unresolved review records remain intact. Offline regressions cover 401/403 across the scoring, analysis, enrichment and validation boundaries and direct-URL stops before writing or history updates.
+
 ```text
 NiceGUI / scheduler
   -> AppState / ProductionService

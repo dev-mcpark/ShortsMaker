@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import time
 from urllib.parse import urljoin
-from openai import AsyncOpenAI, RateLimitError
+from openai import AsyncOpenAI, AuthenticationError, PermissionDeniedError, RateLimitError
 from typing import List, Dict, Optional, Tuple
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
@@ -404,7 +404,7 @@ class ScriptPlanner:
                 raise ValueError('선택된 후보가 재시도 상한을 초과했습니다')
 
             return result
-        except RateLimitError:
+        except (RateLimitError, AuthenticationError, PermissionDeniedError):
             raise
         except (OpenAIBudgetExceeded, ModelMigrationRequired):
             raise

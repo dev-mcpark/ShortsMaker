@@ -799,3 +799,7 @@ Preserve a draft, the exact validator source excerpt, their hashes and the confi
 ## 2026-11-05 — Weight Shorts duration by engaged views on matched reporting dates
 
 Use the provider-reported first seven reporting dates for manual baseline collection and retain their timezone and source export. Establish the publication reporting day from Studio and retain an exact 168-hour analysis separately if it becomes available. YouTube’s Shorts average duration uses engaged views. Keep total starts for reach and require the engaged-view denominator before combining durations in paired or editorial summaries. Migrate older private CSVs additively and leave missing denominators pending. Preserve independent owner acceptance and cost cohorts.
+
+## 2026-11-06 — Stop planning on OpenAI authentication or permission failure
+
+Propagate the SDK's 401/403 errors from scoring, article analysis, optional enrichment and validation through the existing operational failure path. An unavailable analysis or enrichment may otherwise fall back to source-only writing, but denied credentials or model access cannot. Do not convert those errors into editorial rejection or continue buying another stage. Keep original reservations and unresolved draft review records for reconciliation; this change neither proves model access nor authorizes another attempt.

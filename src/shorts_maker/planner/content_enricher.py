@@ -3,7 +3,7 @@
 import os
 import json
 import asyncio
-from openai import AsyncOpenAI, RateLimitError
+from openai import AsyncOpenAI, AuthenticationError, PermissionDeniedError, RateLimitError
 from typing import Optional, List, Dict
 import requests
 from shorts_maker.utils.logger import get_logger
@@ -176,7 +176,7 @@ class ContentEnricher:
                     if isinstance(val, list):
                         return val[:5]
             return []
-        except RateLimitError:
+        except (RateLimitError, AuthenticationError, PermissionDeniedError):
             raise
         except (OpenAIBudgetExceeded, ModelMigrationRequired):
             raise

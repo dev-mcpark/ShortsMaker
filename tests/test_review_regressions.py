@@ -14,7 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-from openai import RateLimitError
+from openai import AuthenticationError, PermissionDeniedError, RateLimitError
 from PIL import Image
 from moviepy import ColorClip, VideoFileClip
 
@@ -1190,49 +1190,94 @@ class ReviewRegressions(unittest.TestCase):
         create.return_value.choices[0].finish_reason = "length"
         self.assertIsNone(asyncio.run(analyzer.analyze_content(article)))
 
-    def test_openai_limit_stops_optional_planning_stages(self):
-        limited = RateLimitError("quota", response=httpx.Response(
-            429, request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
-        ), body=None)
-        completion = AsyncMock(side_effect=limited)
-        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=completion)))
+    def test_openai_limit_and_access_errors_stop_planning_stages(self):
+        for status, error_type in ((429, RateLimitError), (401, AuthenticationError),
+                                   (403, PermissionDeniedError)):
+            with self.subTest(status=status):
+                limited = error_type("Request denied", response=httpx.Response(
+                    status, request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+                ), body=None)
+                completion = AsyncMock(side_effect=limited)
+                client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=completion)))
 
-        with tempfile.TemporaryDirectory() as directory:
-            planner = object.__new__(ScriptPlanner)
-            planner.logger = Mock()
-            planner.history_file = str(Path(directory) / "history.json")
-            planner.client = client
-            planner._fetch_rss_feeds = Mock(return_value=[{
-                "category": "Tech", "title": "Topic", "url": "https://example.com/article",
-            }])
-            planner._write_script = AsyncMock()
-            with self.assertRaises(RateLimitError):
-                asyncio.run(planner.plan_content())
-            planner._write_script.assert_not_awaited()
+                with tempfile.TemporaryDirectory() as directory:
+                    planner = object.__new__(ScriptPlanner)
+                    planner.logger = Mock()
+                    planner.history_file = str(Path(directory) / "history.json")
+                    planner.client = client
+                    planner._fetch_rss_feeds = Mock(return_value=[{
+                        "category": "Tech", "title": "Topic", "url": "https://example.com/article",
+                    }])
+                    planner._write_script = AsyncMock()
+                    with self.assertRaises(error_type):
+                        asyncio.run(planner.plan_content())
+                    planner._write_script.assert_not_awaited()
 
-        analyzer = object.__new__(ContentAnalyzer)
-        analyzer.logger = Mock()
-        analyzer.model = "gpt-4o"
-        analyzer.client = client
+                analyzer = object.__new__(ContentAnalyzer)
+                analyzer.logger = Mock()
+                analyzer.model = "gpt-4o"
+                analyzer.client = client
+                article = SimpleNamespace(url="https://example.com/article", title="Topic",
+                                          main_text="Source", quotes=[], headings=[], captions=[])
+                with self.assertRaises(error_type):
+                    asyncio.run(analyzer.analyze_content(article))
+
+                enricher = object.__new__(ContentEnricher)
+                enricher.logger = Mock()
+                enricher.client = client
+                with self.assertRaises(error_type):
+                    asyncio.run(enricher._summarize_search_results("Topic", [
+                        {"title": "Result", "description": "Excerpt"},
+                    ]))
+
+                validator = object.__new__(ScriptValidator)
+                validator.logger = Mock()
+                validator.client = client
+                script = SimpleNamespace(title="Topic", model_dump_json=lambda **_: "{}")
+                with self.assertRaises(error_type):
+                    asyncio.run(validator.validate_script(script, source_text="Primary source"))
+
+    def test_direct_url_access_failure_does_not_buy_a_fallback_script(self):
         article = SimpleNamespace(url="https://example.com/article", title="Topic",
-                                  main_text="Source", quotes=[], headings=[], captions=[])
-        with self.assertRaises(RateLimitError):
-            asyncio.run(analyzer.analyze_content(article))
-
-        enricher = object.__new__(ContentEnricher)
-        enricher.logger = Mock()
-        enricher.client = client
-        with self.assertRaises(RateLimitError):
-            asyncio.run(enricher._summarize_search_results("Topic", [
-                {"title": "Result", "description": "Excerpt"},
-            ]))
-
-        validator = object.__new__(ScriptValidator)
-        validator.logger = Mock()
-        validator.client = client
-        script = SimpleNamespace(title="Topic", model_dump_json=lambda **_: "{}")
-        with self.assertRaises(RateLimitError):
-            asyncio.run(validator.validate_script(script, source_text="Primary source"))
+                                  main_text="Source", word_count=120,
+                                  quotes=[], headings=[], captions=[])
+        for status, error_type in ((401, AuthenticationError), (403, PermissionDeniedError)):
+            for stage in ("analysis", "enrichment"):
+                with self.subTest(status=status, stage=stage):
+                    denied = error_type("Access denied", response=httpx.Response(
+                        status, request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+                    ), body=None)
+                    create = AsyncMock(side_effect=denied)
+                    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+                    analyzer = object.__new__(ContentAnalyzer)
+                    analyzer.logger = Mock()
+                    analyzer.model = "gpt-4o"
+                    analyzer.client = client
+                    enricher = object.__new__(ContentEnricher)
+                    enricher.logger = Mock()
+                    enricher.client = client
+                    enricher.search_api_key = "test-key"
+                    enricher._generate_search_query = AsyncMock(return_value="Topic")
+                    enricher._search_web_brave = AsyncMock(return_value=[
+                        {"title": "Result", "description": "Excerpt"},
+                    ])
+                    planner = object.__new__(ScriptPlanner)
+                    planner.logger = Mock()
+                    planner._validate_url = Mock(return_value=True)
+                    planner.content_extractor = SimpleNamespace(fetch_enhanced_article=Mock(return_value=article))
+                    planner.content_analyzer = analyzer if stage == "analysis" else SimpleNamespace(
+                        analyze_content=AsyncMock(return_value=SimpleNamespace(core_message="Topic", visual_keywords=[])),
+                    )
+                    planner.content_enricher = enricher
+                    planner._write_script = AsyncMock(side_effect=AssertionError("Unexpected paid fallback"))
+                    planner._save_history = Mock()
+                    with self.assertRaises(error_type):
+                        asyncio.run(planner.plan_content(direct_url=article.url))
+                    create.assert_awaited_once()
+                    planner._write_script.assert_not_awaited()
+                    planner._save_history.assert_not_called()
+                    if stage == "analysis":
+                        enricher._generate_search_query.assert_not_awaited()
 
     def test_optional_enrichment_bounds_provider_responses_and_search_text(self):
         enricher = object.__new__(ContentEnricher)

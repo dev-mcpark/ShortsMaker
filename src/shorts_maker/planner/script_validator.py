@@ -1,5 +1,5 @@
 import json
-from openai import AsyncOpenAI, RateLimitError
+from openai import AsyncOpenAI, AuthenticationError, PermissionDeniedError, RateLimitError
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 from shorts_maker.utils.logger import get_logger
@@ -175,7 +175,7 @@ class ScriptValidator:
 
             return result
             
-        except RateLimitError:
+        except (RateLimitError, AuthenticationError, PermissionDeniedError):
             raise
         except (OpenAIBudgetExceeded, ModelMigrationRequired):
             raise
