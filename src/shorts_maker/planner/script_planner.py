@@ -776,6 +776,7 @@ class ScriptPlanner:
         - **Depth:** Explain one source-supported mechanism or relationship. Give numbers only when the source provides them.
         - **Evidence tense:** Keep a device's capability or assigned role separate from an action observed in the test. Do not turn "can collect samples" into "collected samples" without source evidence.
         - **Observable evidence:** Source-supported dates or occupational roles may be narrated over contextual footage. Do not invent a crew position, uniform, controls, or action to illustrate a role. Counts and spatial or causal relationships still need visible parts and their connection in the generated visual plan.
+        - **Static absence:** If explaining that an object is absent, show the entire relevant area with its surroundings. A cropped view past that object is insufficient. Do not invent an earlier design or removal event when the source only describes the current design.
         - **Evidence type:** Separate measured results from model projections and proposed uses. Do not present a simulated benefit as an observed field outcome. A completed facility proves its construction, not that its intended flood, traffic, or economic benefits have already occurred; preserve source attribution and future tense for those benefits.
         - **Length:** Aim for roughly 200-260 Korean narration characters; the TTS duration check is authoritative.
         - **TIMING:** The total spoken duration MUST be under **50 seconds**. This is a HARD LIMIT.

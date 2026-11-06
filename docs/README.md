@@ -33,6 +33,8 @@ The planner's OpenAI clients propagate authentication and permission errors alon
 
 Writer and validator prompts distinguish observable relationships from descriptive facts: counts and spatial/causal connections require visual evidence, while a source-stated date or role must not force invented equipment, actions or crew placement. Prompt regressions preserve both sides of that boundary; they do not prove a model's editorial judgment.
 
+Static absence briefs must show the entire relevant area and context, rather than merely looking past the missing object, without inventing a prior state or removal. `services/operating_budget.py` retains the $0.30 new-episode default and validates a separately recorded owner extension up to $0.35 without resetting its baseline or spend. `tests/test_operating_handoff.py` covers missing/mismatched approval, the unchanged future default and cumulative room.
+
 ```text
 NiceGUI / scheduler
   -> AppState / ProductionService

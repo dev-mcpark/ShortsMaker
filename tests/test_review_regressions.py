@@ -1803,6 +1803,8 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("source-supported dilemma, decision, and result", prompt)
         self.assertIn("Do not invent a crew position, uniform, controls, or action", prompt)
         self.assertIn("Counts and spatial or causal relationships still need visible parts", prompt)
+        self.assertIn("show the entire relevant area with its surroundings", prompt)
+        self.assertIn("Do not invent an earlier design or removal event", prompt)
         self.assertIn("Separate measured results from model projections", prompt)
         self.assertIn("completed facility proves its construction", prompt)
         self.assertIn("STORY IDEAS FROM AN EARLIER MODEL PASS (NOT EVIDENCE)", prompt)
@@ -2048,6 +2050,8 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("do not demand an invented crew position", prompt)
         self.assertIn("Counts and spatial or causal relationships still require visible parts", prompt)
         self.assertIn("Never invent an action to make a source-stated role look observable", prompt)
+        self.assertIn("not just a cropped view past the missing object", prompt)
+        self.assertIn("Do not require an invented earlier state or removal event", prompt)
 
     def test_planner_requires_source_before_approving_script(self):
         script = ShortsScript(

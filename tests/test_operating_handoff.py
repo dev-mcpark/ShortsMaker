@@ -99,6 +99,35 @@ class OperatingHandoffTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, '사라졌습니다'):
             episode_environment(record)
 
+    def test_explicit_cap_extension_preserves_spend_and_future_default(self):
+        record = self.queued_episode()
+        self.assertEqual(record['openai_cap_micro_usd'], 300000)
+        openai_budget.reserve_openai_speech('tts-1', 'a' * 1000)
+        path = episode_path(record['id'])
+        extended = {**record, 'openai_cap_micro_usd': 350000}
+        path.write_text(json.dumps(extended))
+        schedule = self.manager.get_schedule(self.schedule['id'])
+        with self.assertRaisesRegex(ValueError, '사용자 승인'):
+            load_episode(record['id'], schedule)
+        extended['openai_cap_extension'] = {
+            'previous_cap_micro_usd': 300000, 'approved_cap_micro_usd': 350000,
+            'owner_approval': 'This episode only, $0.35 approved.',
+        }
+        path.write_text(json.dumps(extended))
+        loaded = load_episode(record['id'], schedule)
+        self.assertEqual(loaded['baseline'], record['baseline'])
+        _, current = episode_environment(loaded)
+        self.assertEqual(current['openai_new_reserved_usd'], .015)
+        self.assertEqual(current['openai_remaining_usd'], .335)
+        future = begin_episode('future-schedule', 1)
+        self.assertEqual(future['openai_cap_micro_usd'], 300000)
+        for changes in ({'openai_cap_micro_usd': 350001},
+                        {'openai_cap_extension': {**extended['openai_cap_extension'], 'owner_approval': ''}},
+                        {'openai_cap_extension': {**extended['openai_cap_extension'], 'approved_cap_micro_usd': 340000}}):
+            path.write_text(json.dumps({**extended, **changes}))
+            with self.assertRaises(ValueError):
+                load_episode(record['id'], schedule)
+
     def test_scope_identity_corruption_and_operation_marker_fail_closed(self):
         record = self.queued_episode()
         schedule = self.manager.get_schedule(self.schedule['id'])

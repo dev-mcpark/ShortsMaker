@@ -15,6 +15,7 @@ from shorts_maker.utils.config import settings
 
 
 _OPENAI_EPISODE_CAP_MICRO_USD = 300_000
+_OPENAI_APPROVED_EXTENSION_MAX_MICRO_USD = 350_000
 
 
 def episode_path(episode_id: str) -> Path:
@@ -65,9 +66,17 @@ def load_episode(episode_id: str, schedule: dict) -> dict:
             or type(record.get('google_cap_krw')) is not int
             or not 0 < record['google_cap_krw'] <= 3000
             or type(record.get('openai_cap_micro_usd')) is not int
-            or not 0 < record['openai_cap_micro_usd'] <= _OPENAI_EPISODE_CAP_MICRO_USD
+            or not 0 < record['openai_cap_micro_usd'] <= _OPENAI_APPROVED_EXTENSION_MAX_MICRO_USD
             or not isinstance(record.get('baseline'), dict)):
         raise ValueError('제작 회차와 승인 상한 기록이 일치하지 않습니다.')
+    if record['openai_cap_micro_usd'] > _OPENAI_EPISODE_CAP_MICRO_USD:
+        approval = record.get('openai_cap_extension')
+        if (not isinstance(approval, dict)
+                or approval.get('previous_cap_micro_usd') != _OPENAI_EPISODE_CAP_MICRO_USD
+                or approval.get('approved_cap_micro_usd') != record['openai_cap_micro_usd']
+                or not isinstance(approval.get('owner_approval'), str)
+                or not approval['owner_approval'].strip()):
+            raise ValueError('기본 상한을 넘는 회차는 별도 사용자 승인 기록이 필요합니다.')
     for provider in ('google', 'openai'):
         ids = record['baseline'].get(provider)
         if (not isinstance(ids, list) or not all(isinstance(key, str) for key in ids)
