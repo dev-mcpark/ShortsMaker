@@ -16,6 +16,8 @@ from shorts_maker.utils.config import settings
 
 _OPENAI_EPISODE_CAP_MICRO_USD = 300_000
 _OPENAI_APPROVED_EXTENSION_MAX_MICRO_USD = 350_000
+_GOOGLE_EPISODE_CAP_KRW = 3000
+_GOOGLE_APPROVED_EXTENSION_MAX_KRW = 3300
 
 
 def episode_path(episode_id: str) -> Path:
@@ -45,7 +47,7 @@ def begin_episode(schedule_id: str, run_count: int) -> dict:
         'schema_version': 1, 'id': uuid.uuid4().hex,
         'schedule_id': schedule_id, 'run_count': run_count,
         'created_utc': datetime.now(timezone.utc).isoformat(),
-        'google_cap_krw': 3000, 'openai_cap_micro_usd': _OPENAI_EPISODE_CAP_MICRO_USD,
+        'google_cap_krw': _GOOGLE_EPISODE_CAP_KRW, 'openai_cap_micro_usd': _OPENAI_EPISODE_CAP_MICRO_USD,
         'baseline': {provider: list(_reserves(provider)) for provider in ('google', 'openai')},
         'starting_periods': {'google': google['period'], 'openai': openai['period']},
     }
@@ -64,11 +66,19 @@ def load_episode(episode_id: str, schedule: dict) -> dict:
             or record.get('id') != episode_id or record.get('schedule_id') != schedule['id']
             or record.get('run_count') != schedule['run_count']
             or type(record.get('google_cap_krw')) is not int
-            or not 0 < record['google_cap_krw'] <= 3000
+            or not 0 < record['google_cap_krw'] <= _GOOGLE_APPROVED_EXTENSION_MAX_KRW
             or type(record.get('openai_cap_micro_usd')) is not int
             or not 0 < record['openai_cap_micro_usd'] <= _OPENAI_APPROVED_EXTENSION_MAX_MICRO_USD
             or not isinstance(record.get('baseline'), dict)):
         raise ValueError('제작 회차와 승인 상한 기록이 일치하지 않습니다.')
+    if record['google_cap_krw'] > _GOOGLE_EPISODE_CAP_KRW:
+        approval = record.get('google_cap_extension')
+        if (not isinstance(approval, dict)
+                or approval.get('previous_cap_krw') != _GOOGLE_EPISODE_CAP_KRW
+                or approval.get('approved_cap_krw') != record['google_cap_krw']
+                or not isinstance(approval.get('owner_approval'), str)
+                or not approval['owner_approval'].strip()):
+            raise ValueError('기본 상한을 넘는 회차는 별도 사용자 승인 기록이 필요합니다.')
     if record['openai_cap_micro_usd'] > _OPENAI_EPISODE_CAP_MICRO_USD:
         approval = record.get('openai_cap_extension')
         if (not isinstance(approval, dict)

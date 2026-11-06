@@ -128,6 +128,32 @@ class OperatingHandoffTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_episode(record['id'], schedule)
 
+    def test_google_extension_keeps_old_reserves_and_monthly_ceiling(self):
+        record = self.queued_episode()
+        google_budget.reserve_google_output('video', 'veo-3.1-lite-generate-001', 8)
+        path = episode_path(record['id'])
+        extended = {**record, 'google_cap_krw': 3300, 'google_cap_extension': {
+            'previous_cap_krw': 3000, 'approved_cap_krw': 3300,
+            'owner_approval': 'This episode only, KRW3300 and frame v3 approved.',
+        }}
+        path.write_text(json.dumps(extended))
+        loaded = load_episode(record['id'], self.manager.get_schedule(self.schedule['id']))
+        self.assertEqual(loaded['baseline'], record['baseline'])
+        env, current = episode_environment(loaded)
+        self.assertEqual(current['google_new_reserved_krw'], 480)
+        self.assertEqual(current['google_remaining_krw'], 2820)
+        self.assertEqual(env['GOOGLE_MONTHLY_BUDGET_KRW'], '6300')
+        with patch.object(settings, 'google_monthly_budget_krw', 4000):
+            self.assertEqual(episode_environment(loaded)[0]['GOOGLE_MONTHLY_BUDGET_KRW'], '4000')
+        self.assertEqual(begin_episode('future-schedule', 1)['google_cap_krw'], 3000)
+        for changes in ({'google_cap_krw': 3301}, {'google_cap_extension': None},
+                        {'google_cap_extension': {**extended['google_cap_extension'], 'owner_approval': ''}},
+                        {'google_cap_extension': {**extended['google_cap_extension'], 'previous_cap_krw': 0}},
+                        {'google_cap_extension': {**extended['google_cap_extension'], 'approved_cap_krw': 3200}}):
+            path.write_text(json.dumps({**extended, **changes}))
+            with self.assertRaises(ValueError):
+                load_episode(record['id'], self.manager.get_schedule(self.schedule['id']))
+
     def test_scope_identity_corruption_and_operation_marker_fail_closed(self):
         record = self.queued_episode()
         schedule = self.manager.get_schedule(self.schedule['id'])
