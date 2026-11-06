@@ -803,3 +803,9 @@ Use the provider-reported first seven reporting dates for manual baseline collec
 ## 2026-11-06 — Stop planning on OpenAI authentication or permission failure
 
 Propagate the SDK's 401/403 errors from scoring, article analysis, optional enrichment and validation through the existing operational failure path. An unavailable analysis or enrichment may otherwise fall back to source-only writing, but denied credentials or model access cannot. Do not convert those errors into editorial rejection or continue buying another stage. Keep original reservations and unresolved draft review records for reconciliation; this change neither proves model access nor authorizes another attempt.
+
+## 2026-11-06 — Continue production with the existing accessible model roles
+
+The owner chose to continue with the older models rather than wait for Terra/Luna access. Keep the actual production pins: GPT-4o for analysis, writing and validation, GPT-4o-mini for candidate scoring and optional enrichment, and tts-1/nova for narration. New-model access and organization verification no longer block this route. Keep shutdown guards, evidence gates, original reservations and episode ceilings; this model decision does not grant extra spending. Resume retained work instead of buying discovery and drafting again.
+
+Clarify the visual-proof rule in writing and validation: source-supported dates and occupational roles can accompany contextual footage. Do not invent an unknown crew position, uniform, controls or action merely to make a role identifiable without speech. Counts and spatial/causal relationships still require visible parts and connections. This responds to the retained Cheonggye rejection without overturning it or treating the new draft as accepted. Paid model behavior and final footage remain separate checks.

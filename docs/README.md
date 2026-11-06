@@ -31,6 +31,8 @@ Before paid script validation, `ScriptPlanner._validate_and_save` retains the fu
 
 The planner's OpenAI clients propagate authentication and permission errors alongside rate limits. A denied article analysis or optional enrichment cannot become a fallback script request; validation access failures are operational errors rather than editorial rejections. Existing service error handling stops the run, while original reservations and unresolved review records remain intact. Offline regressions cover 401/403 across the scoring, analysis, enrichment and validation boundaries and direct-URL stops before writing or history updates.
 
+Writer and validator prompts distinguish observable relationships from descriptive facts: counts and spatial/causal connections require visual evidence, while a source-stated date or role must not force invented equipment, actions or crew placement. Prompt regressions preserve both sides of that boundary; they do not prove a model's editorial judgment.
+
 ```text
 NiceGUI / scheduler
   -> AppState / ProductionService

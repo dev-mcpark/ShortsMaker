@@ -775,6 +775,7 @@ class ScriptPlanner:
         - **Spoken voice:** Use calm, curious Korean addressed to one viewer, not a press-release list. Ask one concrete question only when the source can answer it early; avoid repeated rhetorical questions.
         - **Depth:** Explain one source-supported mechanism or relationship. Give numbers only when the source provides them.
         - **Evidence tense:** Keep a device's capability or assigned role separate from an action observed in the test. Do not turn "can collect samples" into "collected samples" without source evidence.
+        - **Observable evidence:** Source-supported dates or occupational roles may be narrated over contextual footage. Do not invent a crew position, uniform, controls, or action to illustrate a role. Counts and spatial or causal relationships still need visible parts and their connection in the generated visual plan.
         - **Evidence type:** Separate measured results from model projections and proposed uses. Do not present a simulated benefit as an observed field outcome. A completed facility proves its construction, not that its intended flood, traffic, or economic benefits have already occurred; preserve source attribution and future tense for those benefits.
         - **Length:** Aim for roughly 200-260 Korean narration characters; the TTS duration check is authoritative.
         - **TIMING:** The total spoken duration MUST be under **50 seconds**. This is a HARD LIMIT.

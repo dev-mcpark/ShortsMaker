@@ -1801,6 +1801,8 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("one coherent shot", prompt)
         self.assertIn("keep its before and resulting state visible", prompt)
         self.assertIn("source-supported dilemma, decision, and result", prompt)
+        self.assertIn("Do not invent a crew position, uniform, controls, or action", prompt)
+        self.assertIn("Counts and spatial or causal relationships still need visible parts", prompt)
         self.assertIn("Separate measured results from model projections", prompt)
         self.assertIn("completed facility proves its construction", prompt)
         self.assertIn("STORY IDEAS FROM AN EARLIER MODEL PASS (NOT EVIDENCE)", prompt)
@@ -2042,6 +2044,10 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn("Reject that unverified relationship", prompt)
         self.assertIn("diagram to be added in editing", prompt)
         self.assertIn("visible before, change, and resulting state", prompt)
+        self.assertIn("not every descriptive fact", prompt)
+        self.assertIn("do not demand an invented crew position", prompt)
+        self.assertIn("Counts and spatial or causal relationships still require visible parts", prompt)
+        self.assertIn("Never invent an action to make a source-stated role look observable", prompt)
 
     def test_planner_requires_source_before_approving_script(self):
         script = ShortsScript(
