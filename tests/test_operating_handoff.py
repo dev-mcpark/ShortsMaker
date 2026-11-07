@@ -230,10 +230,13 @@ class OperatingHandoffTests(unittest.TestCase):
             await asyncio.sleep(0)
 
         with patch('shorts_maker.services.production_service.ProductionService.full_pipeline',
-                   new_callable=AsyncMock) as pipeline:
+                   new_callable=AsyncMock) as pipeline, patch(
+            'shorts_maker.uploader.youtube_uploader.YouTubeUploader.get_authenticated_service',
+        ) as auth:
             asyncio.run(run_clock())
             asyncio.run(self.manager._execute_pipeline(self.schedule))
             pipeline.assert_not_awaited()
+            auth.assert_not_called()
         restarted = ScheduleManager(str(self.manager.filename), queue_only=True)
         queued = restarted.get_schedule(self.schedule['id'])
         self.assertEqual(queued['last_result'], 'operator_pending')
@@ -253,7 +256,9 @@ class OperatingHandoffTests(unittest.TestCase):
             'shorts_maker.services.production_service.ProductionService.full_pipeline', new_callable=AsyncMock,
             return_value=ProductionResult(success=True, review_pending=True, script=script),
         ) as pipeline:
-            asyncio.run(self.manager._execute_pipeline(self.schedule, operator=True))
+            with patch('shorts_maker.uploader.youtube_uploader.YouTubeUploader.get_authenticated_service',
+                       return_value=object()):
+                asyncio.run(self.manager._execute_pipeline(self.schedule, operator=True))
             pipeline.assert_awaited_once()
             with self.assertRaises(ValueError):
                 asyncio.run(self.manager._execute_pipeline(self.schedule, operator=True))
@@ -287,6 +292,41 @@ class OperatingHandoffTests(unittest.TestCase):
 
         asyncio.run(check())
 
+    def test_operator_auth_failure_preserves_episode_before_planning(self):
+        record = self.queued_episode()
+        before = self.manager.get_schedule(self.schedule['id'])
+        episode_before = episode_path(record['id']).read_bytes()
+        budget_before = episode_environment(record)[1]
+        script = ShortsScript(title='Source story', description='Facts', tags=[], mood='calm',
+                              style='documentary', generation_mode='video', source_name='Source',
+                              source_url='https://example.com/story',
+                              scenes=[VideoScene(scene_number=1, visual_description='Model', script_text='사실')])
+        with patch.dict(os.environ, {'SHORTSMAKER_EPISODE_ID': record['id']}), patch.object(
+            settings, 'paid_production_enabled', True,
+        ), patch('shorts_maker.utils.bgm_manager.BGMManager.has_documented_track', return_value=True), patch(
+            'shorts_maker.services.production_service.ProductionService.full_pipeline', new_callable=AsyncMock,
+            return_value=ProductionResult(success=True, review_pending=True, script=script),
+        ) as pipeline, patch(
+            'shorts_maker.uploader.youtube_uploader.YouTubeUploader.get_authenticated_service',
+            side_effect=RuntimeError('expired consent'),
+        ) as auth:
+            with self.assertRaisesRegex(RuntimeError, 'YOUTUBE_AUTH_REQUIRED'):
+                asyncio.run(self.manager._execute_pipeline(self.schedule, operator=True))
+            auth.assert_called_once_with(interactive=False)
+            pipeline.assert_not_awaited()
+            self.assertEqual(self.manager.get_schedule(self.schedule['id']), before)
+            self.assertEqual(episode_path(record['id']).read_bytes(), episode_before)
+            self.assertEqual(episode_environment(record)[1], budget_before)
+            auth.side_effect = None
+            auth.return_value = object()
+            asyncio.run(self.manager._execute_pipeline(self.schedule, operator=True))
+        pipeline.assert_awaited_once()
+        after = self.manager.get_schedule(self.schedule['id'])
+        self.assertEqual(after['last_episode_id'], record['id'])
+        self.assertEqual(after['run_count'], 1)
+        self.assertEqual(after['last_result'], 'script_review_pending')
+        self.assertFalse(after['enabled'])
+
     def test_interrupted_planning_remains_unverified_and_cannot_be_submitted_again(self):
         record = self.queued_episode()
         with patch.dict(os.environ, {'SHORTSMAKER_EPISODE_ID': record['id']}), patch.object(
@@ -295,7 +335,8 @@ class OperatingHandoffTests(unittest.TestCase):
             'shorts_maker.services.production_service.ProductionService.full_pipeline',
             new_callable=AsyncMock, side_effect=asyncio.CancelledError,
         ) as pipeline:
-            with self.assertRaises(asyncio.CancelledError):
+            with patch('shorts_maker.uploader.youtube_uploader.YouTubeUploader.get_authenticated_service',
+                       return_value=object()), self.assertRaises(asyncio.CancelledError):
                 asyncio.run(self.manager._execute_pipeline(self.schedule, operator=True))
             current = self.manager.get_schedule(self.schedule['id'])
             self.assertEqual(current['last_result'], 'run_in_progress')

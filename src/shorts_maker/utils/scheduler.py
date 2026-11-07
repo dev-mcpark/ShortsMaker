@@ -577,6 +577,15 @@ class ScheduleManager:
                     or not schedule.get('last_episode_id')
                     or os.getenv('SHORTSMAKER_EPISODE_ID') != schedule['last_episode_id']):
                 raise ValueError('저장된 에이전트 회차와 제작 대기가 일치하지 않습니다.')
+            if settings.paid_production_enabled:
+                from shorts_maker.uploader.youtube_uploader import YouTubeAuthRequired, YouTubeUploader
+                try:
+                    await asyncio.to_thread(YouTubeUploader().get_authenticated_service, interactive=False)
+                except Exception:
+                    raise YouTubeAuthRequired(
+                        'YOUTUBE_AUTH_REQUIRED: 유료 기획 전에 YouTube 업로드 계정을 다시 연결하세요. '
+                        '기존 auth-only 절차 후 같은 회차를 재개할 수 있습니다.'
+                    ) from None
         else:
             if not schedule.get('enabled', True):
                 return
