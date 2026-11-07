@@ -123,8 +123,8 @@ class VeoPromptExporter:
                     "motion_instruction": scene.motion_instruction,
                     "aspect_ratio": "9:16",
                     "style_notes": (
-                        "Professional broadcast quality, 4K, no people, "
-                        "no presenter, background scene only"
+                        "Follow the scene's specified subjects, people, counts, setting and visual style. "
+                        "Preserve recurring identities and use the selected model's supported resolution."
                     ),
                 }
                 for scene in script.scenes

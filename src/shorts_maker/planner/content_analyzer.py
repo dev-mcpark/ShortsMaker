@@ -5,7 +5,9 @@ from openai import AsyncOpenAI, AuthenticationError, PermissionDeniedError, Rate
 from typing import Optional, Dict, List
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
-from shorts_maker.services.openai_models import ModelMigrationRequired, PRIMARY_CHAT_MODEL
+from shorts_maker.services.openai_models import (
+    ModelMigrationRequired, PRIMARY_CHAT_MODEL, PRIMARY_CHAT_REQUEST_OPTIONS,
+)
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.services.openai_budget import OpenAIBudgetExceeded, reserve_openai_chat
 from shorts_maker.planner.models import ArticleContent, ContentAnalysis
@@ -87,8 +89,8 @@ class ContentAnalyzer:
                 model=self.model,
                 messages=messages,
                 response_format={"type": "json_object"},
-                temperature=0.3,
                 max_completion_tokens=1500,
+                **PRIMARY_CHAT_REQUEST_OPTIONS,
             )
             
             choice = response.choices[0]

@@ -2034,7 +2034,7 @@ class ReviewRegressions(unittest.TestCase):
             scenes=[VideoScene(scene_number=1, visual_description="desert", script_text="지상 시험")],
         )
 
-        for reason in ("unsupported_visual", "missing_visual_proof"):
+        for reason in ("unsupported_visual", "missing_visual_proof", "weak_story", "visual_discontinuity"):
             with self.subTest(reason=reason):
                 source = "The field test took place in Virginia."
                 if reason == "missing_visual_proof":

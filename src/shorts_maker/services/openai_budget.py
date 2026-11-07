@@ -13,10 +13,13 @@ from shorts_maker.utils.config import settings
 from shorts_maker.services.openai_models import require_model_active
 
 
-# shortcut: these standard-tier list prices were checked on 2026-10-23; recheck before changing models or enabling a new month.
+# shortcut: recheck these dated Standard list prices before changing models or enabling a new month.
 _CHAT_PRICES = {
+    # Legacy/fast rates checked 2026-10-23.
     "gpt-4o": (Decimal("2.50"), Decimal("10.00")),
     "gpt-4o-mini": (Decimal("0.15"), Decimal("0.60")),
+    # Standard text rates checked 2026-11-07: https://developers.openai.com/api/docs/models/gpt-6.1-terra
+    "gpt-6.1-terra": (Decimal("1.00"), Decimal("5.00")),
 }
 _SPEECH_PRICES = {"tts-1": Decimal("15.00")}
 _SCHEMA = """CREATE TABLE IF NOT EXISTS requests (

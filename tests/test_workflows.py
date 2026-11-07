@@ -87,6 +87,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(reserve.call_args.args[2], 4000)
         self.assertNotIn("source_url", reserve.call_args.kwargs)
         self.assertEqual(create.await_args.kwargs["max_completion_tokens"], 4000)
+        self.assertEqual(create.await_args.kwargs['model'], 'gpt-4o-mini')
+        self.assertNotIn('reasoning_effort', create.await_args.kwargs)
         prompt = create.await_args.kwargs["messages"][0]["content"]
         self.assertIn("Concrete stakes", prompt)
         self.assertIn("Source-backed turn", prompt)

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -101,6 +102,17 @@ class OpenAIBudgetTests(unittest.TestCase):
         with patch.object(settings, "openai_budget_month", "2020-01"):
             with self.assertRaisesRegex(openai_budget.OpenAIBudgetExceeded, "이번 달"):
                 openai_budget.reserve_openai_speech("tts-1", "안녕하세요")
+
+    def test_terra_reserves_full_completion_ceiling_and_preserves_failed_hold(self):
+        openai_budget.initialize_openai_budget()
+        messages = [{"role": "user", "content": "각본과 장면 검토"}]
+        expected = len(json.dumps(messages, ensure_ascii=False).encode('utf-8')) + 1024 + 1500 * 5
+        openai_budget.reserve_openai_chat('gpt-6.1-terra', messages, 1500)
+        status = openai_budget.budget_status()
+        self.assertAlmostEqual(status['reserved_by_model_usd']['gpt-6.1-terra'], expected / 1000000)
+        with self.assertRaises(openai_budget.OpenAIBudgetExceeded):
+            openai_budget.reserve_openai_chat('gpt-6.1-terra', messages, 1500)
+        self.assertEqual(openai_budget.budget_status(), status)
 
     def test_parallel_scene_requests_cannot_both_spend_the_last_room(self):
         with patch.object(settings, "openai_monthly_budget_usd", 0.012):

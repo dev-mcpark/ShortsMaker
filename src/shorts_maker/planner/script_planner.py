@@ -16,7 +16,9 @@ from openai import AsyncOpenAI, AuthenticationError, PermissionDeniedError, Rate
 from typing import List, Dict, Optional, Tuple
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
-from shorts_maker.services.openai_models import ModelMigrationRequired, PRIMARY_CHAT_MODEL, FAST_CHAT_MODEL
+from shorts_maker.services.openai_models import (
+    ModelMigrationRequired, PRIMARY_CHAT_MODEL, FAST_CHAT_MODEL, PRIMARY_CHAT_REQUEST_OPTIONS,
+)
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.services.openai_budget import OpenAIBudgetExceeded, reserve_openai_chat
 from shorts_maker.planner.script_validator import ScriptValidator
@@ -730,6 +732,9 @@ class ScriptPlanner:
         - Match the primary article's real location, period, setting, participant count, equipment, and roles. Never turn a field test into an actual space mission or another location.
         - If the source does not establish how an event looked, use a clearly illustrative diagram or symbolic image. Mark future or hypothetical scenes as conceptual in the description.
         - Show one narrated idea per scene. Specify the subject, one action or state, its context, and a useful composition. Avoid invented signs, numbers, interface labels, logos, and extra people.
+        - **Visible proof:** Name the specific narrated claim, the visible objects that prove it, their relative positions, and the framing that keeps that evidence readable. Detail should explain the narration, not add decorative objects or unsupported facts. Put this evidence in visual_description, not in a promised later overlay.
+        - **Continuity anchors:** Choose a compact, source-compatible description for each recurring subject and repeat its exact appearance words in every relevant visual_description: shape, color, materials, key layout, and people/counts where supported. Keep place, period, scale and explanatory style coherent. Unspecified appearance may be visibly conceptual, never asserted as the real design. Do not change identity or invent geography between shots; explicitly identify a genuine change or separate place when needed.
+        - **Shot progression:** Change framing to reveal the next needed fact: establish the setting, show the relevant detail or relationship, then its source-supported meaning. Avoid a sequence of interchangeable exterior shots or camera moves with no new evidence. For motion_instruction specify one feasible action or camera movement, what must remain visible, and its final state; preserve the reviewed first frame's objects and layout instead of redescribing them.
         - When narration explains a spatial or causal relationship, show its parts and their connection with shapes, placement, or change in the generated visual itself. A mood shot, labels naming the parts, or a diagram promised for later editing do not supply this proof. Put the visible proof before camera and style details.
         - Do not invent a spatial relationship the source does not establish. Separate places or problems must not appear on one continuous site, map, or tabletop as if they adjoin. If one shot cannot show both without implying adjacency, split the beat into separate scenes.
         - Leave the lower third visually simple for captions. Exact words and data are added by the editor, not drawn by the image or video model.
@@ -781,6 +786,7 @@ class ScriptPlanner:
         - **Length:** Aim for roughly 200-260 Korean narration characters; the TTS duration check is authoritative.
         - **TIMING:** The total spoken duration MUST be under **50 seconds**. This is a HARD LIMIT.
         - **Story spine:** Choose one source-supported dilemma, decision, and result. Each scene must change what the viewer understands; do not list facts or robot roles in article order.
+        - Do not list cabin, capacity, route and fare as disconnected specifications. Keep a detail only if it develops or answers the same viewer question; end with its source-backed payoff, not an unrelated fact or generic future promise.
         - **Structure:**
           1. **Hook (0-5s):** Show the concrete dilemma or unexpected choice, with a reason to keep watching. Do not invent danger or conflict.
           2. **Turn (5-15s):** Reveal what actually happened in the source instead of delaying the answer with a vague teaser.
@@ -831,6 +837,7 @@ class ScriptPlanner:
             messages=messages,
             response_format={"type": "json_object"},
             max_completion_tokens=4000,
+            **PRIMARY_CHAT_REQUEST_OPTIONS,
         )
         choice = response.choices[0]
         if getattr(choice, "finish_reason", None) == "length":

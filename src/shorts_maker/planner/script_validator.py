@@ -4,7 +4,9 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
-from shorts_maker.services.openai_models import ModelMigrationRequired, PRIMARY_CHAT_MODEL
+from shorts_maker.services.openai_models import (
+    ModelMigrationRequired, PRIMARY_CHAT_MODEL, PRIMARY_CHAT_REQUEST_OPTIONS,
+)
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.services.openai_budget import OpenAIBudgetExceeded, reserve_openai_chat
 
@@ -79,10 +81,12 @@ class ScriptValidator:
         **Review Criteria:**
         1. **Policy Safety:** No hate speech, explicit violence, sexual content, or copyright infringement.
         2. **Engagement (Hook):** The first 5 seconds (Scene 1) MUST be gripping/surprising. No "Did you know?" or slow intros.
+           Review the whole arc: later scenes must develop or answer the same source-supported question and earn a specific payoff. A hook followed by disconnected specifications or an unrelated ending fails as `weak_story`; name the disconnected beat. Factual accuracy alone does not establish an engaging story.
         3. **Visual Feasibility:** Visual descriptions must be concrete (objects, lighting, style) for AI Video Generators. Avoid abstract concepts.
            When narration depends on a spatial or causal relationship, the generated visual plan itself must show its parts and connection without relying on speech, captions, or a diagram to be added in editing. For video scenes, inspect visual_description and motion_instruction together: a narrated change needs a visible before, change, and resulting state in the same shot. A decorative atmosphere shot or labels naming objects alone do not establish it. A clearly illustrative generated image or cutaway is acceptable. Reject a missing relationship with reason `missing_visual_proof` and name the scene.
            Apply that test to the relationship actually claimed, not every descriptive fact. A source-supported date or occupational role can be narrated over contextual footage; do not demand an invented crew position, uniform, controls, or action as proof of that label. Counts and spatial or causal relationships still require visible parts and their connection. Never invent an action to make a source-stated role look observable.
            For a static absence claim, require the entire relevant area and its context to be visible, not just a cropped view past the missing object. Do not require an invented earlier state or removal event when the source describes an existing design rather than a change.
+           Compare recurring subjects across ALL scenes. Their declared shape/color/material, relevant layout, scale and source-backed counts/roles must remain consistent unless a source-supported change or explicitly separate place explains it. Require concrete continuity anchors in each relevant visual_description; do not assume another independent image request remembers a prior shot. Reject unexplained identity/layout changes as `visual_discontinuity`, identifying the conflicting scenes and attributes. Different camera angles or a clearly illustrative cutaway are allowed; unsupported decorative detail is not evidence. Verify each motion can preserve the narrated proof and first-frame layout through the end of one short shot.
         4. **Length:** Total duration must be under 60 seconds (ideally 40-50s).
         5. **Language:** Must be Natural Korean suitable for narration.
         6. **NO ADVERTISING/PROMOTIONAL CONTENT:** This is CRITICAL. Reject any script that:
@@ -118,6 +122,8 @@ class ScriptValidator:
         - Unsupported factual claim -> Fail (reason: "unsupported_claim")
         - Unsupported or misleading visual -> Fail (reason: "unsupported_visual")
         - Narrated relationship absent from the visual plan -> Fail (reason: "missing_visual_proof")
+        - Disconnected story or unearned ending -> Fail (reason: "weak_story")
+        - Unexplained recurring-subject or layout changes -> Fail (reason: "visual_discontinuity")
         """
 
         try:
@@ -135,6 +141,7 @@ class ScriptValidator:
                 messages=messages,
                 response_format={"type": "json_object"},
                 max_completion_tokens=1500,
+                **PRIMARY_CHAT_REQUEST_OPTIONS,
             )
             choice = response.choices[0]
             if getattr(choice, "finish_reason", None) == "length":
@@ -150,6 +157,7 @@ class ScriptValidator:
                 "advertising_content", "promotional_tone", "promotional_content",
                 "policy_violation", "unsupported_claim", "unsupported_visual",
                 "insufficient_source", "weak_hook", "missing_visual_proof",
+                "weak_story", "visual_discontinuity",
             }
             reason = result.reason.strip().lower()
             if reason in failure_reasons:

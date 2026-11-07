@@ -3,7 +3,8 @@
 from datetime import date, datetime, timezone
 
 
-PRIMARY_CHAT_MODEL = 'gpt-4o'
+PRIMARY_CHAT_MODEL = 'gpt-6.1-terra'
+PRIMARY_CHAT_REQUEST_OPTIONS = {'reasoning_effort': 'low', 'service_tier': 'default'}
 FAST_CHAT_MODEL = 'gpt-4o-mini'
 SPEECH_MODEL = 'tts-1'
 

@@ -1,6 +1,6 @@
-# Story and shot-planning model comparison
+# Story and shot-planning model migration
 
-Updated: 2026-11-07. This is a preparation plan, not an activated model migration or spending approval. [STATUS.md](STATUS.md) owns the current episode and account evidence.
+Updated: 2026-11-07. The owner subsequently requested applying the confirmed newer model: **primary analysis, writing and validation now use GPT-6.1 Terra, low reasoning, Standard tier**, with offline compatibility and price accounting checks. Fast scoring/enrichment remains GPT-4o-mini and speech remains tts-1/nova. The real access probe used `none`; a full low-reasoning JSON story and its quality have not been live-tested. No new spend allowance is implied. [STATUS.md](STATUS.md) owns current runtime, budget and evidence; the earlier candidate/access history below is retained.
 
 ## Why compare again
 
@@ -24,11 +24,13 @@ Later on November 7 the owner supplied the project's Limits link and explicitly 
 
 ## Smallest useful comparison
 
+The revised production writer's exact request, now including stronger story/proof/continuity instructions, is retained in [the current writer preflight](../outputs/evaluation/model_upgrade_feedback_20261107/terra_updated_writer_preflight.json). Its conservative writer-only reservation is **$0.031987**; it has not been submitted. The returned draft would still need a separately preflighted source/continuity validation. This supersedes the earlier $0.029562 hand-written comparison for a future ordinary-writer test. The current $0.000788 room cannot cover either; no approval, failed hold or baseline was reset.
+
 1. Retain the exact primary-source excerpt, original GPT-4o script and owner feedback. The ignored [comparison plan](../outputs/evaluation/model_upgrade_feedback_20261107/comparison_plan.json) binds the proposed request and source hashes. Do not repurchase RSS scoring, article analysis or a GPT-4o baseline.
 2. After a separate comparison scope is authorized, submit **one text rewrite**, without automatic retry. Prefer the now-accessible Terra comparison above; the Sol proposal remains conditional on its own inference access. Its conservative reservation is **$0.059124**: 9,562 UTF-8 input-bound units at $2/million plus 4,000 completion tokens at $10/million. Recompute against the exact bytes, current rates and monthly room before execution. The uploaded episode's current **$0.000788** allowance covers neither comparison and cannot be reopened for this experiment. Preparing a comparison changes no ledger rows or production defaults; all three completed access probes have their own retained reservations.
 3. Compare against the retained baseline on one source-backed question, whether later scenes advance or answer it, spoken Korean, payoff, source accuracy and each shot's visible explanatory role. Do not invent a human's position, controls, safety procedure or autonomy level to explain the missing driver seat. Keep dated service facts in their article context. A passing model score alone cannot decide story interest.
 4. Validate the returned JSON with existing script models, duration/scene limits and source checks. Empty, truncated, unsupported or failed responses stop; they do not authorize another call. Build a zero-provider-cost spoken/storyboard audition before buying any new voice, image or Veo output. Owner feedback on that comparison is the editorial evidence.
-5. Only adopt a new production model after actual request compatibility, budget accounting and editorial comparison pass. Update shared role constants, reservation prices and all affected call sites/tests together. Keep fast scoring and speech as separate roles. Existing source/frame/raw gates, exclusions and attached-video identity stay in force.
+5. The owner's later request authorizes the current Terra code migration: shared roles, request options, reservation pricing and affected call sites/tests were updated together. Verify the remaining real full-story response and editorial benefit before calling the migration quality-validated or buying replacement media. Keep fast scoring and speech as separate roles. Existing source/frame/raw gates, exclusions and attached-video identity stay in force. Later candidate changes still need their own access and compatibility evidence.
 
 ## Evidence boundary
 
