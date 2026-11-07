@@ -59,6 +59,7 @@ For a reviewed story with retained assets, `ProductionService.full_pipeline` als
 
 Episode-scoped operator budgets and clock/review recovery are implemented in `services/operating_budget.py`, `utils/scheduler.py` and `scripts/operate_schedule.py`, checked by `tests/test_operating_handoff.py`. The tests exercise real local SQLite reservations and clock triggers; provider planning/upload responses remain offline.
 `ScheduleManager.reject_pending_script` can resume discovery only for a draft without an attached upload. Studio hides that draft-rejection action after attachment, and the shared method also blocks stale callers. A finished private copy retains its paused owner-review state until the separate verified-video acceptance path is used.
+`scripts/operate_schedule.run_scoped` blocks another production child after a private upload is attached, before budget preparation or attempt-marker creation. The handoff regression verifies unchanged episode baselines, reservations and review state, while unfinished episodes retain their scoped-run path.
 `ScheduleManager._execute_pipeline_serial(operator=True)` checks saved upload authorization noninteractively after verifying the bound episode and before starting paid planning. Authentication failure propagates as `YOUTUBE_AUTH_REQUIRED`, preserving `operator_pending` and its baseline; `tests/test_operating_handoff.py` checks no planning/spend, same-episode resumption and an auth-free queue-only clock. Ordinary draft-only planning is unchanged.
 
 | Change | Start here | Verify with |

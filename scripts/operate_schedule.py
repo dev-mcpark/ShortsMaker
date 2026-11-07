@@ -27,6 +27,8 @@ def active_episode(manager, schedule_id):
 
 def run_scoped(manager, schedule_id, command):
     schedule, record = active_episode(manager, schedule_id)
+    if schedule.get('last_youtube_id'):
+        raise ValueError('비공개 완성본이 연결된 회차는 제작을 다시 실행할 수 없습니다. 완성본을 검토하세요.')
     env, status = episode_environment(record)
     path = episode_path(record['id']).with_suffix('.operation.pending.json')
     audit = {'command_sha256': hashlib.sha256(json.dumps(command).encode()).hexdigest(), 'status': status}

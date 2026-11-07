@@ -375,6 +375,16 @@ class OperatingHandoffTests(unittest.TestCase):
         self.assertEqual(attached['last_result'], 'script_review_pending')
         self.assertFalse(attached['enabled'])
         self.assertNotIn('accepted_at', attached)
+        episode = episode_path(attached['last_episode_id'])
+        baseline = episode.read_bytes()
+        budget = episode_environment(load_episode(attached['last_episode_id'], attached))[1]
+        with patch('scripts.operate_schedule.subprocess.run', return_value=SimpleNamespace(returncode=0)) as child:
+            with self.assertRaisesRegex(ValueError, '완성본'):
+                run_scoped(self.manager, self.schedule['id'], [sys.executable, '-c', 'pass'])
+            child.assert_not_called()
+        self.assertEqual(list(episode.parent.glob('*.operation.*.json')), [])
+        self.assertEqual(episode.read_bytes(), baseline)
+        self.assertEqual(episode_environment(load_episode(attached['last_episode_id'], attached))[1], budget)
         with self.assertRaisesRegex(ValueError, '비공개'):
             self.manager.reject_pending_script(self.schedule['id'])
         self.assertEqual(self.manager.get_schedule(self.schedule['id']), attached)
