@@ -15,7 +15,8 @@ from shorts_maker.utils.config import settings
 
 
 _OPENAI_EPISODE_CAP_MICRO_USD = 300_000
-_OPENAI_APPROVED_EXTENSION_MAX_MICRO_USD = 350_000
+_OPENAI_INITIAL_EXTENSION_MICRO_USD = 350_000
+_OPENAI_APPROVED_EXTENSION_MAX_MICRO_USD = 450_000
 _GOOGLE_EPISODE_CAP_KRW = 3000
 _GOOGLE_APPROVED_EXTENSION_MAX_KRW = 3300
 
@@ -83,10 +84,19 @@ def load_episode(episode_id: str, schedule: dict) -> dict:
         approval = record.get('openai_cap_extension')
         if (not isinstance(approval, dict)
                 or approval.get('previous_cap_micro_usd') != _OPENAI_EPISODE_CAP_MICRO_USD
-                or approval.get('approved_cap_micro_usd') != record['openai_cap_micro_usd']
+                or approval.get('approved_cap_micro_usd') != min(
+                    record['openai_cap_micro_usd'], _OPENAI_INITIAL_EXTENSION_MICRO_USD)
                 or not isinstance(approval.get('owner_approval'), str)
                 or not approval['owner_approval'].strip()):
             raise ValueError('기본 상한을 넘는 회차는 별도 사용자 승인 기록이 필요합니다.')
+    if record['openai_cap_micro_usd'] > _OPENAI_INITIAL_EXTENSION_MICRO_USD:
+        approval = record.get('openai_cap_extension_followup')
+        if (not isinstance(approval, dict)
+                or approval.get('previous_cap_micro_usd') != _OPENAI_INITIAL_EXTENSION_MICRO_USD
+                or approval.get('approved_cap_micro_usd') != record['openai_cap_micro_usd']
+                or not isinstance(approval.get('owner_approval'), str)
+                or not approval['owner_approval'].strip()):
+            raise ValueError('후속 상한 확장에는 이전 승인과 새 사용자 승인 기록이 모두 필요합니다.')
     for provider in ('google', 'openai'):
         ids = record['baseline'].get(provider)
         if (not isinstance(ids, list) or not all(isinstance(key, str) for key in ids)

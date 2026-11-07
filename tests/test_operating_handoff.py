@@ -128,6 +128,35 @@ class OperatingHandoffTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_episode(record['id'], schedule)
 
+    def test_followup_openai_extension_requires_both_approvals_and_keeps_history(self):
+        record = self.queued_episode()
+        openai_budget.reserve_openai_speech('tts-1', 'a' * 1000)
+        previous = {'previous_cap_micro_usd': 300000, 'approved_cap_micro_usd': 350000,
+                    'owner_approval': 'Previous one-episode approval'}
+        followup = {'previous_cap_micro_usd': 350000, 'approved_cap_micro_usd': 450000,
+                    'owner_approval': 'This episode only, $0.45 for text validation'}
+        extended = {**record, 'openai_cap_micro_usd': 450000,
+                    'openai_cap_extension': previous, 'openai_cap_extension_followup': followup}
+        path = episode_path(record['id'])
+        path.write_text(json.dumps(extended))
+        loaded = load_episode(record['id'], self.manager.get_schedule(self.schedule['id']))
+        self.assertEqual(loaded['baseline'], record['baseline'])
+        self.assertEqual(loaded['openai_cap_extension'], previous)
+        self.assertAlmostEqual(episode_environment(loaded)[1]['openai_remaining_usd'], .435)
+        with patch.object(settings, 'openai_monthly_budget_usd', .22):
+            env, _ = episode_environment(loaded)
+            self.assertEqual(env['OPENAI_MONTHLY_BUDGET_USD'], '0.22')
+        self.assertEqual(begin_episode(record['schedule_id'], 2)['openai_cap_micro_usd'], 300000)
+        for changes in (
+            {'openai_cap_extension': None}, {'openai_cap_extension_followup': None},
+            {'openai_cap_micro_usd': 450001},
+            {'openai_cap_extension_followup': {**followup, 'owner_approval': ''}},
+            {'openai_cap_extension_followup': {**followup, 'previous_cap_micro_usd': 300000}},
+        ):
+            path.write_text(json.dumps({**extended, **changes}))
+            with self.assertRaises(ValueError):
+                load_episode(record['id'], self.manager.get_schedule(self.schedule['id']))
+
     def test_google_extension_keeps_old_reserves_and_monthly_ceiling(self):
         record = self.queued_episode()
         google_budget.reserve_google_output('video', 'veo-3.1-lite-generate-001', 8)

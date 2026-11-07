@@ -3,6 +3,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from decimal import Decimal, ROUND_CEILING
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
@@ -106,7 +107,8 @@ class OpenAIBudgetTests(unittest.TestCase):
     def test_terra_reserves_full_completion_ceiling_and_preserves_failed_hold(self):
         openai_budget.initialize_openai_budget()
         messages = [{"role": "user", "content": "각본과 장면 검토"}]
-        expected = len(json.dumps(messages, ensure_ascii=False).encode('utf-8')) + 1024 + 1500 * 5
+        bound = len(json.dumps(messages, ensure_ascii=False).encode('utf-8')) + 1024
+        expected = int((Decimal(bound) * Decimal('1.25') + 1500 * 5).to_integral_value(rounding=ROUND_CEILING))
         openai_budget.reserve_openai_chat('gpt-6.1-terra', messages, 1500)
         status = openai_budget.budget_status()
         self.assertAlmostEqual(status['reserved_by_model_usd']['gpt-6.1-terra'], expected / 1000000)
