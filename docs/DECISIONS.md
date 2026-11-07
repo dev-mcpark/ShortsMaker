@@ -843,3 +843,7 @@ Operator planning calls the ordinary pipeline with `auto_upload=False`, so its e
 ## 2026-11-07 — Stop scoped production after attaching a private copy
 
 The existing `script_review_pending` state also represents owner review of an attached finished video. Do not let the operator's generic `run` command treat that state as unfinished production. Reject attached episodes in the shared `run_scoped` entry before preparing budgets, starting a child or creating a pending marker. Preserve the attachment, baseline, reservations and owner decision; this does not accept a cut, reopen its spending authority or create a revision workflow. Unfinished episodes still use the existing scoped commands, and attachment/owner acceptance retain their separate paths.
+
+## 2026-11-07 — Bind owner acceptance to the attached finished copy
+
+Source/script/sidecar checks alone allowed another cut of the same script to replace an attached review copy or become accepted. Once a private copy is attached, require its saved resolved MP4 path, file SHA-256 and YouTube ID in the shared verification used by both reattachment and acceptance. Keep same-copy reattachment repeatable for recovery. A self-consistent replacement sidecar is not authority to change what the owner was asked to watch; preserve the old attachment and pending decision on mismatch. Initial attachment and legacy acceptance without a prior attachment still use the existing source/quality/upload checks. This change creates no replacement-production permission or new revision workflow.

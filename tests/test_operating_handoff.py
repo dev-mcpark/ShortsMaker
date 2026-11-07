@@ -388,6 +388,25 @@ class OperatingHandoffTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, '비공개'):
             self.manager.reject_pending_script(self.schedule['id'])
         self.assertEqual(self.manager.get_schedule(self.schedule['id']), attached)
+        self.assertEqual(self.manager.record_private_review_copy(self.schedule['id'], str(video)), attached)
+        original_bytes = video.read_bytes()
+        for label, candidate, content, upload_id in (
+            ('different_path', settings.output_dir / 'other.mp4', original_bytes, report['youtube_id']),
+            ('changed_content', video, b'another cut of the same script', report['youtube_id']),
+            ('changed_upload', video, original_bytes, 'another_12345'),
+        ):
+            with self.subTest(label=label):
+                candidate.write_bytes(content)
+                candidate.with_suffix('.production.json').write_text(json.dumps({
+                    **report, 'video_path': str(candidate), 'youtube_id': upload_id,
+                    'video_sha256': hashlib.sha256(content).hexdigest(),
+                }))
+                for action in (self.manager.record_private_review_copy, self.manager.accept_pending_video):
+                    with self.assertRaisesRegex(ValueError, '연결된'):
+                        action(self.schedule['id'], str(candidate))
+                    self.assertEqual(self.manager.get_schedule(self.schedule['id']), attached)
+                video.write_bytes(original_bytes)
+                video.with_suffix('.production.json').write_text(json.dumps(report))
         accepted = self.manager.accept_pending_video(self.schedule['id'], str(video))
         self.assertTrue(accepted['enabled'])
         self.assertEqual(accepted['last_result'], 'private_review_accepted')

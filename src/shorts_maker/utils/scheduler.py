@@ -461,6 +461,11 @@ class ScheduleManager:
                 or not isinstance(report.get('uploaded_at_utc'), str)
                 or not report['uploaded_at_utc']):
             raise ValueError("확인된 YouTube 비공개 업로드 기록이 필요합니다.")
+        if schedule.get('last_youtube_id') and (
+                schedule.get('last_video_path') != str(video)
+                or schedule.get('last_video_sha256') != video_sha256
+                or schedule['last_youtube_id'] != video_id):
+            raise ValueError("이미 연결된 비공개 검토본의 경로·영상 해시·YouTube ID와 일치해야 합니다.")
         return schedule, video, video_sha256, video_id
 
     def get_execution_history(self) -> List[Dict[str, Any]]:
