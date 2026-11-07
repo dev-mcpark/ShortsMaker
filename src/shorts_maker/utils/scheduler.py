@@ -393,6 +393,8 @@ class ScheduleManager:
             return None
         if schedule.get('last_result') != 'script_review_pending' or schedule.get('enabled'):
             raise ValueError("제외할 검토 대기 각본이 없습니다.")
+        if schedule.get('last_youtube_id'):
+            raise ValueError("비공개 완성본이 연결된 회차는 각본 제외로 재개할 수 없습니다. 완성본을 검토하세요.")
         return self.update_schedule(schedule_id, {
             'last_result': 'script_rejected',
             'enabled': not bool(schedule.get('direct_url')),

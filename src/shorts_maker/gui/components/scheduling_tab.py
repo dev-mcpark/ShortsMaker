@@ -494,8 +494,9 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                             if not enabled and schedule.get('last_result') == 'script_review_pending':
                                                 ui.button('비공개 영상 검토 완료', on_click=accept_pending_video).props(
                                                     'flat dense color=teal')
-                                                ui.button('각본 제외', on_click=reject_pending_script).props(
-                                                    'flat dense color=amber')
+                                                if not schedule.get('last_youtube_id'):
+                                                    ui.button('각본 제외', on_click=reject_pending_script).props(
+                                                        'flat dense color=amber')
                                             else:
                                                 ui.button(
                                                     icon=toggle_icon,

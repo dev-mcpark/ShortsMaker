@@ -334,6 +334,9 @@ class OperatingHandoffTests(unittest.TestCase):
         self.assertEqual(attached['last_result'], 'script_review_pending')
         self.assertFalse(attached['enabled'])
         self.assertNotIn('accepted_at', attached)
+        with self.assertRaisesRegex(ValueError, '비공개'):
+            self.manager.reject_pending_script(self.schedule['id'])
+        self.assertEqual(self.manager.get_schedule(self.schedule['id']), attached)
         accepted = self.manager.accept_pending_video(self.schedule['id'], str(video))
         self.assertTrue(accepted['enabled'])
         self.assertEqual(accepted['last_result'], 'private_review_accepted')
