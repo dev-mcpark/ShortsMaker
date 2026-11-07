@@ -168,6 +168,8 @@ Place your secrets in the `config/credentials/` directory:
 
 If YouTube upload authorization expires, run `.venv/bin/python -m shorts_maker.uploader.youtube_uploader --auth-only` and finish the browser sign-in. This reconnects the upload account without creating or uploading a video. A full run with private auto-upload checks saved authorization before paid planning and stops with `YOUTUBE_AUTH_REQUIRED` if it cannot refresh without interaction. The ordinary publishing action can still prompt for sign-in when used manually; an authentication failure before the media request leaves the reviewed video retryable.
 
+An External OAuth app in Testing has a [seven-day consent/refresh-token lifetime](https://support.google.com/cloud/answer/15549945?hl=en), except for basic identity-only scopes; YouTube upload is outside that exception. Refreshing an access token does not establish a longer testing grant. For agent-operated staged production, check saved upload authentication **before spending on the due episode's planning**, even though upload happens later. If necessary, use the existing auth-only flow once for the same account, upload scope and access duration. Pause paid work if owner sign-in, MFA or a different permission is required. This does not prove unattended future reauthorization. Changing the OAuth app's publishing status, audience, scopes or access duration requires a separate owner decision; the app's video uploads remain private. If Publish app is disabled despite populated basic Branding fields, retain the evidence and establish the supported remedy rather than repeatedly rewriting settings or inventing website URLs.
+
 Configure your API keys in `config/.env`:
 ```ini
 OPENAI_API_KEY=sk-...
