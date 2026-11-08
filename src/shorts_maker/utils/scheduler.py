@@ -352,6 +352,10 @@ class ScheduleManager:
         """
         schedules = self.load_schedules()
         original_count = len(schedules)
+        for schedule in schedules:
+            if (schedule['id'] == schedule_id and schedule.get('last_result') in {
+                    'operator_pending', 'run_in_progress', 'script_review_pending'}):
+                raise ValueError('미해결 제작 회차는 삭제할 수 없습니다. 결과·검토를 먼저 정리하세요.')
         schedules = [s for s in schedules if s['id'] != schedule_id]
 
         if len(schedules) < original_count:

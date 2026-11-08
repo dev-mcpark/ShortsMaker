@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify
 from shorts_maker.services.production_service import ProductionPhase, ProductionProgress
-from shorts_maker.services.raw_review import raw_review_status, save_raw_verdict
+from shorts_maker.services.raw_review import load_raw_verdict, raw_review_status, save_raw_verdict
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
 from shorts_maker.services.visual_review import approve_first_frame, inspect_frame, review_path, verified_first_frame
 from shorts_maker.gui.components.common.progress_utils import update_scene_grid
@@ -33,6 +33,7 @@ def render_first_frame_reviews(state: 'AppState') -> None:
     """Preview and bind locally supplied Veo first frames before a paid scene request."""
     if not state.script or state.manual_video_mode:
         return
+    rendered_script = state.script.model_dump_json()
     video_scenes = [scene for index, scene in enumerate(state.script.scenes)
                     if scene_mode(state.mode, scene, index) == 'video']
     if not video_scenes:
@@ -78,7 +79,14 @@ def render_first_frame_reviews(state: 'AppState') -> None:
 
                 def approve(scene_number=scene.scene_number, frame_input=path_input,
                             show_input=must_show, avoid_input=must_avoid,
-                            note_input=reviewer_note, snapshot=previewed, status=status_label):
+                            note_input=reviewer_note, snapshot=previewed, status=status_label,
+                            expected_script=rendered_script):
+                    if not state.script or state.script.model_dump_json() != expected_script:
+                        safe_notify('각본이 변경됐습니다. 장면·영상 제작 화면을 다시 열어 주세요.', type='warning')
+                        return
+                    if state.is_busy:
+                        safe_notify('진행 중인 제작·업로드가 끝난 뒤 첫 프레임을 승인하세요.', type='warning')
+                        return
                     if not state.is_script_reviewed():
                         safe_notify('현재 각본을 기획 탭에서 먼저 확인하세요.', type='warning')
                         return
@@ -104,13 +112,14 @@ def render_first_frame_reviews(state: 'AppState') -> None:
 
                 with ui.row():
                     ui.button('이미지 미리보기', on_click=preview).props('flat color=amber')
-                    ui.button('이 첫 프레임 승인', on_click=approve).props('color=teal')
+                    ui.button('이 첫 프레임 승인', on_click=approve).props('color=teal').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
 
 
 def render_raw_clip_reviews(state: 'AppState') -> None:
     """Generate and judge one muted Veo scene before the whole-cut production run."""
     if not state.script or state.manual_video_mode:
         return
+    rendered_script = state.script.model_dump_json()
     video_indices = [index for index, scene in enumerate(state.script.scenes)
                      if scene_mode(state.mode, scene, index) == 'video']
     if not video_indices:
@@ -138,11 +147,15 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
 
                 def refresh(scene_index=index, label=status, area=preview_area,
                             criteria_display=criteria_area, note_input=note, cost=cost_label,
-                            shown=displayed_frame, new_request_label=request_label):
+                            shown=displayed_frame, new_request_label=request_label,
+                            expected_script=rendered_script):
                     area.clear()
                     criteria_display.clear()
                     shown['sha256'] = None
                     cost.text = new_request_label
+                    if not state.script or state.script.model_dump_json() != expected_script:
+                        label.text = '각본이 변경됐습니다. 장면·영상 제작 화면을 다시 열어 주세요.'
+                        return
                     try:
                         clip, frame_hash = state.get_or_create_service().review_clip_path(state.script, scene_index)
                         criteria = json.loads(review_path(state.script, state.script.scenes[scene_index]).read_text(encoding='utf-8'))
@@ -162,24 +175,30 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                                   'stale': '원본 판정 무효 · 변경된 파일 확인 필요'}.get(verdict, '무음 원본 판정 대기')
                     if verdict in {'approved', 'rejected'}:
                         try:
-                            note_input.value = json.loads(Path(clip).with_suffix('.review.json').read_text(encoding='utf-8'))['reviewer_note']
+                            note_input.value = load_raw_verdict(
+                                state.script, state.script.scenes[scene_index], clip, frame_hash,
+                            )['reviewer_note']
                         except (OSError, ValueError, KeyError, TypeError):
                             label.text = '원본 판정 기록을 다시 확인하세요.'
                     with area:
                         ui.video(clip).props('controls muted').classes('w-full max-w-[230px]')
 
                 async def generate(scene_index=index, update=refresh, request_cap=reserve,
-                                   shown=displayed_frame):
-                    if not state.is_script_reviewed() or state.pipeline_running:
+                                   shown=displayed_frame, expected_script=rendered_script):
+                    if not state.script or state.script.model_dump_json() != expected_script:
+                        safe_notify('각본이 변경됐습니다. 장면·영상 제작 화면을 다시 열어 주세요.', type='warning')
+                        return
+                    if not state.is_script_reviewed() or state.is_busy:
                         safe_notify('현재 각본 검토를 완료하고 다른 제작이 끝난 뒤 진행하세요.', type='warning')
                         return
                     if not shown['sha256']:
                         update()
                         safe_notify('현재 첫 프레임과 요청 비용을 확인한 뒤 다시 진행하세요.', type='warning')
                         return
-                    state.pipeline_running = True
                     try:
-                        clip = await state.get_or_create_service().generate_review_clip(
+                        service = state.get_or_create_service()
+                        state.pipeline_running = True
+                        clip = await service.generate_review_clip(
                             state.script, scene_index, request_budget_usd=request_cap,
                             expected_frame_sha256=shown['sha256'],
                         )
@@ -192,7 +211,14 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                     finally:
                         state.pipeline_running = False
 
-                def decide(decision, scene_index=index, note_input=note, update=refresh):
+                def decide(decision, scene_index=index, note_input=note, update=refresh,
+                           expected_script=rendered_script):
+                    if not state.script or state.script.model_dump_json() != expected_script:
+                        safe_notify('각본이 변경됐습니다. 장면·영상 제작 화면을 다시 열어 주세요.', type='warning')
+                        return
+                    if state.is_busy:
+                        safe_notify('진행 중인 제작·업로드가 끝난 뒤 원본을 판정하세요.', type='warning')
+                        return
                     if not state.is_script_reviewed() or not note_input.value:
                         safe_notify('현재 각본과 원본을 확인하고 판정 의견을 적어 주세요.', type='warning')
                         return
@@ -208,9 +234,9 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                         safe_notify(f'원본 판정 실패: {error}', type='negative')
 
                 with ui.row():
-                    ui.button('이 장면 Veo 원본 생성', on_click=generate).props('color=amber')
-                    ui.button('원본 승인', on_click=lambda callback=decide: callback('approved')).props('color=teal')
-                    ui.button('원본 제외', on_click=lambda callback=decide: callback('rejected')).props('flat color=red')
+                    ui.button('이 장면 Veo 원본 생성', on_click=generate).props('color=amber').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+                    ui.button('원본 승인', on_click=lambda callback=decide: callback('approved')).props('color=teal').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+                    ui.button('원본 제외', on_click=lambda callback=decide: callback('rejected')).props('flat color=red').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
                 refresh()
 
 
@@ -231,7 +257,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                 with ui.column().classes('items-center gap-4'):
                     ui.icon('description', size='xl').classes('text-slate-600')
                     ui.label('각본을 먼저 로드해주세요').classes('text-lg font-bold text-slate-400')
-                    ui.label('왼쪽 메뉴의 Studio -> 1. Script & Prompt Editor 에서 각본을 생성해주세요.').classes('text-xs text-slate-500')
+                    ui.label('제작 작업실 → 1. 대본·장면 검토에서 각본을 만들거나 불러오세요.').classes('text-xs text-slate-500')
         return
 
     if not state.manual_script_id:
@@ -350,11 +376,22 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
 
                         # 업로드 컴포넌트
                         def make_upload_handler(sn=scene_num):
+                            bound_script = state.script.model_dump_json()
+                            bound_script_id = state.manual_script_id
+
                             async def handle_upload(e):
                                 try:
+                                    if state.is_busy:
+                                        safe_notify('진행 중인 제작·업로드가 끝난 뒤 클립을 추가하세요.', type='warning')
+                                        return
                                     file_bytes = await e.file.read()
+                                    if (state.is_busy or not state.script
+                                            or state.script.model_dump_json() != bound_script
+                                            or state.manual_script_id != bound_script_id):
+                                        safe_notify('각본이나 작업 상태가 변경됐습니다. 현재 장면에서 파일을 다시 선택하세요.', type='warning')
+                                        return
                                     exporter.save_uploaded_clip(
-                                        file_bytes, state.manual_script_id, sn
+                                        file_bytes, bound_script_id, sn
                                     )
 
                                     safe_notify(f'씬 {sn} 비디오 클립 업로드 완료!', type='positive')
@@ -378,6 +415,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
 def render_generation_tab(state: 'AppState') -> None:
     """Google AI Studio 스타일의 리팩토링된 Generation 탭 렌더링"""
     exporter = VeoPromptExporter()
+    rendered_script = state.script.model_dump_json() if state.script else None
 
     # 세션 뷰에 필요한 헬퍼
     phase_labels = {}
@@ -412,6 +450,10 @@ def render_generation_tab(state: 'AppState') -> None:
 
                 # 수동 모드 전용 편집 시작 버튼
                 async def run_manual_production():
+                    if (state.is_busy or not state.script
+                            or state.script.model_dump_json() != rendered_script):
+                        safe_notify('작업 중이거나 각본이 변경됐습니다. 현재 장면·영상 제작 화면을 확인하세요.', type='warning')
+                        return
                     clip_paths = (
                         exporter.get_ready_clip_paths(state.script, state.manual_script_id)
                         if state.script else None
@@ -450,9 +492,9 @@ def render_generation_tab(state: 'AppState') -> None:
                     await run_production()
 
                 auto_btn = ui.button(
-                    'Start Production',
+                    '영상 제작 시작',
                     on_click=run_production_with_notification
-                ).classes('px-4 py-1.5 font-bold text-xs bg-gradient-to-r from-violet-600 to-indigo-600').props('color=violet unelevated size=sm icon=rocket_launch')
+                ).classes('px-4 py-1.5 font-bold text-xs bg-gradient-to-r from-violet-600 to-indigo-600').props('color=violet unelevated size=sm icon=rocket_launch').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
                 auto_btn.visible = not state.manual_video_mode
 
                 # 상태 인디케이터 스피너
@@ -475,7 +517,7 @@ def render_generation_tab(state: 'AppState') -> None:
                     with ui.element('div').classes('w-full bg-slate-900/90 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between'):
                         with ui.row().classes('items-center gap-2'):
                             ui.element('div').classes('w-2 h-2 rounded-full bg-rose-500 animate-pulse')
-                            ui.label('Premium Preview Monitor').classes('text-xs font-bold text-slate-300 font-mono')
+                            ui.label('완성본 미리보기').classes('text-xs font-bold text-slate-300')
 
                         # 해상도 정보 등 뱃지
                         ui.badge('9:16 Vertical Shorts').classes('bg-slate-800 text-slate-400 text-[10px] px-2 py-0.5 border border-slate-700')
@@ -488,13 +530,13 @@ def render_generation_tab(state: 'AppState') -> None:
                         # Gemini 풍의 유려한 그라데이션 광채 플레이스홀더
                         with ui.column().classes('items-center gap-3 z-10 p-6 text-center') as placeholder_content:
                             ui.icon('smart_display', size='lg').classes('text-violet-500/70')
-                            ui.label('Shorts Preview Area').classes('text-sm font-bold text-slate-300')
+                            ui.label('완성된 영상이 여기에 표시됩니다').classes('text-sm font-bold text-slate-300')
                             ui.label('우측 패널에서 하이브리드, Gemini 이미지, Veo 영상 모드를 고른 뒤 생성하면 여기에 프리뷰가 재생됩니다.').classes('text-xs text-slate-500 max-w-md leading-relaxed')
 
                             # 만약 API 요금 절감을 원할 시 수동 모드로 돌릴 것을 추천하는 뱃지
                             with ui.row().classes('items-center gap-1.5 mt-2 bg-violet-950/30 rounded-lg border border-violet-500/20 px-3 py-1.5'):
                                 ui.icon('offline_bolt', size='xs').classes('text-violet-400')
-                            ui.label('API 비용 없이 제작하려면 Local File로 전환하고 씬별 영상을 업로드하세요.').classes('text-[10px] text-violet-300')
+                            ui.label('기존 장면 영상을 쓰려면 소스를 로컬 파일로 바꾸세요. 새 음성 생성에는 API 비용이 들 수 있습니다.').classes('text-[10px] text-violet-300')
 
                         # 실제 비디오 컴포넌트 (종횡비 9:16 대응)
                         video_player = ui.video('').classes('max-h-full max-w-[200px] h-full shadow-lg border border-slate-800 rounded bg-slate-950')
@@ -563,8 +605,11 @@ def render_generation_tab(state: 'AppState') -> None:
         # ── 4. EVENT HANDLERS CORE (동적 렌더러 연동) ──
         async def _run_production_core(manual_clip_paths=None):
             nonlocal video_player, placeholder_content
-            if state.pipeline_running:
+            if state.is_busy:
                 safe_notify('이미 제작이 진행 중입니다.', type='warning')
+                return
+            if not state.script or state.script.model_dump_json() != rendered_script:
+                safe_notify('각본이 변경됐습니다. 장면·영상 제작 화면을 다시 열어 주세요.', type='warning')
                 return
             if not state.is_script_reviewed():
                 safe_notify('기획 탭에서 현재 각본을 확인한 뒤 제작을 시작하세요.', type='warning')
@@ -579,6 +624,7 @@ def render_generation_tab(state: 'AppState') -> None:
                     video_player.visible = False
                 if placeholder_content:
                     placeholder_content.visible = True
+                manual_preview.visible = False
             except RuntimeError:
                 return
 

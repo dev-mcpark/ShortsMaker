@@ -38,11 +38,20 @@ def estimate_new_visual_cost(script: ShortsScript, mode: str) -> float:
     return total
 
 
-def render_planning_tab(state: 'AppState') -> None:
+def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
     """Script Planning 탭 렌더링"""
 
     script_preview_container = None
     editor_area = None
+    previewed_script = {'json': None}
+
+    def apply_script(script, context=None):
+        audio = {key: getattr(state, key) for key in ('tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume')}
+        state.load_saved_script(script)
+        for key, value in audio.items():
+            setattr(state, key, value)
+        state.script_context = context
+        state.topic_candidates = context.candidates if context else []
 
     def update_script_preview():
         try:
@@ -51,6 +60,7 @@ def render_planning_tab(state: 'AppState') -> None:
             return
 
         if not state.script:
+            previewed_script['json'] = None
             with script_preview_container:
                 with ui.element('div').classes('w-full h-full flex items-center justify-center py-20'):
                     with ui.column().classes('items-center gap-4'):
@@ -60,6 +70,7 @@ def render_planning_tab(state: 'AppState') -> None:
             return
 
         script = state.script
+        previewed_script['json'] = script.model_dump_json()
         total_duration = sum(s.duration_seconds for s in script.scenes) if script.scenes else 0
 
         with script_preview_container:
@@ -74,10 +85,11 @@ def render_planning_tab(state: 'AppState') -> None:
                                 'text-xs text-teal-300 leading-relaxed mt-2'
                             )
 
-                    mode = getattr(script, 'generation_mode', 'image')
-                    mode_color = 'bg-violet-600' if mode == 'video' else 'bg-teal-600' if mode == 'hybrid' else 'bg-blue-600'
-                    mode_text = {'video': 'VIDEO (VEO)', 'hybrid': 'HYBRID', 'image': 'IMAGE (GEMINI)'}.get(mode, mode.upper())
-                    ui.badge(mode_text).classes(f'{mode_color} text-white text-[10px] font-semibold px-3 py-0.5 rounded shrink-0')
+                    ui.badge().bind_text_from(
+                        state, 'mode', backward=lambda mode: '기본 모드 · ' + {
+                            'video': 'Veo 영상', 'hybrid': '영상+이미지', 'image': 'Gemini 이미지',
+                        }.get(mode, mode),
+                    ).classes('bg-violet-950 text-violet-200 text-[10px] font-semibold px-3 py-0.5 rounded shrink-0')
 
                 ui.separator().classes('bg-slate-800/80 my-3')
 
@@ -167,6 +179,7 @@ def render_planning_tab(state: 'AppState') -> None:
                                 return '가격 미등록'
                         ui.label().bind_text_from(state, 'mode', backward=cost_label).classes('text-xl font-extrabold text-amber-400 tracking-tight')
                         ui.label('전체 비주얼 추정 · 저장분 차감 전').classes('text-[10px] text-slate-500 font-bold')
+                ui.label('장면에 지정된 모드가 있으면 기본 모드보다 우선합니다.').classes('text-xs text-slate-400 mt-2')
 
     # ── 메인 레이아웃 ────────────────────────────────────────
     with ui.row().classes('w-full h-auto lg:h-full gap-0 flex flex-col lg:flex-row flex-nowrap overflow-visible lg:overflow-hidden'):
@@ -207,6 +220,9 @@ def render_planning_tab(state: 'AppState') -> None:
                 spinner.visible = False
 
                 async def generate_script():
+                    if state.is_busy:
+                        safe_notify('진행 중인 제작·업로드가 끝난 뒤 각본을 기획하세요.', type='warning')
+                        return
                     if source_mode.value == '직접 URL 입력' and not url_input.value:
                         safe_notify('URL을 입력해주세요', type='negative')
                         return
@@ -217,22 +233,21 @@ def render_planning_tab(state: 'AppState') -> None:
                     try:
                         logger.info(f"Starting Plan: Mode={source_mode.value}")
                         service = state.get_or_create_service()
+                        state.pipeline_running = True
                         script, context = await service.generate_script(
                             topic=(category_select.value if source_mode.value == 'RSS 자동 발견'
                                    and category_select.value != '전체 분야' else None),
                             direct_url=url_input.value if source_mode.value == '직접 URL 입력' else None
                         )
                         if script:
-                            state.reset_manual_mode()
-                            state.script = script
-                            state.script_context = context
-                            state.topic_candidates = context.candidates if context else []
+                            state.pipeline_running = False
+                            apply_script(script, context)
                             update_script_preview()
                             update_candidates_panel()
                             try:
                                 editor_area.value = script.model_dump_json(indent=2)
                                 safe_notify(f'각본 생성 완료: {script.title}', type='positive')
-                                feedback_section.visible = True
+                                feedback_section.visible = bool(context)
                                 regen_counter_label.text = f'재생성: 0/{context.max_attempts if context else 3}회'
                             except RuntimeError:
                                 pass
@@ -245,6 +260,7 @@ def render_planning_tab(state: 'AppState') -> None:
                         safe_notify(f'오류: {str(e)}', type='negative')
                         logger.error(f"Plan Error: {e}")
                     finally:
+                        state.pipeline_running = False
                         try:
                             spinner.visible = False
                         except RuntimeError:
@@ -253,7 +269,7 @@ def render_planning_tab(state: 'AppState') -> None:
                 ui.button(
                     '각본 생성하기',
                     on_click=generate_script
-                ).classes('w-full mt-2').props('color=pink-9 unelevated icon=auto_awesome size=md')
+                ).classes('w-full mt-2').props('color=pink-9 unelevated icon=auto_awesome size=md').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
 
             # 저장된 각본 불러오기
             with ui.element('div').classes('w-full rounded-xl bg-slate-900/60 border border-slate-600 p-4'):
@@ -275,6 +291,9 @@ def render_planning_tab(state: 'AppState') -> None:
                         ).props('outlined dense dark').classes('w-full mb-2')
 
                         async def load_selected_script():
+                            if state.is_busy:
+                                safe_notify('진행 중인 제작·업로드가 끝난 뒤 각본을 불러오세요.', type='warning')
+                                return
                             if script_select.value in script_files:
                                 try:
                                     with (script_dir / script_select.value).open('r', encoding='utf-8') as f:
@@ -289,7 +308,7 @@ def render_planning_tab(state: 'AppState') -> None:
                                 except Exception as e:
                                     safe_notify(f'로드 오류: {e}', type='negative')
 
-                        ui.button('불러오기', on_click=load_selected_script).props('flat color=amber icon=download dense').classes('w-full')
+                        ui.button('불러오기', on_click=load_selected_script).props('flat color=amber icon=download dense').classes('w-full').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
                     else:
                         ui.label('저장된 각본 없음').classes('text-xs text-gray-600')
                 else:
@@ -300,13 +319,13 @@ def render_planning_tab(state: 'AppState') -> None:
                 editor_area = ui.textarea().classes('w-full font-mono text-xs bg-slate-900 text-green-300 p-2 rounded').props('outlined rows=10')
 
                 def save_script():
+                    if state.is_busy:
+                        safe_notify('진행 중인 제작·업로드가 끝난 뒤 각본을 적용하세요.', type='warning')
+                        return
                     try:
                         data = json.loads(editor_area.value)
                         edited_script = ShortsScript(**data)
-                        state.reset_manual_mode()
-                        state.script = edited_script
-                        state.script_context = None
-                        state.topic_candidates = []
+                        apply_script(edited_script)
                         update_script_preview()
                         update_candidates_panel()
                         feedback_section.visible = False
@@ -314,7 +333,8 @@ def render_planning_tab(state: 'AppState') -> None:
                     except Exception as e:
                         safe_notify(f'JSON 오류: {e}', type='negative')
 
-                ui.button('적용', on_click=save_script).props('flat color=green-4 icon=save dense').classes('w-full mt-1')
+                ui.button('현재 작업에 적용', on_click=save_script).props('flat color=green-4 icon=save dense').classes('w-full mt-1').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+                ui.label('적용은 현재 작업에만 반영됩니다. 원본 JSON 파일을 별도로 보관하세요.').classes('text-xs text-slate-400 mt-1')
 
             # 피드백 섹션 (스크립트 생성 후 표시)
             with ui.element('div').classes('w-full rounded-xl bg-slate-900/60 border border-orange-500/30 p-4') as feedback_section:
@@ -331,6 +351,9 @@ def render_planning_tab(state: 'AppState') -> None:
                 ).props('outlined dark rows=3').classes('w-full mb-2')
 
                 async def regenerate_with_feedback():
+                    if state.is_busy:
+                        safe_notify('진행 중인 제작·업로드가 끝난 뒤 재생성하세요.', type='warning')
+                        return
                     if not state.script_context:
                         safe_notify('재생성할 컨텍스트가 없습니다', type='warning')
                         return
@@ -346,15 +369,17 @@ def render_planning_tab(state: 'AppState') -> None:
                     except RuntimeError:
                         return
                     try:
+                        context = state.script_context
                         service = state.get_or_create_service()
+                        state.pipeline_running = True
                         new_script = await service.regenerate_script(
-                            context=state.script_context,
+                            context=context,
                             feedback=feedback_input.value
                         )
-                        regen_counter_label.text = f'재생성: {state.script_context.attempt_count}/{max_att}회'
+                        regen_counter_label.text = f'재생성: {context.attempt_count}/{max_att}회'
                         if new_script:
-                            state.reset_manual_mode()
-                            state.script = new_script
+                            state.pipeline_running = False
+                            apply_script(new_script, context)
                             update_script_preview()
                             try:
                                 editor_area.value = new_script.model_dump_json(indent=2)
@@ -371,29 +396,38 @@ def render_planning_tab(state: 'AppState') -> None:
                         safe_notify(f'재생성 오류: {e}', type='negative')
                         logger.error(f"Regen error: {e}")
                     finally:
+                        state.pipeline_running = False
                         try:
                             spinner.visible = False
                         except RuntimeError:
                             pass
 
-                ui.button('피드백 반영 재생성', on_click=regenerate_with_feedback).classes('w-full').props('color=orange unelevated icon=refresh')
+                ui.button('피드백 반영 재생성', on_click=regenerate_with_feedback).classes('w-full').props('color=orange unelevated icon=refresh').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
 
             # 확인 및 이동 버튼
             with ui.element('div').classes('w-full mt-auto pt-4'):
                 ui.label('출처·내레이션·장면 설명을 확인하세요. 영상 첫 프레임과 움직임은 별도 검토가 필요합니다.').classes(
                     'text-xs text-amber-300 mb-2')
                 def confirm_script():
+                    if state.is_busy:
+                        safe_notify('진행 중인 제작·업로드가 끝난 뒤 각본을 확인하세요.', type='warning')
+                        return
+                    if state.script and state.script.model_dump_json() != previewed_script['json']:
+                        safe_notify('각본이 변경됐습니다. 미리보기를 새로고침하고 다시 확인하세요.', type='warning')
+                        return
                     if state.script:
                         state.confirm_script_review()
-                        safe_notify('✅ 각본 확인 완료! Generation 탭으로 이동하세요.', type='positive')
+                        safe_notify('각본 확인을 기록했습니다. 장면·영상 제작으로 이어가세요.', type='positive')
                         logger.info(f"Script confirmed: {state.script.title}")
+                        if on_reviewed:
+                            on_reviewed()
                     else:
                         safe_notify('생성된 각본이 없습니다', type='warning')
 
                 ui.button(
-                    '각본·장면 설명 확인 완료 →',
+                    '각본 확인 완료 · 영상 제작으로 →',
                     on_click=confirm_script
-                ).classes('w-full').props('color=green-9 unelevated icon=check_circle size=md')
+                ).classes('w-full').props('color=green-9 unelevated icon=check_circle size=md').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
 
         # === Right Panel: 주제 후보 + 각본 미리보기 ===
         with ui.column().classes('w-full lg:w-auto lg:flex-grow min-w-0 min-h-[400px] lg:h-full overflow-hidden flex flex-col flex-nowrap'):

@@ -10,6 +10,7 @@ from shorts_maker.gui.components.common.safe_ui import (
 from shorts_maker.services.production_service import ProductionPhase, ProductionProgress
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.source_manager import SourceManager
+from shorts_maker.utils.config import settings
 from shorts_maker.gui.components.common.progress_utils import format_time, update_scene_grid
 
 if TYPE_CHECKING:
@@ -78,7 +79,7 @@ def render_pipeline_tab(
                 ui.label('콘텐츠 소스 입력').classes('text-[10px] text-slate-400 font-bold uppercase tracking-widest')
 
                 source_mode = ui.radio(
-                    ['Auto (RSS)', 'Direct URL'],
+                    {'Auto (RSS)': 'RSS에서 소재 찾기', 'Direct URL': '기사 URL 직접 입력'},
                     value='Auto (RSS)'
                 ).props('color=violet size=32px').classes('text-xs text-slate-300 gap-4 mb-1')
 
@@ -99,7 +100,7 @@ def render_pipeline_tab(
             # --- Options ---
             with ui.column().classes('w-full gap-2'):
                 ui.label('검토 단계').classes('text-[10px] text-slate-400 font-bold uppercase tracking-widest')
-                ui.label('각본 생성 후 멈춥니다. 장면을 검토한 뒤 Workspace에서 제작하세요.').classes('text-xs text-amber-300')
+                ui.label('각본 생성 후 멈춥니다. 장면을 검토한 뒤 제작 작업실에서 제작하세요.').classes('text-xs text-amber-300')
 
                 character_overlay = ui.switch('캐릭터 아바타 오버레이').props('color=violet dense').classes('text-xs text-slate-400')
                 character_overlay.bind_value(state, 'character_overlay_enabled')
@@ -110,23 +111,24 @@ def render_pipeline_tab(
             async def run_full_pipeline():
                 nonlocal start_btn, stop_btn
 
-                if state.pipeline_running:
-                    safe_notify('이미 파이프라인이 구동 중입니다!', type='warning')
+                if state.is_busy:
+                    safe_notify('진행 중인 제작·업로드가 끝난 뒤 기획을 시작하세요.', type='warning')
+                    return
+                if not settings.paid_production_enabled:
+                    safe_notify('현재 읽기·검토 모드입니다. 승인된 유료 실행 범위에서 기획을 시작하세요.', type='warning')
                     return
 
-                if source_mode.value == 'Direct URL' and not url_input.value:
-                    safe_notify('직접 크롤링할 URL을 입력해주십시오.', type='negative')
+                if source_mode.value == 'Direct URL' and not SourceManager.is_allowed_url((url_input.value or '').strip()):
+                    safe_notify('공개된 http 또는 https 기사 URL을 입력하세요.', type='negative')
                     return
 
                 # 파이프라인 상태 초기화
                 state.pipeline_running = True
                 state.pipeline_phase = ProductionPhase.IDLE
                 state.last_error = None
-                state.final_video_path = None
-                state.generated_clips = []
+                monitor_task = None
 
                 try:
-                    start_btn.disable()
                     stop_btn.enable()
                 except RuntimeError:
                     pass
@@ -238,15 +240,19 @@ def render_pipeline_tab(
                     result = await service.full_pipeline(
                         topic=(category_select.value if source_mode.value == 'Auto (RSS)'
                                and category_select.value != '전체 분야' else None),
-                        direct_url=url_input.value if source_mode.value == 'Direct URL' else None,
+                        direct_url=(url_input.value or '').strip() if source_mode.value == 'Direct URL' else None,
                         auto_upload=False
                     )
 
+                    monitor_task.cancel()
+                    await asyncio.gather(monitor_task, return_exceptions=True)
                     state.pipeline_running = False
-                    await monitor_task
-                    state.script = result.script
-                    state.final_video_path = result.video_path if result.ready_for_upload else None
-                    state.generated_clips = result.clips
+                    if result.script is not None:
+                        state.load_saved_script(result.script)
+                    if result.ready_for_upload:
+                        state.final_video_path = result.video_path
+                    if result.clips:
+                        state.generated_clips = result.clips
 
                     if result.video_path:
                         try:
@@ -259,7 +265,7 @@ def render_pipeline_tab(
                     if result.review_pending:
                         state.pipeline_phase = ProductionPhase.COMPLETED
                         state.pipeline_message = '각본 생성 완료 · 장면 검토 대기'
-                        safe_notify('각본을 만들었습니다. Workspace의 Script Editor에서 확인한 뒤 제작하세요.', type='info')
+                        safe_notify('각본을 만들었습니다. 제작 작업실의 대본·장면 검토에서 확인한 뒤 제작하세요.', type='info')
                         state.pipeline_history.append({
                             'title': state.script.title,
                             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M'),
@@ -307,10 +313,10 @@ def render_pipeline_tab(
                         show_error_panel(result.error)
                         safe_notify('❌ 파이프라인 구동 중 에러가 발생했습니다.', type='negative')
                         if result.clips:
-                            safe_notify('완료된 씬은 저장되었습니다. Generation 탭의 Start Production으로 이어서 제작하세요.', type='info')
+                            safe_notify('완료된 씬은 저장되었습니다. 장면·영상 제작 화면의 영상 제작 시작으로 이어서 제작하세요.', type='info')
 
                         state.pipeline_history.append({
-                            'title': state.script.title if state.script else '작업 실패',
+                            'title': result.script.title if result.script else '각본 기획 실패',
                             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M'),
                             'success': False,
                             'error': result.error
@@ -326,10 +332,16 @@ def render_pipeline_tab(
                     logger.error(f"Pipeline running crash: {e}")
 
                 finally:
+                    if monitor_task is not None and not monitor_task.done():
+                        monitor_task.cancel()
+                        await asyncio.gather(monitor_task, return_exceptions=True)
                     state.pipeline_running = False
                     try:
-                        start_btn.enable()
                         stop_btn.disable()
+                        if state.final_video_path:
+                            video_preview.set_source(state.final_video_path)
+                            video_preview.visible = True
+                            preview_placeholder.visible = False
                     except RuntimeError:
                         pass
 
@@ -345,6 +357,7 @@ def render_pipeline_tab(
                     '각본 기획 시작',
                     on_click=run_full_pipeline
                 ).classes('flex-grow font-bold text-xs py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600').props('color=purple-9 unelevated icon=play_arrow')
+                start_btn.bind_enabled_from(state, 'is_busy', backward=lambda busy: not busy)
 
                 stop_btn = ui.button(on_click=stop_pipeline).props('flat round color=red icon=stop aria-label="파이프라인 중단"').classes('bg-slate-800/80')
                 stop_btn.disable()
@@ -460,7 +473,7 @@ def render_pipeline_tab(
                     with ui.column().classes('w-full items-center justify-center col-span-full py-12'):
                         ui.icon('burst_mode', size='lg').classes('text-slate-800')
                         ui.label('대기 중').classes('text-sm font-bold text-slate-400')
-                        ui.label('각본 생성 후 Workspace에서 장면 설명을 검토하세요.').classes('text-xs text-slate-400 mt-1')
+                        ui.label('각본 생성 후 제작 작업실에서 장면 설명을 검토하세요.').classes('text-xs text-slate-400 mt-1')
 
             # --- 2C. 에러 알림 박스 (실패 시에만 보임) ---
             error_panel = ui.element('div').classes('w-full rounded-xl p-4 bg-rose-950/20 border border-rose-500/30 flex items-start gap-3 shadow-lg')

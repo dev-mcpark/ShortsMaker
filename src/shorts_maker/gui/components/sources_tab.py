@@ -63,7 +63,7 @@ def render_sources_tab(state: 'AppState') -> None:
 
                     # 추가 실행 버튼
                     def add_feed():
-                        if not cat_input.value:
+                        if not (cat_input.value or '').strip():
                             safe_notify('카테고리를 입력해주십시오.', type='warning')
                             return
                         if not url_input.value:
@@ -117,7 +117,7 @@ def render_sources_tab(state: 'AppState') -> None:
             with ui.card().classes('w-full p-5 bg-slate-900/60 border border-slate-800/80 rounded-xl'):
                 with ui.row().classes('items-center gap-2 mb-3'):
                     ui.icon('star', size='xs').classes('text-violet-400')
-                    ui.label('검증된 추천 피드').classes('text-xs font-bold text-slate-400 uppercase tracking-widest')
+                    ui.label('추천 피드 예시').classes('text-xs font-bold text-slate-400 uppercase tracking-widest')
 
                 recommended = [
                     ('Technology', 'TechCrunch', 'https://techcrunch.com/feed/'),
@@ -135,7 +135,11 @@ def render_sources_tab(state: 'AppState') -> None:
 
                         def make_add_rec_fn(c=cat, u=url, n=name):
                             def add_recommended():
-                                source_manager.add_source(c, u)
+                                try:
+                                    source_manager.add_source(c, u)
+                                except (OSError, ValueError) as error:
+                                    safe_notify(f'RSS 추가 실패: {error}', type='negative')
+                                    return
                                 safe_notify(f"✅ 추가 완료: {n}", type='positive')
                                 safe_refresh(sources_list)
                                 safe_refresh(stats_card)
@@ -179,7 +183,7 @@ def render_sources_tab(state: 'AppState') -> None:
                                 ui.label('좌측 추가 패널이나 추천 피드에서 첫 RSS 연동을 시작하십시오.').classes('text-xs text-slate-400')
                         return
 
-                    with ui.scroll_area().classes('w-full flex-grow max-h-[560px]'):
+                    with ui.element('div').classes('w-full min-w-0 overflow-y-auto max-h-[560px]'):
                         with ui.column().classes('p-5 gap-4 w-full'):
                             for category, urls in sources.items():
                                 # 카테고리별 디렉토리 카드
@@ -226,7 +230,7 @@ def render_sources_tab(state: 'AppState') -> None:
                                             with ui.row().classes(
                                                 'w-full items-center justify-between p-2.5 bg-slate-950/40 border border-slate-800/60 hover:bg-slate-900/60 rounded-lg no-wrap transition-colors duration-200'
                                             ):
-                                                with ui.row().classes('items-center gap-2 overflow-hidden flex-grow mr-4'):
+                                                with ui.row().classes('items-center gap-2 overflow-hidden flex-grow min-w-0 flex-nowrap mr-4'):
                                                     ui.icon('link', size='xs').classes('text-slate-400 shrink-0')
                                                     # 긴 URL 말줄임표 처리
                                                     ui.label(url).classes('text-xs text-slate-400 truncate font-mono')

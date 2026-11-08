@@ -79,8 +79,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                         with ui.row().classes('items-center gap-3'):
                             status_icon = ui.icon('pause_circle', size='md').classes('text-white')
                             with ui.column().classes('gap-0'):
-                                ui.label('Studio Scheduler').classes('text-sm text-white/70')
-                                status_label = ui.label('Stopped').classes('text-lg font-bold text-white')
+                                ui.label('Studio 직접 실행 스케줄러').classes('text-sm text-white/70')
+                                status_label = ui.label('중지됨').classes('text-lg font-bold text-white')
 
                         with ui.row().classes('gap-2'):
                             start_btn = ui.button(icon='play_arrow').props('round color=white text-color=green-600 size=md aria-label="스케줄러 시작"')
@@ -102,11 +102,11 @@ def render_scheduling_tab(state: 'AppState') -> None:
                         if schedule_manager._scheduler_running:
                             status_header.classes(remove='from-red-600 to-orange-600', add='from-green-600 to-teal-600')
                             status_icon._props['name'] = 'play_circle'
-                            status_label.text = 'Running'
+                            status_label.text = '실행 중'
                         else:
                             status_header.classes(remove='from-green-600 to-teal-600', add='from-red-600 to-orange-600')
                             status_icon._props['name'] = 'pause_circle'
-                            status_label.text = 'Stopped'
+                            status_label.text = '중지됨'
                         status_header.update()
                         status_icon.update()
                     except (AttributeError, RuntimeError) as e:
@@ -118,16 +118,16 @@ def render_scheduling_tab(state: 'AppState') -> None:
                     except Exception as error:
                         logger.error(f"Scheduler start failed: {error}")
                         update_status()
-                        safe_notify(f'❌ Scheduler start failed: {error}', type='negative')
+                        safe_notify(f'스케줄러 시작 실패: {error}', type='negative')
                         return
                     update_status()
-                    safe_notify('✅ Scheduler started', type='positive')
+                    safe_notify('Studio 스케줄러를 시작했습니다.', type='positive')
                     safe_refresh(schedule_list)
 
                 def stop_scheduler():
                     schedule_manager.stop_scheduler()
                     update_status()
-                    safe_notify('⏹️ Scheduler stopped', type='warning')
+                    safe_notify('Studio 스케줄러를 중지했습니다.', type='warning')
                     safe_refresh(schedule_list)
 
                 start_btn.on_click(start_scheduler)
@@ -135,17 +135,17 @@ def render_scheduling_tab(state: 'AppState') -> None:
                 update_status()
 
             # === Create Schedule Card ===
-            with card_with_header('Create New Schedule', 'add_alarm', 'purple'):
+            with card_with_header('일정 만들기', 'add_alarm', 'purple'):
                 with ui.element('div').classes('p-5'):
                     # Schedule Name
                     with ui.column().classes('w-full gap-1 mb-4'):
-                        ui.label('Schedule Name').classes('text-xs text-gray-400 uppercase tracking-wider')
-                        schedule_name = ui.input('Schedule Name', value='4주 Shorts 기획').props('outlined dense dark').classes('w-full')
+                        ui.label('일정 이름').classes('text-xs text-gray-400 uppercase tracking-wider')
+                        schedule_name = ui.input('일정 이름', value='2주 Shorts 기획').props('outlined dense dark').classes('w-full')
 
                     # Time & Frequency
                     with ui.row().classes('w-full gap-4 mb-4'):
                         with ui.column().classes('flex-grow gap-1'):
-                            ui.label('Time').classes('text-xs text-gray-400 uppercase tracking-wider')
+                            ui.label('실행 시각').classes('text-xs text-gray-400 uppercase tracking-wider')
                             with ui.row().classes('gap-2'):
                                 hour_select = ui.select(
                                     options={str(i).zfill(2): str(i).zfill(2) for i in range(24)},
@@ -158,19 +158,19 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                 ).props('outlined dense dark aria-label="실행 분"').classes('w-20')
 
                         with ui.column().classes('flex-grow gap-1'):
-                            ui.label('Frequency').classes('text-xs text-gray-400 uppercase tracking-wider')
+                            ui.label('반복 주기').classes('text-xs text-gray-400 uppercase tracking-wider')
                             frequency_select = ui.select(
                                 options={
-                                    'Daily': '📅 Daily',
-                                    'Every 2 Weeks': '📅 Every 2 Weeks',
-                                    'Every 4 Weeks': '📅 Every 4 Weeks',
-                                    'Weekly (Mon)': '📆 Mon',
-                                    'Weekly (Tue)': '📆 Tue',
-                                    'Weekly (Wed)': '📆 Wed',
-                                    'Weekly (Thu)': '📆 Thu',
-                                    'Weekly (Fri)': '📆 Fri',
-                                    'Weekly (Sat)': '📆 Sat',
-                                    'Weekly (Sun)': '📆 Sun',
+                                    'Daily': '매일',
+                                    'Every 2 Weeks': '14일마다',
+                                    'Every 4 Weeks': '28일마다',
+                                    'Weekly (Mon)': '매주 월요일',
+                                    'Weekly (Tue)': '매주 화요일',
+                                    'Weekly (Wed)': '매주 수요일',
+                                    'Weekly (Thu)': '매주 목요일',
+                                    'Weekly (Fri)': '매주 금요일',
+                                    'Weekly (Sat)': '매주 토요일',
+                                    'Weekly (Sun)': '매주 일요일',
                                 },
                                 value='Every 2 Weeks'
                             ).props('outlined dense dark aria-label="반복 주기"').classes('w-full')
@@ -178,49 +178,49 @@ def render_scheduling_tab(state: 'AppState') -> None:
                     ui.separator().classes('bg-slate-600 my-4')
 
                     # Content Source
-                    ui.label('Content Source').classes('text-xs text-gray-400 uppercase tracking-wider mb-2')
+                    ui.label('소재 출처').classes('text-xs text-gray-400 uppercase tracking-wider mb-2')
 
                     with ui.element('div').classes('w-full p-3 bg-slate-800/50 rounded-lg mb-3'):
                         source_mode = ui.radio(
-                            ['Auto-Discovery (RSS)', 'Direct URL'],
+                            {'Auto-Discovery (RSS)': 'RSS에서 새 소재 찾기', 'Direct URL': '기사 URL 직접 입력'},
                             value='Auto-Discovery (RSS)'
                         ).props('color=purple size=32px')
 
                     category_select = ui.select(
                         ['전체 분야', *SourceManager().get_categories()],
-                        value='전체 분야', label='RSS Category'
+                        value='전체 분야', label='RSS 분야'
                     ).props('outlined dense dark').classes('w-full mb-3')
                     category_select.bind_visibility_from(source_mode, 'value', value='Auto-Discovery (RSS)')
 
                     url_input = ui.input(
-                        'Article URL',
+                        '기사 URL',
                         placeholder='https://...'
                     ).props('outlined dense dark').classes('w-full mb-3')
                     url_input.bind_visibility_from(source_mode, 'value', value='Direct URL')
                     url_hint = ui.label(
-                        'One article URL makes one episode. After rendering, this schedule pauses; use RSS for recurring topics.'
+                        '한 기사 URL은 한 편에 사용합니다. 각본 생성 후 멈추며, 지속적으로 새 소재를 찾으려면 RSS를 선택하세요.'
                     ).classes('text-xs text-gray-400 mb-3')
                     url_hint.bind_visibility_from(source_mode, 'value', value='Direct URL')
 
                     ui.separator().classes('bg-slate-600 my-4')
 
                     # Options
-                    ui.label('Options').classes('text-xs text-gray-400 uppercase tracking-wider mb-3')
+                    ui.label('제작 방식').classes('text-xs text-gray-400 uppercase tracking-wider mb-3')
 
                     with ui.row().classes('w-full gap-4 mb-4'):
                         with ui.column().classes('gap-1'):
-                            ui.label('Mode').classes('text-xs text-gray-300')
+                            ui.label('화면 구성').classes('text-xs text-gray-300')
                             with ui.button_group().props('rounded'):
                                 mode_hybrid_btn = ui.button(
-                                    'HYBRID',
+                                    '혼합',
                                     on_click=lambda: mode_select.set_value('hybrid')
                                 ).props('color=purple-9 size=sm')
                                 mode_img_btn = ui.button(
-                                    'IMAGE',
+                                    '이미지',
                                     on_click=lambda: mode_select.set_value('image')
                                 ).props('outline color=purple-3 size=sm')
                                 mode_vid_btn = ui.button(
-                                    'VIDEO',
+                                    '영상',
                                     on_click=lambda: mode_select.set_value('video')
                                 ).props('outline color=purple-3 size=sm')
                             mode_select = ui.radio(['hybrid', 'image', 'video'], value='hybrid').classes('hidden')
@@ -255,16 +255,16 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                 mode=mode_select.value,
                                 enabled=True
                             )
-                            safe_notify(f"✅ Schedule created: {schedule['name']}", type='positive')
+                            safe_notify(f"일정을 만들었습니다: {schedule['name']}", type='positive')
                             logger.info(f"Created schedule: {schedule['name']} at {time_str}")
                             safe_refresh(schedule_list)
                             safe_refresh(history_list)
                         except Exception as e:
-                            safe_notify(f"❌ Failed: {e}", type='negative')
+                            safe_notify(f'일정 생성 실패: {e}', type='negative')
                             logger.error(f"Schedule creation error: {e}")
 
                     ui.button(
-                        'Create Schedule',
+                        '일정 만들기',
                         on_click=create_schedule
                     ).classes('w-full').props('color=purple-9 unelevated icon=add size=lg')
 
@@ -277,16 +277,16 @@ def render_scheduling_tab(state: 'AppState') -> None:
                     with ui.row().classes('items-center justify-between'):
                         with ui.row().classes('items-center gap-2'):
                             ui.icon('event_available', size='sm').classes('text-teal-400')
-                        ui.label('Studio Registered Jobs').classes('text-lg font-bold text-white')
+                        ui.label('저장된 일정').classes('text-lg font-bold text-white')
 
-                        schedule_count_badge = ui.badge('0').props('color=teal-9 text-color=white')
+                        schedule_count_badge = ui.badge('Studio 등록 0개').props('color=teal-9 text-color=white')
 
                 @ui.refreshable
                 def schedule_list():
                     schedules = schedule_manager.load_schedules()
                     next_runs = {item['id']: item['next_run'] for item in schedule_manager.get_next_run_times()}
                     try:
-                        schedule_count_badge.text = str(sum(run is not None for run in next_runs.values()))
+                        schedule_count_badge.text = f"Studio 등록 {sum(run is not None for run in next_runs.values())}개"
                     except RuntimeError:
                         pass
 
@@ -294,8 +294,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                         with ui.element('div').classes('p-8'):
                             with ui.column().classes('items-center gap-3'):
                                 ui.icon('event_busy', size='xl').classes('text-slate-400')
-                                ui.label('No schedules configured').classes('text-gray-300')
-                                ui.label('Create your first schedule to automate video production').classes('text-xs text-gray-600')
+                                ui.label('저장된 일정이 없습니다.').classes('text-gray-300')
+                                ui.label('일정을 만들면 예약 시각에 각본 기획을 시작합니다.').classes('text-xs text-gray-400')
                         return
 
                     with ui.scroll_area().classes('h-[40vh]'):
@@ -371,7 +371,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                     safe_notify('각본을 불러왔습니다. Workspace의 Script Editor에서 장면을 검토하고 확인하세요.', type='info')
 
                                                 ui.button('검토할 각본 불러오기', on_click=load_pending_script).props(
-                                                    'flat dense color=amber')
+                                                    'flat dense color=amber').bind_enabled_from(
+                                                        state, 'is_busy', backward=lambda busy: not busy)
                                             elif not enabled and schedule.get('last_result') == 'run_in_progress':
                                                 ui.label('제작 완료 미확인 · 출력과 청구 내역 확인 후 일정 재개').classes('text-xs text-amber-300')
                                             elif not enabled and schedule.get('last_result') == 'model_migration_required':
@@ -404,12 +405,12 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 with ui.element('div').classes('mt-2 p-2 bg-teal-900/30 rounded-lg border border-teal-500/20'):
                                                     with ui.row().classes('items-center gap-2'):
                                                         ui.icon('alarm', size='xs').classes('text-teal-400')
-                                                        ui.label('Next run:').classes('text-xs text-teal-400')
+                                                        ui.label('다음 실행:').classes('text-xs text-teal-400')
                                                         ui.label(next_run[:16].replace('T', ' ')).classes('text-sm text-teal-300 font-medium')
                                             elif enabled:
                                                 ui.label('별도 대기 호스트 사용 · 운영 상태 별도 확인'
                                                          if schedule.get('review_operator') == 'agent'
-                                                         else 'Studio Scheduler stopped or job not registered').classes(
+                                                         else 'Studio 스케줄러가 중지됐거나 작업이 등록되지 않았습니다.').classes(
                                                     'text-xs text-amber-300')
 
                                         with ui.column().classes('gap-2'):
@@ -490,7 +491,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
 
                                             toggle_icon = 'pause' if enabled else 'play_arrow'
                                             toggle_color = 'amber' if enabled else 'green'
-                                            toggle_tip = 'Pause' if enabled else 'Resume'
+                                            toggle_tip = '일시정지' if enabled else '재개'
                                             if not enabled and schedule.get('last_result') == 'script_review_pending':
                                                 ui.button('비공개 영상 검토 완료', on_click=accept_pending_video).props(
                                                     'flat dense color=teal')
@@ -506,7 +507,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                             ui.button(
                                                 icon='delete_outline',
                                                 on_click=delete_schedule
-                                            ).props('round size=md flat color=red aria-label="일정 삭제"').tooltip('Delete')
+                                            ).props('round size=md flat color=red aria-label="일정 삭제"').tooltip('일정 삭제')
 
                 schedule_list()
 
@@ -515,7 +516,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                 with ui.element('div').classes('w-full p-4 border-b border-slate-700'):
                     with ui.row().classes('items-center gap-2'):
                         ui.icon('history', size='sm').classes('text-amber-400')
-                        ui.label('Execution History').classes('text-lg font-bold text-white')
+                        ui.label('실행 이력').classes('text-lg font-bold text-white')
 
                 @ui.refreshable
                 def history_list():
@@ -525,8 +526,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                         with ui.element('div').classes('p-8'):
                             with ui.column().classes('items-center gap-3'):
                                 ui.icon('hourglass_empty', size='xl').classes('text-slate-400')
-                                ui.label('No execution history yet').classes('text-gray-300')
-                                ui.label('History will appear after schedules run').classes('text-xs text-gray-600')
+                                ui.label('아직 실행 이력이 없습니다.').classes('text-gray-300')
+                                ui.label('일정이 실행되면 여기에 표시됩니다.').classes('text-xs text-gray-400')
                         return
 
                     with ui.scroll_area().classes('h-[25vh]'):

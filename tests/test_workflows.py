@@ -311,6 +311,55 @@ class WorkflowTests(unittest.TestCase):
         self.assertIsNone(service._editor)
         self.assertEqual(service.progress.phase, ProductionPhase.FAILED)
 
+    def test_active_service_survives_option_changes_until_idle(self):
+        with patch.object(settings, 'update_api_keys'):
+            for busy in ('pipeline_running', 'youtube_upload_in_progress'):
+                with self.subTest(busy=busy):
+                    state = AppState(mode='image', **{busy: True})
+                    active = state.get_or_create_service()
+                    self.assertIs(state.production_service, active)
+                    state.mode = 'video'
+                    state.tts_voice = 'nova'
+                    state.character_overlay_enabled = True
+                    self.assertIs(state.get_or_create_service(), active)
+                    self.assertEqual(active.mode, 'image')
+                    active.cancel()
+                    self.assertIs(state.get_or_create_service(), active)
+                    self.assertIs(state.production_service, active)
+                    setattr(state, busy, False)
+                    idle = state.get_or_create_service()
+                    self.assertIsNot(idle, active)
+                    self.assertEqual(idle.mode, 'video')
+                    self.assertEqual(idle.editor_options['tts_voice'], 'nova')
+                    self.assertTrue(idle.character_overlay_config.enabled)
+                    self.assertFalse(idle.is_cancelled())
+
+    def test_overlay_changes_refresh_service_without_starting_generation(self):
+        state = AppState()
+        with patch.object(settings, 'update_api_keys'), patch(
+            'shorts_maker.services.production_service.VideoGenerator'
+        ) as generator:
+            original = state.new_production_service()
+            self.assertIs(state.get_or_create_service(), original)
+            state.character_overlay_enabled = True
+            enabled = state.get_or_create_service()
+            self.assertIsNot(enabled, original)
+            self.assertTrue(enabled.character_overlay_config.enabled)
+            self.assertIs(state.get_or_create_service(), enabled)
+            state.character_position = 'top_left'
+            state.character_size_ratio = .4
+            repositioned = state.get_or_create_service()
+            self.assertIsNot(repositioned, enabled)
+            self.assertEqual(repositioned.character_overlay_config.position, 'top_left')
+            self.assertEqual(repositioned.character_overlay_config.size_ratio, .4)
+            self.assertEqual(enabled.character_overlay_config.position, 'bottom_right')
+            state.character_overlay_enabled = False
+            disabled = state.get_or_create_service()
+            self.assertIsNot(disabled, repositioned)
+            self.assertIsNone(disabled.character_overlay_config)
+            self.assertIs(state.get_or_create_service(), disabled)
+            generator.assert_not_called()
+
     @patch("shorts_maker.services.production_service.check_video_quality")
     def test_session_options_reach_editor_and_parallel_generator(self, _check):
         state = AppState(mode="image", tts_voice="nova", bgm_mood="cinematic",

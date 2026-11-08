@@ -150,23 +150,36 @@ def save_raw_verdict(script, scene, clip_path: str, frame_sha256: str,
     return path
 
 
-def raw_review_status(script, scene, clip_path: str, frame_sha256: str) -> str:
+def _validated_raw_verdict(script, scene, clip_path: str, frame_sha256: str) -> tuple[str, dict | None]:
     try:
         if verified_first_frame(script, scene)[1] != frame_sha256:
-            return 'stale'
+            return 'stale', None
         path = _verdict_path(script, scene, clip_path)
         if not path.exists():
             path = _review_path(clip_path)
         record = json.loads(path.read_text(encoding='utf-8'))
         expected = _binding(script, scene, clip_path, frame_sha256)
     except (OSError, ValueError, KeyError, TypeError):
-        return 'pending'
+        return 'pending', None
     if (not isinstance(record, dict)
             or any(record.get(key) != value for key, value in expected.items())
             or not isinstance(record.get('reviewer_note'), str)
             or not record['reviewer_note'].strip()):
-        return 'stale'
-    return record.get('decision') if record.get('decision') in {'approved', 'rejected'} else 'pending'
+        return 'stale', None
+    decision = record.get('decision')
+    return (decision, record) if decision in {'approved', 'rejected'} else ('pending', None)
+
+
+def raw_review_status(script, scene, clip_path: str, frame_sha256: str) -> str:
+    return _validated_raw_verdict(script, scene, clip_path, frame_sha256)[0]
+
+
+def load_raw_verdict(script, scene, clip_path: str, frame_sha256: str) -> dict:
+    """Read the same bound verdict and legacy fallback used by the production gate."""
+    _, record = _validated_raw_verdict(script, scene, clip_path, frame_sha256)
+    if record is None:
+        raise ValueError('현재 각본·첫 프레임·원본과 일치하는 판정 기록이 없습니다.')
+    return record
 
 
 def verified_raw_clip(script, scene, clip_path: str, frame_sha256: str) -> str:

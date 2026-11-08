@@ -5,12 +5,52 @@ Development map and agent handoff: [docs/README.md](docs/README.md), [docs/STATU
 AI-powered YouTube Shorts automation pipeline using **Google Veo 3.1** and **Gemini image generation**.
 ShortsMaker aims to produce and upload source-grounded Korean Shorts continuously within a controlled budget, improving quality and audience results toward eventual YouTube revenue. It researches, writes scripts, generates visuals, and can upload content to YouTube. Review source claims and the finished video before scaling publication.
 Automatic uploads are private review copies; public publication remains a separate editorial decision.
-Planning uses GPT-6.1 Terra for article analysis, scripts/scene prompts and source/continuity validation with low reasoning and Standard-tier bounded JSON requests. Fast scoring/enrichment retains GPT-4o-mini; voice retains tts-1/nova. The writer specifies visible narration evidence and repeated subject/layout anchors; the raw and whole-cut reviews still decide whether returned imagery is coherent. This model change has offline compatibility coverage; the authorized full-story response stopped at music selection and remains unapproved; finished-video quality improvement is unproven.
+
+## Studio 사용법
+
+실행 중인 [ShortsMaker Studio](http://127.0.0.1:8080)를 여세요. 같은 Mac에서 접속하는 주소입니다. 처음 설치하는 경우 아래의 설치·실행 절차를 먼저 따르세요.
+
+| 메뉴 | 할 수 있는 일 |
+| --- | --- |
+| 제작 작업실 | 저장된 대본 불러오기, 기사/RSS 기획, 내레이션·장면 설명 확인, 장면별 첫 프레임·무음 원본 검토, 영상 제작 |
+| 기획·진행 현황 | 기획 입력, 실행 진행률·오류·현재 세션 이력 확인. 상단 **대본 기획**도 이 입력 화면을 엽니다. |
+| 소재·출처 | RSS 분야·주소 관리. 추천 피드는 예시이며 기사별 출처 검증은 별도로 진행합니다. |
+| 예약 운영 | 제작 시작 주기, 활성 상태, 검토 대기 이유와 연결된 영상 확인 |
+| 완성본·업로드 | 저장된 완성본 재생, 게시 정보 복원, 기존 YouTube 링크 확인, 비공개 업로드 |
+| 사용 안내 | 화면 안에서 간단한 사용 순서 확인 |
+
+### 기존 영상부터 확인하기
+
+1. **완성본·업로드 → 저장된 완성본**에서 제목과 파일명을 확인하고 **완성본 불러오기**를 누르세요. 재제작 없이 MP4와 일치하는 품질 기록·해시를 확인해 엽니다.
+2. 화면의 영상을 끝까지 재생하세요. 업로드 이력이 있으면 **YouTube 검토본 열기**로 기존 영상을 볼 수 있습니다.
+3. 제목·설명·태그·AI 사용 공개 선택이 저장된 업로드 요청에서 복원됩니다. 이미 올라간 영상의 제목·설명 수정과 공개 전환은 YouTube Studio에서 직접 하세요. 같은 파일의 업로드 버튼을 다시 눌러도 기록된 영상 ID를 재사용합니다.
+
+### 새 영상을 제작하는 순서
+
+1. **제작 작업실 → 1. 대본·장면 검토**에서 저장된 각본을 고른 뒤 **불러오기**를 누르거나, RSS 분야/기사 URL로 기획합니다. 새 기획·재생성에는 API 비용과 유효한 실행 권한이 필요합니다.
+2. 출처 원문, 이야기 전개, 장면별 내레이션·비주얼·움직임을 읽으세요. JSON 수정의 **현재 작업에 적용**은 현재 세션만 바꿉니다. 수정한 JSON은 별도 파일로 보관하세요.
+3. 우측에서 화면 구성 방식과 음성·음악을 고르세요. **각본별 음성·음악 설정 저장**으로 선택을 보존할 수 있습니다. 같은 대본을 다시 불러오면 복원되며, 다른 대본에 자동으로 승계되지 않습니다. **각본 확인 완료 · 영상 제작으로 →**를 누르면 장면 검토 화면으로 이동합니다.
+4. Veo 장면은 첫 프레임 PNG/JPEG를 로컬에 준비하고 경로·보여야 할 내용·피해야 할 묘사·검토 의견을 입력하세요. **이미지 미리보기 → 이 첫 프레임 승인** 후, 허용된 예산 안에서 **이 장면 VEO 원본 생성**을 사용합니다. Studio는 이 화면에서 첫 프레임을 자동 생성하지 않습니다.
+5. 무음 원본을 끝까지 보고 내레이션의 내용과 일관성이 유지되는지 판정하세요. 검토 의견과 **원본 승인/원본 제외**는 현재 대본·첫 프레임·원본 파일에 묶여 저장됩니다. 이미 승인된 원본은 재사용합니다. 파일이나 대본이 달라지면 다시 확인해야 합니다.
+6. 필요한 장면이 준비되면 **영상 제작 시작**으로 음성·음악·자막을 합칩니다. **보유 영상 직접 연결**은 장면 파일을 직접 넣는 방법이며, 새 음성이 필요하면 여전히 API 비용이 발생할 수 있습니다.
+7. 완성본을 끝까지 검토한 뒤 **완성본·업로드**에서 제목·설명·모든 출처·AI 사용 공개 여부를 확인하고 **YouTube에 비공개 업로드**를 사용하세요. 기술 품질 통과와 편집상 채택은 별개이며, 공개는 사용자가 결정합니다.
+
+### 비용·예약·저장 시 주의할 점
+
+- **검토 모드 · API 생성 중지**이면 새 대본·음성·이미지·영상 API 생성이 차단됩니다. 저장된 자료를 검토할 수는 있습니다. 현재 위임 운영의 유료 제작은 승인된 회차의 `operate_schedule.py` 경로에서 진행하며, Studio 버튼이 그 회차 한도를 자동 위임받는 것은 아닙니다. 재개를 위해 전역 유료 스위치를 임의로 켜지 마세요.
+- 화면에는 실제 설정된 대본·영상 모델이 표시됩니다. 일반 Studio 기본 영상 모델과 위임 회차에서 고정하는 Lite 모델은 다를 수 있으므로, 새 호출 전에 모델과 비용을 확인하세요. 전체 비주얼 추정은 저장분 차감 전 금액이며, 장면별 재사용 여부는 원본 검토 화면에서 확인합니다.
+- **예약 운영**의 기본 주기는 **2주**입니다. 예약 시각은 기획 시작 시각이며 업로드 완료 시각이 아닙니다. 검토·예산·인증에서 멈출 수 있고, 미해결 회차는 삭제하거나 토글해 건너뛸 수 없습니다. 설정 화면을 보는 것만으로 일정을 활성화하지 않습니다.
+- 일반 Studio 예약은 서버와 내장 스케줄러가 필요합니다. `review_operator=agent`로 위임한 일정은 독립 시계 호스트가 대기 작업만 만들고, 에이전트가 검토·제작을 이어갑니다. 이 운영에서 내장 시계를 중복 시작하지 마세요. 현재 회차 상태와 다음 작업은 [STATUS](docs/STATUS.md)가 관리합니다.
+- 대본·장면·게시 입력과 화면 이력은 브라우저 세션 상태입니다. 서버 재시작 후 저장된 대본/완성본을 다시 불러오세요. **고급 · API 연결 → 연결 설정 적용**은 실행 중 Studio 설정에만 반영되고 `.env`를 저장하지 않습니다. 키·토큰·비공개 출력은 Git에 넣지 않습니다.
+
+---
+
+Planning uses GPT-6.1 Terra for article analysis, scripts/scene prompts and source/continuity validation with low reasoning and Standard-tier bounded JSON requests. Fast scoring/enrichment retains GPT-4o-mini; voice retains tts-1/nova. The writer specifies visible narration evidence and repeated subject/layout anchors; the raw and whole-cut reviews still decide whether returned imagery is coherent. The model path has offline compatibility coverage and a separately authorized private video comparison; current editorial verdicts and runtime evidence belong to [STATUS](docs/STATUS.md). A model change alone does not establish better finished-video quality.
 Automatic API uploads conservatively mark AI-generated visuals for YouTube's synthetic-media disclosure. The manual Publishing tab requires an explicit yes/no choice about realistic AI-generated or altered scenes; review that choice again before making a video public.
 Studio and scheduled API uploads are always **private**. The Studio Publishing tab plays the exact finished file selected for manual upload; watch it and check the metadata before uploading. Review the complete video, source claims, music rights, and AI disclosure choice in YouTube before making it public; the technical quality check does not make an editorial decision.
 New API uploads label Korean title and description text with YouTube's `defaultLanguage=ko`; this does not alter earlier uploads or set the spoken-audio language. The current Sillim public-metadata proposal and remaining release checks are in [docs/SILLIM_PUBLICATION_CANDIDATE.md](docs/SILLIM_PUBLICATION_CANDIDATE.md).
 The upload action requires the matching, quality-passed `*.production.json` record. New records bind the finished MP4 by SHA-256; changing its bytes blocks upload or reuse of a recorded YouTube ID. An older unuploaded record gains that binding after a fresh quality check, while an older uploaded record without a hash requires a YouTube Studio check. Repeating the action for an unchanged file with a recorded ID shows the existing private upload instead of posting another copy; metadata typed on that repeat is not submitted. Before each new upload, an adjacent `*.upload-pending.json` file records the video hash and prepared private request fields. Successful uploads also save those fields in the ignored production sidecar, so the submitted description can be checked later. If YouTube returns no ID or saving the ID fails, the pending file prevents another upload until the result is checked in YouTube Studio. If Studio confirms no upload occurred, remove the pending file before retrying; if it confirms an upload, record its verified ID in the matching production sidecar before clearing the pending file. Do not clear it based only on a network error.
-Studio's **Load Metadata from Script** fills the selected primary article URL and any `supporting_source_urls` when absent; review or edit the description before a manual upload. A new upload must include every source URL saved in its production record. The explicit approved-script upload path checks supplied metadata and all script source URLs before rendering. A reviewed description is kept as written when it passes this check. Older production records without supporting-source metadata cannot establish whether a multi-source story is fully credited; rebuild such a cut from the reviewed script before uploading it.
+Studio's **각본에서 게시 정보 가져오기** fills the selected primary article URL and any `supporting_source_urls` when absent; review or edit the description before a manual upload. A new upload must include every source URL saved in its production record. The explicit approved-script upload path checks supplied metadata and all script source URLs before rendering. A reviewed description is kept as written when it passes this check. Older production records without supporting-source metadata cannot establish whether a multi-source story is fully credited; rebuild such a cut from the reviewed script before uploading it.
 The private scorecard separates unique image/hybrid comparison pairs from all other finished cuts, including routine automatic videos, and shows a distinct-primary-source cost rollup across revisions. It counts audience results only after `public_release_confirmed=yes` is entered for a reviewed video; an upload ID alone is not a public-release record. See [the evaluation workflow](docs/QUALITY_EVALUATION.md).
 
 ---

@@ -94,6 +94,10 @@ class AppState:
     # ── Service accessor ──────────────────────────────────────────────────────
 
     @property
+    def is_busy(self) -> bool:
+        return self.pipeline_running or self.youtube_upload_in_progress
+
+    @property
     def production_service(self) -> Optional["ProductionService"]:
         return self._production_service
 
@@ -105,9 +109,16 @@ class AppState:
         """Reuse the current planning service while its credentials and mode are current."""
         from shorts_maker.utils.config import settings
 
+        # Keep cancellation and progress attached to the active task until it finishes.
+        if self.is_busy and self._production_service is not None:
+            return self._production_service
+        overlay = self.build_character_overlay_config()
         if (self._production_service is None
                 or self._production_service.mode != self.mode
                 or self._production_service.editor_options != self._editor_options()
+                or (self._production_service.character_overlay_config.to_dict()
+                    if self._production_service.character_overlay_config else None) != (
+                        overlay.to_dict() if overlay else None)
                 or self._production_service.is_cancelled()
                 or (self.openai_key and self.openai_key != settings.openai_api_key)
                 or (self.gcp_project and self.gcp_project != settings.gcp_project_id)):
@@ -153,6 +164,10 @@ class AppState:
     def load_saved_script(self, script) -> None:
         from shorts_maker.services.audio_choices import load_audio_choices
 
+        if self.is_busy:
+            raise ValueError('제작 또는 업로드가 진행 중에는 각본을 바꿀 수 없습니다.')
+        if script.generation_mode not in {'image', 'hybrid', 'video'}:
+            raise ValueError('각본의 제작 모드를 확인하세요.')
         choices = load_audio_choices(script)
         if choices is None:
             defaults = AppState()
@@ -160,12 +175,17 @@ class AppState:
                        for key in ('tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume')}
         for key, value in choices.items():
             setattr(self, key, value)
+        self.reset_pipeline()
         self.reset_manual_mode()
         self.script = script
+        self.mode = script.generation_mode
         self.script_context = None
         self.topic_candidates = []
         self.reviewed_script_sha256 = None
         self.final_video_path = None
+        self.scene_clips = []
+        self.generated_clips = []
+        self._production_service = None
 
     def confirm_script_review(self) -> None:
         if self.script is None:
@@ -185,12 +205,13 @@ class AppState:
         self.pipeline_phase = None
         self.pipeline_progress = 0.0
         self.pipeline_message = ""
-        self.scene_progresses.clear()
+        self.scene_progresses = []
         self.total_scenes = 0
         self.completed_scenes = 0
         self.current_scene = 0
         self.elapsed_seconds = 0.0
         self.estimated_seconds = 0.0
+        self.phase_times = {}
         self.last_error = None
 
     def reset_manual_mode(self) -> None:

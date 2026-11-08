@@ -1,5 +1,24 @@
 # Studio UI and code review
 
+### 2026-11-08 — Full feature review and usage cleanup
+
+Used the click-path-audit workflow to trace each feature's rendered control to its callback, service and retained state; reviewed the staged commits with conventional-commit-review. No new provider call, upload, schedule activation/deletion, owner acceptance or ledger release was performed during this review.
+
+| Area | Fixed behavior | Verification |
+| --- | --- | --- |
+| Shared session/settings | One busy state blocks overlapping generation/upload and script replacement. The active service retains its cancellation/progress handle; idle overlay changes rebuild it. Loading another script clears stale result/review/clip state and restores its mode/audio. | Offline state/callback tests; live saved Terra comparison script restored video mode, nova, Digital Clouds and18%. |
+| Planning | Confirmation now opens the actual scene-production pane. Double clicks submit once; stale previews cannot approve a different script. Failed planning keeps the previous result; JSON application is explicitly session-only. | Offline async double-click/error/stale-preview tests; live load → preview → confirmation → scene panel. |
+| First frames/raws/manual clips | Scoped verdict notes use the same binding/fallback as the gate. Stale callbacks and file reads that finish after a script switch cannot modify the new script. Failed manual renders hide the old preview. | Offline stale-script/upload-race/corrupt-verdict tests; live five existing approved muted originals and their actual notes restored, with no-new-request labels. |
+| Finished files/upload | Added saved-finished-file selector, quality/hash checks, submitted metadata restoration and existing YouTube link. Different-script metadata cannot overwrite selected-file metadata. Busy uploads retain their configured service. | Offline tamper/path/busy/failure cases; live latest31.33s file loaded with exact metadata/link and played to end unmuted without media error. No upload button invoked. |
+| Schedule/source management | Pending/in-progress/review rounds cannot be deleted with history loss. Source categories reject whitespace; recommended-feed save errors surface. Native vertical scrolling and shrinkable URL rows keep RSS delete controls inside narrow screens. Direct Studio clock and separate agent queue host are labelled distinctly. | Offline disposable-schedule and feed-write tests; live forms/history inspected without changes. |
+| Navigation/help/layout | Replaced icon-only navigation with six Korean menus, collapsed advanced settings, added actual model/read-only indicators and help. Header opens a planning form instead of immediately launching paid RSS work. Removed misleading duplicate phase-completion indicators. | All six desktop menus opened. At1440px desktop,1200px stacked and390px emulated touch viewport, inspected controls stayed inside the viewport;390px nav targets exceed44px. This is targeted browser checking, not a complete accessibility certification. |
+
+**367 offline tests pass** (`.venv/bin/python -m unittest discover -s tests -q`). The current comparison's exact adopted script was additionally copied to the ignored recent-script folder with its recorded audio choices so the owner can reopen it in Studio. The original scheduled attachment, cadence and budget holds were preserved. Root [README](../README.md#studio-사용법) owns the complete Korean usage guide; in-app help summarizes it.
+
+Paid/destructive callbacks were checked with offline fixtures, not real transactions. Future OAuth expiry, subjective video improvement and unattended production across actual14-day slots remain unproven. Studio's general default video model remains Fast while scoped operator runs pin Lite; the displayed model and saved-asset deductions must be reviewed before new spending. Server restarts still clear unsaved session inputs.
+
+## Earlier reviews
+
 Reviewed: 2026-10-15. Scope: the NiceGUI Studio on a local browser with `PAID_PRODUCTION_ENABLED=false`; no paid generation, scheduler start, or YouTube upload.
 
 | Function | Checked | Issue resolved |

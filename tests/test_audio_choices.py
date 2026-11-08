@@ -37,6 +37,74 @@ class AudioChoicesTests(unittest.TestCase):
         self.assertIsNone(restored.reviewed_script_sha256)
         self.assertIsNone(restored.final_video_path)
 
+    def test_loading_script_restores_mode_and_clears_prior_production(self):
+        script = sample_script()
+        script.generation_mode = 'video'
+        save_audio_choices(script, CHOICES)
+        previous_progress = [object()]
+        service = object()
+        state = AppState(mode='image', openai_key='current-key', gcp_project='current-project',
+                         generated_clips=['old.mp4'], scene_clips=['old.png'],
+                         scene_progresses=previous_progress, pipeline_phase='completed',
+                         pipeline_progress=100, pipeline_message='Old completed run',
+                         total_scenes=5, completed_scenes=5, current_scene=5,
+                         elapsed_seconds=30, estimated_seconds=10, phase_times={'old': 30},
+                         last_error='Old failure', final_video_path='old-final.mp4',
+                         reviewed_script_sha256='old-review', manual_script_id='old-manual',
+                         manual_video_mode=True, script_context=object(), topic_candidates=[object()],
+                         pipeline_history=[{'title': 'Earlier video'}])
+        state.production_service = service
+        with patch('shorts_maker.services.audio_choices.BGMManager.get_track_path', return_value='licensed.mp3'):
+            state.load_saved_script(script)
+        self.assertIs(state.script, script)
+        self.assertEqual(state.mode, 'video')
+        self.assertEqual({key: getattr(state, key) for key in CHOICES}, CHOICES)
+        self.assertEqual((state.openai_key, state.gcp_project), ('current-key', 'current-project'))
+        self.assertTrue(state.manual_video_mode)
+        self.assertEqual(state.manual_script_id, '')
+        self.assertIsNone(state.production_service)
+        self.assertIsNone(state.script_context)
+        self.assertIsNone(state.final_video_path)
+        self.assertIsNone(state.reviewed_script_sha256)
+        self.assertEqual((state.generated_clips, state.scene_clips, state.topic_candidates), ([], [], []))
+        self.assertIsNone(state.pipeline_phase)
+        self.assertEqual((state.pipeline_progress, state.pipeline_message), (0, ''))
+        self.assertEqual((state.total_scenes, state.completed_scenes, state.current_scene), (0, 0, 0))
+        self.assertEqual((state.elapsed_seconds, state.estimated_seconds, state.phase_times), (0, 0, {}))
+        self.assertIsNone(state.last_error)
+        self.assertEqual(state.scene_progresses, [])
+        self.assertEqual(len(previous_progress), 1)
+        self.assertEqual(state.pipeline_history, [{'title': 'Earlier video'}])
+
+    def test_active_production_or_upload_cannot_replace_current_script(self):
+        original = sample_script()
+        candidate = original.model_copy(deep=True)
+        candidate.title = 'Another episode'
+        for busy in ('pipeline_running', 'youtube_upload_in_progress'):
+            with self.subTest(busy=busy):
+                state = AppState(script=original, mode='image', final_video_path='old.mp4',
+                                 generated_clips=['old-clip.mp4'], manual_script_id='manual', **{busy: True})
+                with patch('shorts_maker.services.audio_choices.load_audio_choices') as load:
+                    with self.assertRaisesRegex(ValueError, '진행 중'):
+                        state.load_saved_script(candidate)
+                    load.assert_not_called()
+                self.assertIs(state.script, original)
+                self.assertEqual((state.mode, state.final_video_path), ('image', 'old.mp4'))
+                self.assertEqual(state.generated_clips, ['old-clip.mp4'])
+                self.assertEqual(state.manual_script_id, 'manual')
+                self.assertTrue(getattr(state, busy))
+
+    def test_unknown_loaded_mode_preserves_existing_state(self):
+        candidate = sample_script()
+        candidate.generation_mode = 'unknown'
+        original = sample_script()
+        state = AppState(script=original, mode='video', final_video_path='current.mp4')
+        with self.assertRaisesRegex(ValueError, '모드'):
+            state.load_saved_script(candidate)
+        self.assertIs(state.script, original)
+        self.assertEqual(state.mode, 'video')
+        self.assertEqual(state.final_video_path, 'current.mp4')
+
     def test_changed_script_does_not_inherit_another_scripts_audio(self):
         script = sample_script()
         save_audio_choices(script, CHOICES)
