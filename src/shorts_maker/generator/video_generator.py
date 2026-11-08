@@ -515,8 +515,35 @@ class VideoGenerator:
             raise
 
     def _run_image_generation(self, model_id: str, scene, output_path: str,
-                              source_url: str | None = None) -> None:
+                              source_url: str | None = None,
+                              reference_image_path: str | None = None) -> None:
         require_paid_production_enabled()
+        contents = (
+            "Create one vertical 9:16 image for this single scene. Keep one continuous "
+            "composition; do not turn a route or action description into storyboard strips, "
+            "a montage, repeated subjects, or multiple moments. Only if the brief explicitly "
+            "requests a comparison or multiple conceptual views within one frame, retain "
+            "those views in one image. Preserve the specified place, period and architectural "
+            "context even in a stylized model. Keep unspecified surroundings visually neutral "
+            "rather than inventing a distinctive locale.\nScene brief:\n" + scene.visual_description
+        )
+        if reference_image_path:
+            with Path(reference_image_path).open('rb') as file:
+                data = file.read(20_000_001)
+            if len(data) > 20_000_000:
+                raise ValueError('참고 이미지는 20 MB 이하의 PNG/JPEG이어야 합니다.')
+            try:
+                with Image.open(BytesIO(data)) as image:
+                    mime = {'PNG': 'image/png', 'JPEG': 'image/jpeg'}[image.format]
+                    image.verify()
+            except (OSError, ValueError, KeyError) as error:
+                raise ValueError('읽을 수 있는 PNG/JPEG 참고 이미지가 필요합니다.') from error
+            contents = [
+                contents + "\nUse the reference for the recurring subject's appearance and layout. "
+                "Reframe it as the scene brief requires; do not copy its camera angle, "
+                "decorative overlays or unrelated surroundings.",
+                types.Part.from_bytes(data=data, mime_type=mime),
+            ]
         budget_request_id = reserve_google_output("image", model_id, source_url=source_url)
         if self.image_client is None:
             self.image_client = genai.Client(
@@ -527,15 +554,7 @@ class VideoGenerator:
         try:
             response = self.image_client.models.generate_content(
                 model=model_id,
-                contents=(
-                    "Create one vertical 9:16 image for this single scene. Keep one continuous "
-                    "composition; do not turn a route or action description into storyboard strips, "
-                    "a montage, repeated subjects, or multiple moments. Only if the brief explicitly "
-                    "requests a comparison or multiple conceptual views within one frame, retain "
-                    "those views in one image. Preserve the specified place, period and architectural "
-                    "context even in a stylized model. Keep unspecified surroundings visually neutral "
-                    "rather than inventing a distinctive locale.\nScene brief:\n" + scene.visual_description
-                ),
+                contents=contents,
                 config=types.GenerateContentConfig(
                     response_modalities=["TEXT", "IMAGE"],
                     image_config=types.ImageConfig(aspect_ratio="9:16", image_size="1K"),

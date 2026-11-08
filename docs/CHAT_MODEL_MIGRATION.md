@@ -2,6 +2,10 @@
 
 Updated: 2026-11-07. The owner subsequently requested applying the confirmed newer model: **primary analysis, writing and validation now use GPT-6.1 Terra, low reasoning, Standard tier**, with offline compatibility and price accounting checks. Fast scoring/enrichment remains GPT-4o-mini and speech remains tts-1/nova. The real low-reasoning JSON writer has now returned HTTP 200, but its six-scene draft stopped at music selection (`mood: null`) and is unapproved. The conditional paid validator was not sent; video quality benefit is unproven. No new spend allowance is implied. [STATUS.md](STATUS.md) owns current runtime, budget and evidence; the earlier candidate/access history below is retained.
 
+## Later finished-video comparison
+
+The owner separately approved a new same-source video comparison and a second validator, then explicitly reassessed/adopted a corrected schematic one-person script after both paid checks failed. The first failure concerned explicit steering-wheel absence; the second concerned an unseen narrated count and contradictory no-people views. Preserve those original verdicts; the correction is not a model pass. Five new Lite clips and retained nova/Digital Clouds/soft captions now form a31-second privately uploaded comparison. [STATUS.md](STATUS.md) owns current upload/processing, costs and owner feedback; [the local comparison](../outputs/evaluation/cheonggye_terra_video_proposal_20261107/comparison_review.html) retains both finished cuts. Similar reference angles remain a quality limitation. No claim of better storytelling, retention or revenue is established before actual owner/audience evaluation. The spent requests below are history, not instructions to repeat them.
+
 ## Why compare again
 
 The owner found the Cheonggye finished video's story development and visual composition unsatisfactory and requested reconsidering GPT models. Record that cut as needing improvement, not as an accepted scheduled cycle. The owner retains publication control. Technical checks and an agent's intermediate approvals did not establish editorial quality.

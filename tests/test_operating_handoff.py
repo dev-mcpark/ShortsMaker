@@ -157,6 +157,52 @@ class OperatingHandoffTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_episode(record['id'], self.manager.get_schedule(self.schedule['id']))
 
+    def test_video_comparison_extension_retains_all_previous_approvals(self):
+        record = self.queued_episode()
+        google_budget.reserve_google_output('video', 'veo-3.1-lite-generate-001', 8)
+        openai_budget.reserve_openai_speech('tts-1', 'a' * 1000)
+        old_google = {'previous_cap_krw': 3000, 'approved_cap_krw': 3300, 'owner_approval': 'Earlier media'}
+        old_openai = {'previous_cap_micro_usd': 300000, 'approved_cap_micro_usd': 350000,
+                      'owner_approval': 'Earlier validation'}
+        followup = {'previous_cap_micro_usd': 350000, 'approved_cap_micro_usd': 450000,
+                    'owner_approval': 'Earlier text comparison'}
+        approval = {'previous_google_cap_krw': 3300, 'approved_google_cap_krw': 6300,
+                    'previous_openai_cap_micro_usd': 450000, 'approved_openai_cap_micro_usd': 500000,
+                    'owner_approval': 'New video comparison approved'}
+        extended = {**record, 'google_cap_krw': 6300, 'openai_cap_micro_usd': 500000,
+                    'google_cap_extension': old_google, 'openai_cap_extension': old_openai,
+                    'openai_cap_extension_followup': followup, 'video_comparison_extension': approval}
+        path = episode_path(record['id'])
+        path.write_text(json.dumps(extended))
+        schedule = self.manager.get_schedule(self.schedule['id'])
+        loaded = load_episode(record['id'], schedule)
+        self.assertEqual(loaded['baseline'], record['baseline'])
+        self.assertEqual(loaded['openai_cap_extension_followup'], followup)
+        self.assertEqual(loaded['google_cap_extension'], old_google)
+        _, status = episode_environment(loaded)
+        self.assertEqual(status['google_new_reserved_krw'], 480)
+        self.assertAlmostEqual(status['openai_remaining_usd'], .485)
+        with patch.object(settings, 'google_monthly_budget_krw', 2000), patch.object(
+                settings, 'openai_monthly_budget_usd', .2):
+            env, _ = episode_environment(loaded)
+            self.assertEqual(env['GOOGLE_MONTHLY_BUDGET_KRW'], '2000')
+            self.assertEqual(env['OPENAI_MONTHLY_BUDGET_USD'], '0.2')
+        future = begin_episode(record['schedule_id'], 2)
+        self.assertEqual((future['google_cap_krw'], future['openai_cap_micro_usd']), (3000, 300000))
+        for changes in (
+            {'google_cap_extension': None}, {'openai_cap_extension_followup': None},
+            {'video_comparison_extension': None}, {'google_cap_krw': 6301},
+            {'openai_cap_micro_usd': 500001},
+            {'video_comparison_extension': {**approval, 'owner_approval': ''}},
+            {'video_comparison_extension': {**approval, 'previous_google_cap_krw': 3000}},
+            {'video_comparison_extension': {**approval, 'approved_openai_cap_micro_usd': 450000}},
+            {'openai_cap_micro_usd': 350000, 'openai_cap_extension_followup': None,
+             'video_comparison_extension': {**approval, 'approved_openai_cap_micro_usd': 350000}},
+        ):
+            path.write_text(json.dumps({**extended, **changes}))
+            with self.assertRaises(ValueError):
+                load_episode(record['id'], schedule)
+
     def test_google_extension_keeps_old_reserves_and_monthly_ceiling(self):
         record = self.queued_episode()
         google_budget.reserve_google_output('video', 'veo-3.1-lite-generate-001', 8)

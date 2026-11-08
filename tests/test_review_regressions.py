@@ -1439,6 +1439,34 @@ class ReviewRegressions(unittest.TestCase):
         self.assertTrue(generator.image_client.models.generate_content.call_args.kwargs[
             "contents"].endswith(scene.visual_description))
 
+    def test_gemini_reference_preserves_bytes_and_rejects_nonimage_before_spend(self):
+        generator = object.__new__(VideoGenerator)
+        generated = SimpleNamespace(save=Mock())
+        generate = Mock(return_value=SimpleNamespace(candidates=[SimpleNamespace(
+            content=SimpleNamespace(parts=[SimpleNamespace(as_image=lambda: generated)]))]))
+        generator.image_client = SimpleNamespace(models=SimpleNamespace(generate_content=generate))
+        scene = SimpleNamespace(visual_description="One matching bus from its side")
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "shorts_maker.generator.video_generator.reserve_google_output"
+        ) as reserve, patch("shorts_maker.generator.video_generator.mark_google_result", return_value=True):
+            reference = Path(directory) / "reference.png"
+            Image.new("RGB", (90, 160), "blue").save(reference)
+            generator._run_image_generation("gemini-3.1-flash-lite-image", scene, "scene.png",
+                                            reference_image_path=str(reference))
+            contents = generate.call_args.kwargs["contents"]
+            self.assertEqual(contents[1].inline_data.data, reference.read_bytes())
+            self.assertEqual(contents[1].inline_data.mime_type, "image/png")
+            self.assertIn(scene.visual_description, contents[0])
+            reserve.assert_called_once()
+            generate.reset_mock()
+            reserve.reset_mock()
+            reference.write_text("not an image")
+            with self.assertRaises(ValueError):
+                generator._run_image_generation("gemini-3.1-flash-lite-image", scene, "bad.png",
+                                                reference_image_path=str(reference))
+            reserve.assert_not_called()
+            generate.assert_not_called()
+
     def test_veo_polling_stops_after_bounded_wait(self):
         generator = object.__new__(VideoGenerator)
         operation = SimpleNamespace(done=False)

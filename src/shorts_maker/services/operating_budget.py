@@ -16,9 +16,11 @@ from shorts_maker.utils.config import settings
 
 _OPENAI_EPISODE_CAP_MICRO_USD = 300_000
 _OPENAI_INITIAL_EXTENSION_MICRO_USD = 350_000
-_OPENAI_APPROVED_EXTENSION_MAX_MICRO_USD = 450_000
+_OPENAI_TEXT_EXTENSION_MICRO_USD = 450_000
+_OPENAI_APPROVED_EXTENSION_MAX_MICRO_USD = 500_000
 _GOOGLE_EPISODE_CAP_KRW = 3000
-_GOOGLE_APPROVED_EXTENSION_MAX_KRW = 3300
+_GOOGLE_INITIAL_EXTENSION_KRW = 3300
+_GOOGLE_APPROVED_EXTENSION_MAX_KRW = 6300
 
 
 def episode_path(episode_id: str) -> Path:
@@ -76,7 +78,8 @@ def load_episode(episode_id: str, schedule: dict) -> dict:
         approval = record.get('google_cap_extension')
         if (not isinstance(approval, dict)
                 or approval.get('previous_cap_krw') != _GOOGLE_EPISODE_CAP_KRW
-                or approval.get('approved_cap_krw') != record['google_cap_krw']
+                or approval.get('approved_cap_krw') != min(
+                    record['google_cap_krw'], _GOOGLE_INITIAL_EXTENSION_KRW)
                 or not isinstance(approval.get('owner_approval'), str)
                 or not approval['owner_approval'].strip()):
             raise ValueError('기본 상한을 넘는 회차는 별도 사용자 승인 기록이 필요합니다.')
@@ -93,10 +96,24 @@ def load_episode(episode_id: str, schedule: dict) -> dict:
         approval = record.get('openai_cap_extension_followup')
         if (not isinstance(approval, dict)
                 or approval.get('previous_cap_micro_usd') != _OPENAI_INITIAL_EXTENSION_MICRO_USD
-                or approval.get('approved_cap_micro_usd') != record['openai_cap_micro_usd']
+                or approval.get('approved_cap_micro_usd') != min(
+                    record['openai_cap_micro_usd'], _OPENAI_TEXT_EXTENSION_MICRO_USD)
                 or not isinstance(approval.get('owner_approval'), str)
                 or not approval['owner_approval'].strip()):
             raise ValueError('후속 상한 확장에는 이전 승인과 새 사용자 승인 기록이 모두 필요합니다.')
+    if (record['google_cap_krw'] > _GOOGLE_INITIAL_EXTENSION_KRW
+            or record['openai_cap_micro_usd'] > _OPENAI_TEXT_EXTENSION_MICRO_USD):
+        approval = record.get('video_comparison_extension')
+        if (not isinstance(approval, dict)
+                or record['google_cap_krw'] != _GOOGLE_APPROVED_EXTENSION_MAX_KRW
+                or record['openai_cap_micro_usd'] != _OPENAI_APPROVED_EXTENSION_MAX_MICRO_USD
+                or approval.get('previous_google_cap_krw') != _GOOGLE_INITIAL_EXTENSION_KRW
+                or approval.get('approved_google_cap_krw') != record['google_cap_krw']
+                or approval.get('previous_openai_cap_micro_usd') != _OPENAI_TEXT_EXTENSION_MICRO_USD
+                or approval.get('approved_openai_cap_micro_usd') != record['openai_cap_micro_usd']
+                or not isinstance(approval.get('owner_approval'), str)
+                or not approval['owner_approval'].strip()):
+            raise ValueError('새 영상 비교에는 기존 승인과 두 공급자의 추가 승인 기록이 필요합니다.')
     for provider in ('google', 'openai'):
         ids = record['baseline'].get(provider)
         if (not isinstance(ids, list) or not all(isinstance(key, str) for key in ids)

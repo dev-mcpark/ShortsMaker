@@ -618,7 +618,7 @@ class ProductionService:
                 self._update_progress(ProductionPhase.FAILED, 0, "사용자에 의해 취소됨")
                 return None, None
 
-            self._update_progress(ProductionPhase.PLANNING, 50, "GPT-4o로 스크립트 생성 중...")
+            self._update_progress(ProductionPhase.PLANNING, 50, "각본·장면 계획 생성 중...")
 
             script, context = await planner.plan_content(topic=topic, direct_url=direct_url)
 
