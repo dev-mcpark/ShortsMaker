@@ -46,6 +46,47 @@ def planning_environment(state, service):
 
 
 class CreationCallbackTests(unittest.IsolatedAsyncioTestCase):
+    async def test_successful_manual_clip_replacement_invalidates_previous_edit(self):
+        async def read():
+            return b'new-clip'
+        state = AppState(script=script(), manual_script_id='workspace', final_video_path='old-final.mp4',
+                         generated_clips=['old.mp4'])
+        state.confirm_script_review()
+        exporter = SimpleNamespace(save_uploaded_clip=Mock(), all_clips_ready=Mock(return_value=False))
+        env = {'scene_num': 1, 'state': state, 'exporter': exporter, 'safe_notify': Mock(),
+               'render_manual_panel': Mock(), 'start_edit_btn': None, 'scene_cards_container': None,
+               'logger': Mock()}
+        handler = callback('generation_tab.py', 'make_upload_handler', env)()
+        await handler(SimpleNamespace(file=SimpleNamespace(read=read)))
+        exporter.save_uploaded_clip.assert_called_once_with(b'new-clip', 'workspace', 1)
+        self.assertIsNone(state.final_video_path)
+        self.assertEqual(state.generated_clips, [])
+        self.assertTrue(state.is_script_reviewed())
+        env['render_manual_panel'].assert_called_once()
+
+    async def test_stale_save_or_workspace_restore_cannot_act_on_another_script(self):
+        original = script('A')
+        state = AppState(script=script('B'))
+        state.save_script_copy, state.restore_manual_workspace = Mock(), Mock()
+        save = callback('planning_tab.py', 'save_current_script', {
+            'state': state, 'previewed_script': {'json': original.model_dump_json()}, 'safe_notify': Mock()})
+        save()
+        state.save_script_copy.assert_not_called()
+        restore = callback('generation_tab.py', 'restore_workspace', {
+            'state': state, 'rendered_script': original.model_dump_json(), 'safe_notify': Mock()})
+        restore()
+        state.restore_manual_workspace.assert_not_called()
+
+    async def test_unapplied_json_cannot_be_mistaken_for_saved_current_script(self):
+        state = AppState(script=script('Original'))
+        state.save_script_copy = Mock()
+        env = {'state': state, 'previewed_script': {'json': state.script.model_dump_json()},
+               'editor_area': SimpleNamespace(value=script('Unapplied edit').model_dump_json()),
+               'ShortsScript': ShortsScript, 'safe_notify': Mock()}
+        callback('planning_tab.py', 'save_current_script', env)()
+        state.save_script_copy.assert_not_called()
+        self.assertIn('먼저', env['safe_notify'].call_args.args[0])
+
     async def test_review_only_edit_stops_before_clearing_saved_result(self):
         state = AppState(script=script(), final_video_path='reviewed-final.mp4', generated_clips=['old.mp4'])
         state.confirm_script_review()

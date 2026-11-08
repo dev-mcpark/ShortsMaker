@@ -564,6 +564,7 @@ class ProductionGateTests(unittest.TestCase):
                 script = sample_script()
                 script.scenes = script.scenes[:1]
                 local = ProductionService(mode="video", editor_options={"bgm_volume": 0})
+                local._valid_clip = Mock(return_value=True)  # This wiring fixture has no encoded video bytes.
                 local._editor = fake_editor(output)
                 local._editor.validate_narration = Mock()
                 result = asyncio.run(local.produce_video(
@@ -838,6 +839,7 @@ class ProductionGateTests(unittest.TestCase):
             clip.touch()
             output.touch()
             service = ProductionService(mode="video")
+            service._valid_clip = Mock(return_value=True)  # This wiring fixture has no encoded video bytes.
             service._editor = fake_editor(output)
             service._uploader = SimpleNamespace(upload=AsyncMock(return_value="video-id"))
             script = sample_script()

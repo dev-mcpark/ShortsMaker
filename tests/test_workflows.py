@@ -285,6 +285,7 @@ class WorkflowTests(unittest.TestCase):
             clip = Path(directory) / "clip.mp4"
             clip.touch()
             service = ProductionService(mode="video")
+            service._valid_clip = Mock(return_value=True)  # This wiring fixture has no encoded video bytes.
             editor = SimpleNamespace(compose_video=AsyncMock(return_value=str(output)))
             service._editor = editor
             script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=1)])
@@ -719,6 +720,7 @@ class WorkflowTests(unittest.TestCase):
             output = Path(directory) / "output.mp4"
             output.touch()
             service = ProductionService()
+            service._valid_clip = Mock(return_value=True)  # This wiring fixture has no encoded video bytes.
             async def compose(*args, progress_callback, is_cancelled):
                 progress_callback(50, "씬 편집 중")
                 return str(output)

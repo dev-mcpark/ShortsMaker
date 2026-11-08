@@ -818,6 +818,7 @@ class ReviewRegressions(unittest.TestCase):
                 "last_script": script.model_dump(), "last_planned_url": script.source_url,
             })
             service = ProductionService(mode="image")
+            service._valid_clip = Mock(return_value=True)  # This wiring fixture has no encoded video bytes.
             service._editor = SimpleNamespace(
                 validate_narration=Mock(), compose_video=AsyncMock(return_value=str(video)),
                 selected_bgm_path=None, bgm_volume=0,

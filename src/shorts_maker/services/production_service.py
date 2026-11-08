@@ -724,10 +724,13 @@ class ProductionService:
             if manual_clip_paths is not None and not manual_clip_paths:
                 return self._failed_result("씬 1의 클립 파일이 없습니다.", clips)
             manual_paths = manual_clip_paths or {}
+            scene_numbers = {scene.scene_number for scene in script.scenes}
+            if any(type(number) is not int or number not in scene_numbers for number in manual_paths):
+                return self._failed_result('현재 대본에 있는 장면 번호로 클립을 연결하세요.', clips)
             for scene_number, path in manual_paths.items():
-                if not path or not os.path.isfile(path):
+                if not path or not await asyncio.to_thread(self._valid_clip, Path(path), 'video'):
                     return self._failed_result(
-                        f"씬 {scene_number}의 클립 파일이 없거나 접근할 수 없습니다.", clips,
+                        f"씬 {scene_number}의 클립 파일이 없거나 재생할 수 없습니다.", clips,
                     )
             if self.is_cancelled():
                 return self._failed_result("사용자에 의해 취소됨", clips)

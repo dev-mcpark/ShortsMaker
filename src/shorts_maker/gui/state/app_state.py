@@ -152,6 +152,32 @@ class AppState:
 
     # ── State mutators ────────────────────────────────────────────────────────
 
+    def save_script_copy(self):
+        from shorts_maker.services.script_store import save_script_copy
+        from shorts_maker.utils.config import settings
+
+        if self.is_busy or self.script is None:
+            raise ValueError('작업이 끝난 뒤 저장할 대본을 확인하세요.')
+        return save_script_copy(self.script, settings.scripts_dir)
+
+    def invalidate_video_result(self):
+        if self.is_busy:
+            raise ValueError('작업 중에는 제작 결과를 변경할 수 없습니다.')
+        self.reset_pipeline()
+        self.final_video_path = None
+        self.scene_clips = []
+        self.generated_clips = []
+        self._production_service = None
+
+    def restore_manual_workspace(self, script_id: str):
+        from shorts_maker.utils.veo_prompt_exporter import VeoPromptExporter
+
+        if self.is_busy or self.script is None or not self.manual_video_mode:
+            raise ValueError('작업이 끝난 뒤 현재 대본의 보유 영상 연결 화면에서 복원하세요.')
+        VeoPromptExporter().validate_workspace(self.script, script_id)
+        self.invalidate_video_result()
+        self.manual_script_id = script_id
+
     def save_audio_choices(self):
         from shorts_maker.services.audio_choices import save_audio_choices
 

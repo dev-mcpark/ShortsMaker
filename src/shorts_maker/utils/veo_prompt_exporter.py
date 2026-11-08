@@ -30,15 +30,62 @@ class VeoPromptExporter:
 
     def get_clips_dir(self, script_id: str) -> Path:
         """해당 스크립트의 클립 저장 디렉토리 반환 및 생성"""
-        if not re.fullmatch(r"[\w-]{1,80}", script_id):
-            raise ValueError("유효하지 않은 스크립트 ID입니다.")
-        clips_dir = settings.clips_dir / script_id
+        clips_dir = self._clips_dir(script_id)
         clips_dir.mkdir(parents=True, exist_ok=True)
         return clips_dir
 
+    def _clips_dir(self, script_id: str) -> Path:
+        if not re.fullmatch(r"[\w-]{1,80}", script_id):
+            raise ValueError("유효하지 않은 스크립트 ID입니다.")
+        clips_dir = settings.clips_dir / script_id
+        if not clips_dir.resolve().is_relative_to(settings.clips_dir.resolve()):
+            raise ValueError('클립 작업 폴더가 출력 경계를 벗어났습니다.')
+        return clips_dir
+
+    def create_workspace(self, script: ShortsScript) -> str:
+        script_id = self.get_script_id(script)
+        directory = self.get_clips_dir(script_id)
+        (directory / 'workspace.json').write_text(json.dumps({
+            'schema_version': 1, 'script_id': script_id,
+            'script': script.model_dump(mode='json'),
+        }, ensure_ascii=False, indent=2), encoding='utf-8')
+        return script_id
+
+    def validate_workspace(self, script: ShortsScript, script_id: str) -> None:
+        path = self._clips_dir(script_id) / 'workspace.json'
+        if not path.resolve().is_relative_to(settings.clips_dir.resolve()):
+            raise ValueError('작업 기록이 출력 경계를 벗어났습니다.')
+        try:
+            record = json.loads(path.read_text(encoding='utf-8'))
+            if (not isinstance(record, dict) or type(record.get('schema_version')) is not int
+                    or record['schema_version'] != 1 or record.get('script_id') != script_id
+                    or record.get('script') != script.model_dump(mode='json')):
+                raise ValueError('현재 대본과 일치하는 작업 기록이 필요합니다.')
+        except (OSError, ValueError) as error:
+            raise ValueError('보유 영상 작업을 복원할 수 없습니다. 현재 대본과 작업 기록을 확인하세요.') from error
+        for scene in script.scenes:
+            self.get_clip_path(script_id, scene.scene_number)
+
+    def list_workspaces(self, script: ShortsScript) -> Dict[str, str]:
+        workspaces = []
+        for path in settings.clips_dir.glob('*/workspace.json'):
+            try:
+                script_id = path.parent.name
+                self.validate_workspace(script, script_id)
+                ready = sum(item['exists'] for item in self.get_scenes_status(script, script_id))
+                if ready:
+                    workspaces.append((path.parent.stat().st_mtime, script_id,
+                                       f'{script_id} · 연결 {ready}/{len(script.scenes)}장면'))
+            except (OSError, ValueError):
+                continue
+        return {script_id: label for _, script_id, label in sorted(workspaces, reverse=True)}
+
     def get_clip_path(self, script_id: str, scene_number: int) -> Path:
         """씬 번호에 해당하는 클립 파일 경로 반환"""
-        return self.get_clips_dir(script_id) / f"scene_{scene_number:02d}.mp4"
+        path = self.get_clips_dir(script_id) / f"scene_{scene_number:02d}.mp4"
+        if not path.resolve().is_relative_to(settings.clips_dir.resolve()):
+            raise ValueError('장면 파일이 클립 출력 경계를 벗어났습니다.')
+        return path
 
     def get_prompt_for_scene(self, scene: VideoScene) -> str:
         """씬의 VEO 프롬프트 조합: visual_description + motion_instruction"""
@@ -62,7 +109,7 @@ class VeoPromptExporter:
             result.append({
                 "scene_number": scene.scene_number,
                 "clip_path": str(clip_path),
-                "exists": clip_path.exists(),
+                "exists": clip_path.is_file(),
                 "prompt": self.get_prompt_for_scene(scene),
                 "visual_description": scene.visual_description,
                 "motion_instruction": scene.motion_instruction,
@@ -74,7 +121,7 @@ class VeoPromptExporter:
     def all_clips_ready(self, script: ShortsScript, script_id: str) -> bool:
         """모든 씬의 클립 파일이 존재하는지 확인"""
         return all(
-            self.get_clip_path(script_id, scene.scene_number).exists()
+            self.get_clip_path(script_id, scene.scene_number).is_file()
             for scene in script.scenes
         )
 

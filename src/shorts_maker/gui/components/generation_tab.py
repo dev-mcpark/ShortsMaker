@@ -2,7 +2,8 @@
 import asyncio
 import json
 from pathlib import Path
-from nicegui import ui
+from nicegui import app, ui
+from uuid import uuid4
 from typing import TYPE_CHECKING
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
@@ -27,6 +28,15 @@ SCENE_ACCENT = [
     ('from-teal-600', 'to-emerald-600', 'border-teal-500/30', 'bg-teal-950/20', 'text-teal-300'),
     ('from-fuchsia-600', 'to-rose-600', 'border-fuchsia-500/30', 'bg-fuchsia-950/20', 'text-fuchsia-300'),
 ]
+
+
+def _manual_preview_source(clip_path: str) -> str:
+    # Old widgets must not delete the route of a newly restored preview of the same file.
+    # shortcut: routes live until the browser client closes; reclaim earlier if long sessions accumulate previews.
+    url = app.add_media_file(local_file=clip_path,
+                             url_path=f'/manual-review/{uuid4().hex}/{Path(clip_path).name}')
+    ui.context.client.on_delete(lambda: app.remove_route(url))
+    return url
 
 
 def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None:
@@ -304,17 +314,56 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
         return
 
     if not state.manual_script_id:
-        state.manual_script_id = exporter.get_script_id(state.script)
+        try:
+            state.manual_script_id = exporter.create_workspace(state.script)
+        except (OSError, ValueError) as error:
+            start_edit_btn.disable()
+            with scene_cards_container:
+                ui.label(f'보유 영상 작업을 준비할 수 없습니다: {error}').classes('text-amber-200')
+            return
 
-    scenes_status = exporter.get_scenes_status(state.script, state.manual_script_id)
+    try:
+        scenes_status = exporter.get_scenes_status(state.script, state.manual_script_id)
+        workspaces = exporter.list_workspaces(state.script)
+    except (OSError, ValueError) as error:
+        start_edit_btn.disable()
+        with scene_cards_container:
+            ui.label(f'보유 영상 작업 기록을 확인하세요: {error}').classes('text-amber-200')
+        return
     ready_count = sum(1 for s in scenes_status if s["exists"])
     total = len(scenes_status)
-    if total and ready_count == total and settings.paid_production_enabled and not state.is_busy:
+    if (total and ready_count == total and settings.paid_production_enabled
+            and not state.is_busy and state.is_script_reviewed()):
         start_edit_btn.enable()
     else:
         start_edit_btn.disable()
 
     with scene_cards_container:
+        if not settings.paid_production_enabled:
+            ui.label('검토 모드: 클립 연결·복원·재생은 가능합니다. 새 음성이 필요한 편집은 승인된 유료 회차에서 진행합니다.').classes(
+                'col-span-full w-full p-3 border border-amber-700/40 rounded-lg text-sm text-amber-200')
+        workspaces.pop(state.manual_script_id, None)
+        if workspaces:
+            with ui.column().classes('col-span-full w-full p-4 bg-slate-900 border border-slate-700 rounded-lg'):
+                ui.label('이 대본으로 연결했던 영상 작업 이어가기').classes('text-sm text-white')
+                workspace_select = ui.select(workspaces, label='저장된 보유 영상 작업', with_input=True).classes('w-full').props('outlined dark')
+                rendered_script = state.script.model_dump_json()
+
+                def restore_workspace():
+                    if not state.script or state.script.model_dump_json() != rendered_script:
+                        safe_notify('대본이 변경됐습니다. 장면·영상 제작 화면을 다시 열어 주세요.', type='warning')
+                        return
+                    try:
+                        state.restore_manual_workspace(workspace_select.value or '')
+                        render_manual_panel(state, exporter, start_edit_btn, scene_cards_container)
+                        safe_notify('연결한 영상 작업을 복원했습니다. 장면을 재생해 확인하세요.', type='positive')
+                    except (OSError, ValueError) as error:
+                        safe_notify(f'작업 복원 실패: {error}', type='negative')
+
+                ui.button('선택한 작업 이어가기', on_click=restore_workspace).props('icon=restore color=teal').bind_enabled_from(
+                    state, 'is_busy', lambda busy: not busy)
+                ui.label('현재 대본과 정확히 일치하는 기록만 표시합니다. 복원은 파일 연결이며 품질 승인·유료 실행 승인이 아닙니다.').classes('text-xs text-slate-400')
+
         # ── 상단 진행 정보 (Grid의 가로 한 줄 전체 차지) ──
         with ui.element('div').classes('col-span-full w-full rounded-xl bg-slate-900 border border-slate-800 p-5 mb-2'):
             with ui.row().classes('w-full items-center justify-between mb-3'):
@@ -374,7 +423,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                     if exists:
                         with ui.row().classes('items-center gap-1 bg-white/20 rounded-full px-2 py-0.5'):
                             ui.icon('check', size='xs').classes('text-white')
-                            ui.label('완료').classes('text-[10px] text-white font-semibold')
+                            ui.label('파일 연결됨').classes('text-[10px] text-white font-semibold')
                     else:
                         ui.label('대기').classes('text-[10px] text-white/70 font-semibold bg-white/10 px-2 py-0.5 rounded-full')
 
@@ -411,6 +460,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                         # 업로드 완료된 클립명 표시
                         if exists:
                             clip_name = scene_info["clip_path"].split('/')[-1]
+                            ui.video(_manual_preview_source(scene_info['clip_path'])).props('controls muted').classes('w-full max-h-[240px] bg-black')
                             with ui.element('div').classes('w-full rounded-lg bg-violet-950/20 border border-violet-500/20 px-2 py-1.5 flex items-center justify-between mb-1.5'):
                                 with ui.row().classes('items-center gap-1.5 overflow-hidden'):
                                     ui.icon('video_file', size='xs').classes('text-violet-400 shrink-0')
@@ -436,6 +486,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                                     exporter.save_uploaded_clip(
                                         file_bytes, bound_script_id, sn
                                     )
+                                    state.invalidate_video_result()
 
                                     safe_notify(f'씬 {sn} 비디오 클립 업로드 완료!', type='positive')
 
@@ -633,7 +684,7 @@ def render_generation_tab(state: 'AppState') -> None:
                 with ui.column().classes('w-full p-4 lg:p-6 gap-2') as manual_preview:
                     ui.label('편집 결과 미리보기').classes('text-sm font-bold text-white')
                     manual_video_player = ui.video(state.final_video_path or '').classes('w-full max-w-[220px] max-h-[360px] bg-black')
-                manual_preview.visible = bool(state.final_video_path)
+                manual_preview.bind_visibility_from(state, 'final_video_path', bool)
                 scene_cards_container = ui.grid(columns='repeat(auto-fill, minmax(min(100%, 320px), 1fr))').classes('w-full gap-4 p-4 lg:p-6')
 
         # ── 3. VISIBILITY SWITCHING LOGIC ──

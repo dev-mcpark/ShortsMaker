@@ -1,5 +1,22 @@
 # Studio UI and code review
 
+### 2026-11-08 — User intervention and architecture audit
+
+Audited UI controls through AppState, ProductionService, storage, cost gates and provider/editor/uploader adapters using the local `production-audit` workflow and the dependency-boundary lens from `hexagonal-architecture`. The implementation remains a modular monolith with concrete lazy adapters, not a completed Ports & Adapters migration. That scale is suitable for this local single-operator program; no microservices, queue framework or new dependency is needed.
+
+| User action | Current support / boundary |
+| --- | --- |
+| Choose RSS field/article and initiate planning | Implemented through the shared service. Current review-only deployment disables paid calls; UI does not inherit an operator episode's budget authorization. |
+| Intervene in a script | JSON editing is available. Added explicit current-script copy saving, immediate saved-list refresh and a guard against saving unapplied JSON. Old files are retained; copied/reloaded work has no new model or scene approval. |
+| Inspect/change first frame or raw | Existing file preview, source-bound first-frame criteria and raw approve/reject records remain authoritative. UI still requires a locally prepared seed image. Changing the script/frame requires matching review bindings again. |
+| Supply/replace scenes and resume after restart | Added script-bound manual workspace metadata, explicit workspace selection/validation, clip playback and stale-result invalidation on replacement/restore. Corrupt/mismatched/outside-root records and unbound legacy folders cannot be guessed into the active script. File connection is not a native raw verdict. |
+| Stop and resume | Cooperative cancellation prevents later work after the current call finishes. In-flight paid requests and uncertain results retain their audits/holds. Existing raw caching survives; Studio does not yet accept retained narration, and ordinary narration may need new spending on a later run. |
+| Edit/inspect the final cut and upload | Existing whole-cut/metadata/private-upload gates remain. UI is not a timeline editor. Public release remains the owner's decision. |
+
+Three concrete defects were fixed in the same pass. First, UI-only script changes and random per-session clip IDs lacked a safe recovery path. `services/script_store.py` now owns the existing atomic unique-copy operation used by both validated planner output and explicit UI saving; AppState owns busy/review invalidation, and VeoPromptExporter owns the exact-script workspace/file boundary. Second, the new manual preview reproduced a NiceGUI route-lifetime collision: old widgets using the same auto media route could remove the current route and return404 despite an intact MP4. Manual preview routes are unique and owned until the browser client is deleted; an offline two-widget regression retains the surviving route. Third, production previously checked only manual-file existence before paid narration; it now checks actual decoding through the existing shared clip validator and rejects unknown scene IDs before editor/provider work. Positive wiring fixtures explicitly mock encoded media; corrupt-media and unknown-scene stops are tested separately.
+
+Remaining architecture work is explicit: a persistent production job with user-visible episode authorization/budget and stage commands would connect direct UI paid execution to the existing operator path. Seed-image creation/review and retained-narration selection need UI adapters before the full pipeline can be called self-contained. Process-local session and credential settings still assume a trusted local owner; multi-user isolation is unverified. Keep these open rather than switching the global paid flag or weakening current gates. Current runtime and browser proof belong to [STATUS](STATUS.md).
+
 ### 2026-11-08 — Local production usability follow-up
 
 Evaluated the existing source → script → first-frame → muted-raw → narration/edit → private-upload path. Source/hash binding, retained requests, paid preflight and private-upload identity remain useful boundaries. The local UI still requires prepared first-frame files and separate raw judgments; its editor does not accept prepared narration the way the offline CLI does. A running local server and queue host are not proof of unattended completion. No new production episode or provider request was needed to reproduce the interface problems.

@@ -4,7 +4,7 @@ import json
 from nicegui import ui
 from typing import TYPE_CHECKING
 
-from shorts_maker.gui.components.common.safe_ui import safe_notify
+from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.config.ui_theme import SCENE_GRADIENTS
 from shorts_maker.planner.script_planner import ShortsScript
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
@@ -293,40 +293,63 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                     ui.icon('folder_open', size='xs').classes('text-amber-400')
                     ui.label('저장된 각본').classes('text-xs font-bold text-amber-300 uppercase tracking-wider')
 
-                script_dir = settings.scripts_dir
-                if script_dir.exists():
-                    script_files = _saved_script_options()
+                @ui.refreshable
+                def saved_scripts():
+                    script_dir = settings.scripts_dir
+                    if script_dir.exists():
+                        script_files = _saved_script_options()
 
-                    if script_files:
-                        script_select = ui.select(
-                            options=script_files,
-                            label='저장된 각본 검색', with_input=True,
-                        ).props('outlined dense dark').classes('w-full mb-2')
-                        ui.label('제목·파일명으로 검색 · 파일 최근 수정순').classes('text-xs text-slate-400')
+                        if script_files:
+                            script_select = ui.select(
+                                options=script_files,
+                                label='저장된 각본 검색', with_input=True,
+                            ).props('outlined dense dark').classes('w-full mb-2')
+                            ui.label('제목·파일명으로 검색 · 파일 최근 수정순').classes('text-xs text-slate-400')
 
-                        async def load_selected_script():
-                            if state.is_busy:
-                                safe_notify('진행 중인 제작·업로드가 끝난 뒤 각본을 불러오세요.', type='warning')
-                                return
-                            if script_select.value in script_files:
-                                try:
-                                    with (script_dir / script_select.value).open('r', encoding='utf-8') as f:
-                                        data = json.load(f)
-                                    loaded_script = ShortsScript.model_validate(data)
-                                    state.load_saved_script(loaded_script)
-                                    update_script_preview()
-                                    update_candidates_panel()
-                                    feedback_section.visible = False
-                                    editor_area.value = json.dumps(data, indent=2, ensure_ascii=False)
-                                    safe_notify(f'불러옴: {state.script.title}', type='positive')
-                                except Exception as e:
-                                    safe_notify(f'로드 오류: {e}', type='negative')
+                            async def load_selected_script():
+                                if state.is_busy:
+                                    safe_notify('진행 중인 제작·업로드가 끝난 뒤 각본을 불러오세요.', type='warning')
+                                    return
+                                if script_select.value in script_files:
+                                    try:
+                                        with (script_dir / script_select.value).open('r', encoding='utf-8') as f:
+                                            data = json.load(f)
+                                        loaded_script = ShortsScript.model_validate(data)
+                                        state.load_saved_script(loaded_script)
+                                        update_script_preview()
+                                        update_candidates_panel()
+                                        feedback_section.visible = False
+                                        editor_area.value = json.dumps(data, indent=2, ensure_ascii=False)
+                                        safe_notify(f'불러옴: {state.script.title}', type='positive')
+                                    except Exception as e:
+                                        safe_notify(f'로드 오류: {e}', type='negative')
 
-                        ui.button('불러오기', on_click=load_selected_script).props('flat color=amber icon=download dense').classes('w-full').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+                            ui.button('불러오기', on_click=load_selected_script).props('flat color=amber icon=download dense').classes('w-full').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+                        else:
+                            ui.label('저장된 각본 없음').classes('text-xs text-gray-600')
                     else:
-                        ui.label('저장된 각본 없음').classes('text-xs text-gray-600')
-                else:
-                    ui.label(f'{script_dir} 폴더 없음').classes('text-xs text-gray-600')
+                        ui.label(f'{script_dir} 폴더 없음').classes('text-xs text-gray-600')
+
+                saved_scripts()
+
+                def save_current_script():
+                    if (not state.script or state.script.model_dump_json() != previewed_script['json']):
+                        safe_notify('현재 대본 미리보기를 확인한 뒤 저장하세요.', type='warning')
+                        return
+                    try:
+                        if (editor_area.value and ShortsScript.model_validate_json(editor_area.value).model_dump_json()
+                                != state.script.model_dump_json()):
+                            safe_notify('JSON 변경을 먼저 현재 작업에 적용한 뒤 저장하세요.', type='warning')
+                            return
+                        path = state.save_script_copy()
+                        safe_refresh(saved_scripts)
+                        safe_notify(f'새 파일로 저장했습니다: {path.name}. 저장은 검토 승인이 아닙니다.', type='positive')
+                    except (OSError, ValueError) as error:
+                        safe_notify(f'대본 저장 실패: {error}', type='negative')
+
+                ui.button('현재 대본 새 파일로 저장', on_click=save_current_script).props('flat icon=save').classes('w-full').bind_enabled_from(
+                    state, 'is_busy', lambda busy: not busy and state.script is not None)
+                ui.label('JSON 수정은 먼저 적용하세요. 저장한 사본은 재시작 후 다시 불러올 수 있으며 원본은 보존됩니다.').classes('text-xs text-slate-400')
 
             # JSON 편집기 (고급)
             with ui.expansion('JSON 편집기', icon='code').classes('w-full').props('header-class="text-xs text-gray-300 px-0"'):
@@ -348,7 +371,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                         safe_notify(f'JSON 오류: {e}', type='negative')
 
                 ui.button('현재 작업에 적용', on_click=save_script).props('flat color=green-4 icon=save dense').classes('w-full mt-1').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
-                ui.label('적용은 현재 작업에만 반영됩니다. 원본 JSON 파일을 별도로 보관하세요.').classes('text-xs text-slate-400 mt-1')
+                ui.label('적용 후 위의 현재 대본 새 파일로 저장을 누르면 수정본을 보관할 수 있습니다. 출처·각본·장면 검토는 다시 필요합니다.').classes('text-xs text-slate-400 mt-1')
 
             # 피드백 섹션 (스크립트 생성 후 표시)
             with ui.element('div').classes('w-full rounded-xl bg-slate-900/60 border border-orange-500/30 p-4') as feedback_section:
