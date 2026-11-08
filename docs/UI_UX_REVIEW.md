@@ -32,6 +32,12 @@ Applied `make-interfaces-feel-better` to reduce visible form density, clarify ac
 
 Regression coverage includes older-than-five scripts, title/mtime ordering, malformed/outside entries, multi-scene summary/action isolation, rejected/stale/uncertain states, frame-triggered raw refresh, and preserving the prior cut on a read-only edit attempt. Browser evidence and final test/runtime results are recorded in [STATUS](STATUS.md). These changes improve local review ergonomics, not video quality or measured viewer retention. No paid verification or fresh upload is part of this pass.
 
+### 2026-11-08 — Local material management follow-up
+
+The seventh menu, **재료 보관함**, now lists the five material roots, total/folder logical bytes and disk free space, with search/type/folder filters, size sorting, pagination and scoped media previews. Protected files show the retained usage or preservation reason. Explicit cleanup only admits old unreferenced temporary media or unuploaded unreferenced root edits with usable production records; the confirmation lists exact names/bytes and requires a separate checkbox. Final service checks bind identities/hashes and repeat reference/upload/busy checks; receipts preserve successes and partial failures. No force-delete action is exposed for originals, records or referenced cuts.
+
+**402 offline tests pass**. Real browser checks searched/selected a disposable local MP4, played it muted to end without media error, verified the disabled-until-confirmed deletion button, removed only that fixture and cleared its preview. Original113 root MP4 hashes, schedule attachment and budget readbacks remain unchanged. Desktop1440px and390px touch checks kept controls/page bounds within the viewport; the narrow table scrolls internally. The real post-fixture inventory has no eligible cleanup candidates, so this is not evidence of production-space reclamation. [Private evidence](../outputs/evaluation/studio_ui_review_20261108/storage_management.json) owns runtime/readback details. Image/audio preview routes share the bounded media interface but were not separately played in this browser pass; no paid-provider or upload operation was tested live.
+
 ### 2026-11-08 — Full feature review and usage cleanup
 
 Used the click-path-audit workflow to trace each feature's rendered control to its callback, service and retained state; reviewed the staged commits with conventional-commit-review. No new provider call, upload, schedule activation/deletion, owner acceptance or ledger release was performed during this review.

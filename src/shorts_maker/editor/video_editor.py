@@ -5,7 +5,6 @@ import json
 import math
 import subprocess
 import time
-import glob
 from contextlib import suppress
 from pathlib import Path
 from typing import Callable, List, Optional
@@ -155,29 +154,6 @@ class VideoEditor:
             except Exception:
                 pass
 
-    def cleanup_old_temp_files(self, max_age_hours: int = 24):
-        """오래된 임시 파일 정리 (24시간 이상)"""
-        temp_dir = str(settings.temp_dir)
-        if not os.path.exists(temp_dir):
-            return
-
-        current_time = time.time()
-        max_age_seconds = max_age_hours * 3600
-        cleaned = 0
-
-        for pattern in ["*.mp3", "*.png", "*.mp4"]:
-            for filepath in glob.glob(os.path.join(temp_dir, pattern)):
-                try:
-                    file_age = current_time - os.path.getmtime(filepath)
-                    if file_age > max_age_seconds:
-                        os.remove(filepath)
-                        cleaned += 1
-                except OSError:
-                    pass
-
-        if cleaned > 0:
-            self.logger.info(f"🧹 오래된 임시 파일 {cleaned}개 정리")
-
     async def prepare_narration(self, script) -> List[str]:
         """Generate narration once, before the costly visual generation step."""
         self.preflight_music(script)
@@ -250,7 +226,7 @@ class VideoEditor:
             raise ValueError("씬 수와 내레이션 수가 일치하지 않습니다.")
         bgm_path = self.preflight_music(script)
         # 시작 시 오래된 임시 파일 정리
-        self.cleanup_old_temp_files()
+        # Retained temporary assets are cleaned explicitly through the reference-checked library.
 
         processed_clips = []
         final_video = None

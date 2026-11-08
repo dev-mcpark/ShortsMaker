@@ -22,6 +22,7 @@ from .planning_tab import render_planning_tab
 from .generation_tab import render_generation_tab
 from .publishing_tab import render_publishing_tab
 from .scheduling_tab import render_scheduling_tab
+from .asset_library_tab import render_asset_library_tab
 
 __all__ = [
     # Common utilities
@@ -45,4 +46,5 @@ __all__ = [
     'render_generation_tab',
     'render_publishing_tab',
     'render_scheduling_tab',
+    'render_asset_library_tab',
 ]

@@ -10,6 +10,7 @@ from shorts_maker.gui.components import (
     render_generation_tab,
     render_publishing_tab,
     render_scheduling_tab,
+    render_asset_library_tab,
 )
 from shorts_maker.gui.config.ui_theme import SIDEBAR_LEFT, WORKSPACE_CENTER, CONFIG_PANEL_RIGHT
 from shorts_maker.utils.bgm_manager import BGMManager
@@ -61,13 +62,14 @@ def render_main_page() -> None:
 
             # --- 2A. LEFT SIDEBAR RAIL (좌측 메뉴 바) ---
             with ui.element('div').classes(SIDEBAR_LEFT):
-                with ui.element('nav').props('aria-label="주 메뉴"').classes('w-full grid grid-cols-3 sm:grid-cols-6 xl:flex xl:flex-col gap-1 px-2'):
+                with ui.element('nav').props('aria-label="주 메뉴"').classes('w-full grid grid-cols-3 sm:grid-cols-4 xl:flex xl:flex-col gap-1 px-2'):
                     menu_items = [
                         ('workspace', 'edit_document', '제작 작업실'),
                         ('pipeline', 'playlist_play', '기획·진행 현황'),
                         ('sources', 'rss_feed', '소재·출처'),
                         ('scheduling', 'schedule', '예약 운영'),
                         ('publishing', 'cloud_upload', '완성본·업로드'),
+                        ('assets', 'folder_open', '재료 보관함'),
                         ('help', 'help_outline', '사용 안내'),
                     ]
 
@@ -338,6 +340,10 @@ def render_main_page() -> None:
                         with ui.element('div').classes('w-full flex-grow overflow-auto p-3 lg:p-6'):
                             render_publishing_tab(state)
 
+                    elif state.current_view == 'assets':
+                        with ui.element('div').classes('w-full flex-grow overflow-auto p-3 lg:p-6'):
+                            render_asset_library_tab(state)
+
                     elif state.current_view == 'help':
                         with ui.column().classes('w-full overflow-auto p-5 gap-4'):
                             ui.label('ShortsMaker 사용 안내').classes('text-xl font-bold text-white')
@@ -357,6 +363,9 @@ def render_main_page() -> None:
 **검토 모드 · API 생성 중지** 상태에서는 새 대본·음성·이미지·영상 API 생성이 차단됩니다. 저장된 자료 검토는 가능하며, 유료 제작은 승인된 회차 예산으로 진행합니다. 보유 영상을 연결해도 새 음성은 별도 API 비용이 들 수 있습니다.
 
 화면의 임시 입력은 서버 재시작 시 사라질 수 있습니다. 대본 JSON은 **현재 작업에 적용 → 현재 대본 새 파일로 저장** 순서로 수정본을 보관하세요. 보유 영상 연결 화면의 **선택한 작업 이어가기**로 같은 대본의 클립 작업을 복원할 수 있습니다. 음성·음악은 **각본별 음성·음악 설정 저장**으로 보존하세요.
+
+### 재료와 저장 공간
+**재료 보관함**에서 폴더·종류·파일명으로 찾고, 미디어 하나를 선택해 재생할 수 있습니다. **정리 후보만 보기 → 파일 선택 → 선택 파일 정리 검토**에서 삭제 목록과 크기를 확인합니다. 영구 삭제는 복구할 수 없습니다. 원본·음악·비용·승인 기록, 업로드된 영상, 검토 문서가 참조하는 파일은 보존합니다. 정리 후보가 없으면 보호 사유를 확인하세요.
 """).classes('text-slate-200 leading-relaxed max-w-3xl')
 
             # 최초 기본 뷰 설정 및 구동
