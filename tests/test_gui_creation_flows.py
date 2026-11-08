@@ -41,7 +41,7 @@ def planning_environment(state, service):
             'url_input': SimpleNamespace(value=''), 'category_select': SimpleNamespace(value='전체 분야'),
             'spinner': SimpleNamespace(visible=False), 'safe_notify': Mock(), 'logger': Mock(),
             'update_script_preview': Mock(), 'update_candidates_panel': Mock(),
-            'editor_area': SimpleNamespace(value=''), 'feedback_section': SimpleNamespace(visible=False),
+            'editor_area': SimpleNamespace(value=''), 'restore_editor': Mock(), 'feedback_section': SimpleNamespace(visible=False),
             'regen_counter_label': SimpleNamespace(text=''), 'ShortsScript': ShortsScript, 'json': json}
 
 

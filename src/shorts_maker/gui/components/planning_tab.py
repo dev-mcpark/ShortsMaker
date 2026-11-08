@@ -56,7 +56,12 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
 
     script_preview_container = None
     editor_area = None
+    editor_source = {'key': state.script_editor_key()}
     previewed_script = {'json': None}
+
+    def restore_editor():
+        editor_source['key'] = state.script_editor_key()
+        editor_area.value = state.script_editor_text()
 
     def apply_script(script, context=None):
         audio = {key: getattr(state, key) for key in ('tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume')}
@@ -258,7 +263,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                             update_script_preview()
                             update_candidates_panel()
                             try:
-                                editor_area.value = script.model_dump_json(indent=2)
+                                restore_editor()
                                 safe_notify(f'각본 생성 완료: {script.title}', type='positive')
                                 feedback_section.visible = bool(context)
                                 regen_counter_label.text = f'재생성: 0/{context.max_attempts if context else 3}회'
@@ -319,7 +324,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                                         update_script_preview()
                                         update_candidates_panel()
                                         feedback_section.visible = False
-                                        editor_area.value = json.dumps(data, indent=2, ensure_ascii=False)
+                                        restore_editor()
                                         safe_notify(f'불러옴: {state.script.title}', type='positive')
                                     except Exception as e:
                                         safe_notify(f'로드 오류: {e}', type='negative')
@@ -337,7 +342,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                         safe_notify('현재 대본 미리보기를 확인한 뒤 저장하세요.', type='warning')
                         return
                     try:
-                        if (editor_area.value and ShortsScript.model_validate_json(editor_area.value).model_dump_json()
+                        if (not editor_area.value or ShortsScript.model_validate_json(editor_area.value).model_dump_json()
                                 != state.script.model_dump_json()):
                             safe_notify('JSON 변경을 먼저 현재 작업에 적용한 뒤 저장하세요.', type='warning')
                             return
@@ -353,16 +358,24 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
 
             # JSON 편집기 (고급)
             with ui.expansion('JSON 편집기', icon='code').classes('w-full').props('header-class="text-xs text-gray-300 px-0"'):
-                editor_area = ui.textarea().classes('w-full font-mono text-xs bg-slate-900 text-green-300 p-2 rounded').props('outlined rows=10')
+                editor_area = ui.textarea('각본 JSON', value=state.script_editor_text(),
+                    on_change=lambda event: state.remember_script_draft(editor_source['key'], event.value or '')
+                ).classes('w-full font-mono text-xs bg-slate-900 text-green-300 p-2 rounded').props('outlined rows=10').bind_enabled_from(
+                    state, 'is_busy', lambda busy: not busy)
 
                 def save_script():
                     if state.is_busy:
                         safe_notify('진행 중인 제작·업로드가 끝난 뒤 각본을 적용하세요.', type='warning')
                         return
+                    if editor_source['key'] != state.script_editor_key():
+                        safe_notify('대본이 바뀌었습니다. 편집기를 다시 열어 확인하세요.', type='warning')
+                        return
                     try:
                         data = json.loads(editor_area.value)
                         edited_script = ShortsScript(**data)
                         apply_script(edited_script)
+                        state.script_editor_drafts.pop(state.script_editor_key(), None)
+                        restore_editor()
                         update_script_preview()
                         update_candidates_panel()
                         feedback_section.visible = False
@@ -371,6 +384,16 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                         safe_notify(f'JSON 오류: {e}', type='negative')
 
                 ui.button('현재 작업에 적용', on_click=save_script).props('flat color=green-4 icon=save dense').classes('w-full mt-1').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+                def discard_draft():
+                    if state.is_busy or editor_source['key'] != state.script_editor_key():
+                        safe_notify('현재 대본 편집기를 다시 열어 확인하세요.', type='warning')
+                        return
+                    state.script_editor_drafts.pop(editor_source['key'], None)
+                    restore_editor()
+
+                ui.button('미적용 수정 되돌리기', on_click=discard_draft).props('flat color=grey-4').classes('w-full min-h-[44px]').bind_enabled_from(
+                    state, 'is_busy', lambda busy: not busy)
+                ui.label('입력은 이 서버 세션에서 대본별로 유지됩니다. 메뉴 이동으로 사라지지 않지만 서버 재시작 전에는 적용 후 새 파일로 저장하세요.').classes('text-xs text-amber-200 mt-1')
                 ui.label('적용 후 위의 현재 대본 새 파일로 저장을 누르면 수정본을 보관할 수 있습니다. 출처·각본·장면 검토는 다시 필요합니다.').classes('text-xs text-slate-400 mt-1')
 
             # 피드백 섹션 (스크립트 생성 후 표시)
@@ -419,7 +442,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                             apply_script(new_script, context)
                             update_script_preview()
                             try:
-                                editor_area.value = new_script.model_dump_json(indent=2)
+                                restore_editor()
                                 safe_notify(f'재생성 완료: {new_script.title}', type='positive')
                                 feedback_input.value = ''
                             except RuntimeError:
@@ -449,6 +472,9 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                 def confirm_script():
                     if state.is_busy:
                         safe_notify('진행 중인 제작·업로드가 끝난 뒤 각본을 확인하세요.', type='warning')
+                        return
+                    if state.has_unapplied_script_draft():
+                        safe_notify('미적용 JSON 수정이 있습니다. 먼저 적용하거나 되돌린 뒤 각본을 확인하세요.', type='warning')
                         return
                     if state.script and state.script.model_dump_json() != previewed_script['json']:
                         safe_notify('각본이 변경됐습니다. 미리보기를 새로고침하고 다시 확인하세요.', type='warning')

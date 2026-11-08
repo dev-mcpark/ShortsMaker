@@ -45,6 +45,7 @@ class AppState:
     # Results
     script: Optional["ShortsScript"] = None
     reviewed_script_sha256: Optional[str] = None
+    script_editor_drafts: Dict[str, str] = field(default_factory=dict, repr=False)
     script_context: Optional["ScriptGenerationContext"] = None
     topic_candidates: List["TopicCandidate"] = field(default_factory=list)
     scene_clips: List[str] = field(default_factory=list)
@@ -219,6 +220,30 @@ class AppState:
         self.reviewed_script_sha256 = hashlib.sha256(
             self.script.model_dump_json().encode("utf-8")
         ).hexdigest()
+
+    def script_editor_key(self) -> str:
+        source = self.script.model_dump_json() if self.script else ''
+        return hashlib.sha256(source.encode('utf-8')).hexdigest()
+
+    def script_editor_text(self) -> str:
+        return self.script_editor_drafts.get(
+            self.script_editor_key(), self.script.model_dump_json(indent=2) if self.script else '')
+
+    def remember_script_draft(self, key: str, text: str) -> None:
+        if not self.is_busy and key == self.script_editor_key():
+            self.script_editor_drafts[key] = text
+
+    def has_unapplied_script_draft(self) -> bool:
+        from shorts_maker.planner.models import ShortsScript
+
+        draft = self.script_editor_drafts.get(self.script_editor_key())
+        if draft is None or (self.script is None and not draft.strip()):
+            return False
+        try:
+            parsed = ShortsScript.model_validate_json(draft)
+            return self.script is None or parsed.model_dump_json() != self.script.model_dump_json()
+        except ValueError:
+            return True
 
     def is_script_reviewed(self) -> bool:
         return bool(self.script and self.reviewed_script_sha256 == hashlib.sha256(

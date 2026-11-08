@@ -21,6 +21,7 @@ def render_asset_library_tab(state) -> None:
         busy=lambda: state.is_busy or any(s.is_busy for s in SessionManager._sessions.values()),
         active_references=lambda: [
             {'video': s.final_video_path, 'clips': s.generated_clips,
+             'drafts': list(s.script_editor_drafts.values()),
              'script': s.script.model_dump(mode='json') if s.script else None}
             for s in SessionManager._sessions.values()
         ],
