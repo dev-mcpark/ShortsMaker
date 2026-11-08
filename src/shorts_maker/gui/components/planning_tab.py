@@ -38,6 +38,19 @@ def estimate_new_visual_cost(script: ShortsScript, mode: str) -> float:
     return total
 
 
+def _saved_script_options() -> dict[str, str]:
+    scripts = []
+    for path in settings.scripts_dir.glob('*.json'):
+        try:
+            if not path.resolve().is_relative_to(settings.scripts_dir.resolve()):
+                continue
+            script = ShortsScript.model_validate_json(path.read_text(encoding='utf-8'))
+            scripts.append((path.stat().st_mtime, path.name, f'{script.title} · {path.name}'))
+        except (OSError, ValueError):
+            continue
+    return {name: label for _, name, label in sorted(scripts, reverse=True)}
+
+
 def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
     """Script Planning 탭 렌더링"""
 
@@ -269,7 +282,10 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                 ui.button(
                     '각본 생성하기',
                     on_click=generate_script
-                ).classes('w-full mt-2').props('color=pink-9 unelevated icon=auto_awesome size=md').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+                ).classes('w-full mt-2').props('color=pink-9 unelevated icon=auto_awesome size=md').bind_enabled_from(
+                    state, 'is_busy', lambda busy: not busy and settings.paid_production_enabled)
+                if not settings.paid_production_enabled:
+                    ui.label('검토 모드: 새 각본 생성은 중지되어 있습니다. 아래에서 저장된 각본을 불러오세요.').classes('text-xs text-amber-200 mt-2')
 
             # 저장된 각본 불러오기
             with ui.element('div').classes('w-full rounded-xl bg-slate-900/60 border border-slate-600 p-4'):
@@ -279,16 +295,14 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
 
                 script_dir = settings.scripts_dir
                 if script_dir.exists():
-                    script_files = sorted(
-                        [path.name for path in script_dir.glob('*.json') if path.is_file()],
-                        reverse=True
-                    )[:5]
+                    script_files = _saved_script_options()
 
                     if script_files:
                         script_select = ui.select(
-                            options={f: f.replace('script_', '').replace('.json', '').replace('_', ' ')[:28] for f in script_files},
-                            label='최근 각본'
+                            options=script_files,
+                            label='저장된 각본 검색', with_input=True,
                         ).props('outlined dense dark').classes('w-full mb-2')
+                        ui.label('제목·파일명으로 검색 · 파일 최근 수정순').classes('text-xs text-slate-400')
 
                         async def load_selected_script():
                             if state.is_busy:
@@ -402,7 +416,8 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                         except RuntimeError:
                             pass
 
-                ui.button('피드백 반영 재생성', on_click=regenerate_with_feedback).classes('w-full').props('color=orange unelevated icon=refresh').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+                ui.button('피드백 반영 재생성', on_click=regenerate_with_feedback).classes('w-full').props('color=orange unelevated icon=refresh').bind_enabled_from(
+                    state, 'is_busy', lambda busy: not busy and settings.paid_production_enabled)
 
             # 확인 및 이동 버튼
             with ui.element('div').classes('w-full mt-auto pt-4'):

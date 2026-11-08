@@ -3,13 +3,15 @@
 import asyncio
 import hashlib
 import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import AsyncMock, Mock, patch
 
-from shorts_maker.gui.components import pipeline_tab, publishing_tab, sources_tab
+from shorts_maker.gui.components import generation_tab, pipeline_tab, planning_tab, publishing_tab, sources_tab
 from shorts_maker.gui.state.app_state import AppState
+from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.services.production_service import ProductionProgress, ProductionResult
 from shorts_maker.utils.scheduler import ScheduleManager
 
@@ -21,6 +23,8 @@ class _Element:
         self.callback = kwargs.get('on_click')
         self.props_text = ''
         self.visible = True
+        self.text = args[0] if args and isinstance(args[0], str) else ''
+        self.enabled = True
 
     def __enter__(self):
         return self
@@ -35,6 +39,17 @@ class _Element:
     def on_click(self, callback):
         self.callback = callback
         return self
+
+    def bind_enabled_from(self, target, name, backward=None):
+        value = getattr(target, name)
+        self.enabled = backward(value) if backward else bool(value)
+        return self
+
+    def enable(self):
+        self.enabled = True
+
+    def disable(self):
+        self.enabled = False
 
     def __getattr__(self, name):
         return lambda *args, **kwargs: self
@@ -129,6 +144,13 @@ class CompletedOutputTests(TestCase):
         (self.output / 'bad.production.json').write_text('{')
         (self.output / 'list.production.json').write_text('[]')
         self.assertEqual(list(publishing_tab._completed_outputs()), [str(video)])
+
+    def test_completed_outputs_use_file_time_instead_of_filename_order(self):
+        old, _ = self.write_output(self.output / 'zzz_older.mp4')
+        new, _ = self.write_output(self.output / 'aaa_latest.mp4')
+        os.utime(old, (100, 100))
+        os.utime(new, (200, 200))
+        self.assertEqual(list(publishing_tab._completed_outputs()), [str(new), str(old)])
 
     def render(self, state):
         recorder = _UI()
@@ -303,3 +325,113 @@ class SourceCallbackTests(TestCase):
             button.callback()
         self.assertEqual(notify.call_args.kwargs['type'], 'negative')
         refresh.assert_not_called()
+
+
+class LocalReviewInterfaceTests(TestCase):
+    def setUp(self):
+        self.temp = TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.script = ShortsScript(title='파일명이 아닌 실제 이야기 제목', description='Source', tags=[], mood='calm', style='explainer',
+            source_url='https://example.com/article', source_name='Source', generation_mode='video',
+            scenes=[VideoScene(scene_number=n, script_text=f'Scene {n}', visual_description='One bus')
+                    for n in range(1, 4)])
+        self.state = AppState(script=self.script, mode='video')
+        self.state.confirm_script_review()
+        self.record = self.root / 'review.json'
+        self.record.write_text(json.dumps({'frame_path': 'approved.png', 'must_show': ['one bus'],
+            'must_avoid': ['extra bus'], 'reviewer_note': 'Reviewed'}))
+
+    def test_script_search_keeps_older_titles_and_skips_invalid_or_outside_files(self):
+        for n in range(7):
+            path = self.root / f'script_{9-n}.json'
+            path.write_text(self.script.model_copy(update={'title': f'Full title {n}'}).model_dump_json())
+            os.utime(path, (100+n, 100+n))
+        (self.root / 'broken.json').write_text('{')
+        (self.root / 'list.json').write_text('[]')
+        outside = self.root / 'outside'
+        outside.mkdir()
+        secret = outside / 'script.json'
+        secret.write_text(self.script.model_dump_json())
+        # A separate script root must not follow a link to another workspace location.
+        script_dir = self.root / 'scripts'
+        script_dir.mkdir()
+        (script_dir / 'outside.json').symlink_to(secret)
+        with patch.object(planning_tab.settings, 'scripts_dir', script_dir):
+            self.assertEqual(planning_tab._saved_script_options(), {})
+        with patch.object(planning_tab.settings, 'scripts_dir', self.root):
+            options = planning_tab._saved_script_options()
+        self.assertEqual(len(options), 7)
+        self.assertEqual(next(iter(options)), 'script_3.json')
+        self.assertIn('Full title 0 · script_9.json', options.values())
+
+    def test_frame_summary_folds_approved_scenes_and_updates_after_explicit_review(self):
+        recorder = _UI()
+        changed = Mock()
+        def verified(script, scene):
+            if scene.scene_number == 3:
+                raise ValueError('unreviewed')
+            return 'approved.png', 'hash'
+        with patch.object(generation_tab, 'ui', recorder), patch.object(
+                generation_tab, 'verified_first_frame', side_effect=verified), patch.object(
+                generation_tab, 'review_path', return_value=self.record), patch.object(
+                generation_tab, 'inspect_frame', return_value='hash'), patch.object(
+                generation_tab, 'approve_first_frame') as approve, patch.object(generation_tab, 'safe_notify'):
+            generation_tab.render_first_frame_reviews(self.state, on_review_change=changed)
+            panels = [e for e in recorder.elements if e.kind == 'expansion']
+            self.assertIn('승인 2/3', panels[0].text)
+            self.assertEqual([e.value for e in panels[1:]], [False, False, True])
+            approve.assert_not_called()
+            inputs = [e for e in recorder.elements if e.kind == 'input' and e.text == '첫 프레임 PNG/JPEG 경로']
+            notes = [e for e in recorder.elements if e.kind == 'input' and e.text == '검토 의견']
+            criteria = [e for e in recorder.elements if e.kind == 'textarea']
+            inputs[-1].value, notes[-1].value = 'candidate.png', 'Source and image checked'
+            criteria[-2].value, criteria[-1].value = 'one bus', 'extra bus'
+            [e for e in recorder.elements if e.kind == 'button' and e.text == '이미지 미리보기'][-1].callback()
+            [e for e in recorder.elements if e.kind == 'button' and e.text == '이 첫 프레임 승인'][-1].callback()
+            approve.assert_called_once()
+            changed.assert_called_once()
+            self.assertIn('승인 3/3', panels[0].text)
+            self.assertIn('승인됨', panels[-1].text)
+
+    def test_raw_summary_keeps_rejected_and_unknown_results_open_without_paid_calls(self):
+        recorder = _UI()
+        verdicts = {1: 'approved', 2: 'rejected', 3: 'stale'}
+        service = Mock(max_veo_attempts=1)
+        service.review_clip_path.side_effect = lambda script, index: ('cached.mp4', 'hash')
+        self.state.get_or_create_service = lambda: service
+        with patch.object(generation_tab, 'ui', recorder), patch.object(
+                generation_tab, 'review_path', return_value=self.record), patch.object(
+                generation_tab, 'raw_review_status', side_effect=lambda script, scene, *args: verdicts[scene.scene_number]), patch.object(
+                generation_tab, 'load_raw_verdict', return_value={'reviewer_note': 'Stored note'}), patch.object(
+                generation_tab, 'save_raw_verdict') as save, patch.object(generation_tab, 'safe_notify'), patch.object(
+                generation_tab.settings, 'paid_production_enabled', False):
+            generation_tab.render_raw_clip_reviews(self.state)
+            panels = [e for e in recorder.elements if e.kind == 'expansion']
+            self.assertIn('승인 1/3', panels[0].text)
+            self.assertEqual([e.value for e in panels[1:]], [False, True, True])
+            self.assertIn('원본 제외', panels[2].text)
+            self.assertIn('판정 무효', panels[3].text)
+            self.assertEqual(len([e for e in recorder.elements if e.kind == 'button' and e.text == '저장된 원본 다시 확인']), 3)
+            verdicts[2] = 'approved'
+            [e for e in recorder.elements if e.kind == 'button' and e.text == '원본 승인'][1].callback()
+            save.assert_called_once()
+            self.assertIn('승인 2/3', panels[0].text)
+            self.assertFalse(panels[2].value)
+            service.generate_review_clip.assert_not_called()
+
+    def test_missing_raw_cannot_be_generated_in_review_mode(self):
+        recorder = _UI()
+        service = Mock(max_veo_attempts=1)
+        service.review_clip_path.side_effect = [
+            (None, 'hash'), ValueError('uncertain request'), (None, 'hash')]
+        self.state.get_or_create_service = lambda: service
+        with patch.object(generation_tab, 'ui', recorder), patch.object(
+                generation_tab, 'review_path', return_value=self.record), patch.object(
+                generation_tab.settings, 'paid_production_enabled', False):
+            generation_tab.render_raw_clip_reviews(self.state)
+        buttons = [e for e in recorder.elements if e.kind == 'button' and e.text == '이 장면 Veo 원본 생성']
+        self.assertTrue(all(not e.enabled for e in buttons))
+        group = next(e for e in recorder.elements if e.kind == 'expansion')
+        self.assertIn('승인 0/3', group.text)
+        service.generate_review_clip.assert_not_called()

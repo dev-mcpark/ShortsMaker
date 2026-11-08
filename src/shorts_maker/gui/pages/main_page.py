@@ -286,11 +286,13 @@ def render_main_page() -> None:
                                 # 하위 탭 토글
                                 with ui.button_group().props('rounded dense size=xs'):
                                     editor_btn = ui.button('1. 대본·장면 검토').props(
-                                        f'{"color=violet" if state.workspace_sub_tab == "editor" else "outline color=gray"}'
-                                    )
+                                        f'{"color=deep-purple-6" if state.workspace_sub_tab == "editor" else "outline color=grey-5"} '
+                                        f'aria-pressed={str(state.workspace_sub_tab == "editor").lower()}'
+                                    ).classes('min-h-[44px]')
                                     preview_btn = ui.button('2. 장면·영상 제작').props(
-                                        f'{"color=violet" if state.workspace_sub_tab == "preview" else "outline color=gray"}'
-                                    )
+                                        f'{"color=deep-purple-6" if state.workspace_sub_tab == "preview" else "outline color=grey-5"} '
+                                        f'aria-pressed={str(state.workspace_sub_tab == "preview").lower()}'
+                                    ).classes('min-h-[44px]')
 
                                     def set_sub_tab(tab_name):
                                         state.workspace_sub_tab = tab_name

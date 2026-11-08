@@ -357,7 +357,7 @@ def render_pipeline_tab(
                     '각본 기획 시작',
                     on_click=run_full_pipeline
                 ).classes('flex-grow font-bold text-xs py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600').props('color=purple-9 unelevated icon=play_arrow')
-                start_btn.bind_enabled_from(state, 'is_busy', backward=lambda busy: not busy)
+                start_btn.bind_enabled_from(state, 'is_busy', backward=lambda busy: not busy and settings.paid_production_enabled)
 
                 stop_btn = ui.button(on_click=stop_pipeline).props('flat round color=red icon=stop aria-label="파이프라인 중단"').classes('bg-slate-800/80')
                 stop_btn.disable()

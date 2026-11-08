@@ -46,6 +46,27 @@ def planning_environment(state, service):
 
 
 class CreationCallbackTests(unittest.IsolatedAsyncioTestCase):
+    async def test_review_only_edit_stops_before_clearing_saved_result(self):
+        state = AppState(script=script(), final_video_path='reviewed-final.mp4', generated_clips=['old.mp4'])
+        state.confirm_script_review()
+        state.new_production_service = Mock()
+        preview = SimpleNamespace(visible=True)
+        env = {'state': state, 'safe_notify': Mock(), 'rendered_script': state.script.model_dump_json(),
+               'settings': SimpleNamespace(paid_production_enabled=False),
+               'injected_video_player': preview, 'injected_placeholder': SimpleNamespace(visible=False)}
+        tree = ast.parse((COMPONENTS / 'generation_tab.py').read_text())
+        production = next(node for node in ast.walk(tree)
+                          if isinstance(node, ast.AsyncFunctionDef) and node.name == '_run_production_core')
+        wrapper = ast.parse('def factory():\n video_player = injected_video_player\n placeholder_content = injected_placeholder\n return _run_production_core\n')
+        wrapper.body[0].body.insert(-1, production)
+        exec(compile(ast.fix_missing_locations(wrapper), 'generation_tab.py', 'exec'), env)
+        await env['factory']()({1: 'local.mp4'})
+        self.assertEqual(state.final_video_path, 'reviewed-final.mp4')
+        self.assertEqual(state.generated_clips, ['old.mp4'])
+        self.assertFalse(state.is_busy)
+        self.assertTrue(preview.visible)
+        state.new_production_service.assert_not_called()
+
     async def test_planning_double_click_submits_once_and_clears_busy(self):
         release = asyncio.Event()
         calls = []
@@ -207,7 +228,7 @@ class CreationCallbackTests(unittest.IsolatedAsyncioTestCase):
         state = AppState(script=script(), pipeline_running=True)
         env = {'state': state, 'scene': state.script.scenes[0], 'path_input': SimpleNamespace(value='frame.png'),
                'must_show': None, 'must_avoid': None, 'reviewer_note': None,
-               'previewed': {}, 'status_label': None, 'safe_notify': Mock(),
+               'previewed': {}, 'status_label': None, 'scene_panel': Mock(), 'safe_notify': Mock(),
                'approve_first_frame': Mock(), 'rendered_script': state.script.model_dump_json()}
         callback('generation_tab.py', 'approve', env)()
         env['approve_first_frame'].assert_not_called()
@@ -276,7 +297,8 @@ class CreationCallbackTests(unittest.IsolatedAsyncioTestCase):
                'injected_video_player': SimpleNamespace(visible=True),
                'injected_placeholder': SimpleNamespace(visible=False),
                'update_scene_grid': Mock(), 'update_progress_ui': Mock(),
-               'rendered_script': state.script.model_dump_json()}
+               'rendered_script': state.script.model_dump_json(),
+               'settings': SimpleNamespace(paid_production_enabled=True)}
         tree = ast.parse((COMPONENTS / 'generation_tab.py').read_text())
         production = next(node for node in ast.walk(tree)
                           if isinstance(node, ast.AsyncFunctionDef) and node.name == '_run_production_core')

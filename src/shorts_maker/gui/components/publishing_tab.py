@@ -21,8 +21,8 @@ logger = get_logger(__name__)
 
 
 def _completed_outputs() -> dict[str, str]:
-    outputs = {}
-    for path in sorted(settings.output_dir.glob('*.production.json'), reverse=True):
+    outputs = []
+    for path in settings.output_dir.glob('*.production.json'):
         try:
             if not path.resolve().is_relative_to(settings.output_dir.resolve()):
                 continue
@@ -31,10 +31,10 @@ def _completed_outputs() -> dict[str, str]:
             if (report.get('quality_passed') is True and video.is_file()
                     and video.suffix.lower() == '.mp4'
                     and video.is_relative_to(settings.output_dir.resolve())):
-                outputs[str(video)] = f"{report.get('title') or video.stem} · {video.name}"
+                outputs.append((video.stat().st_mtime, str(video), f"{report.get('title') or video.stem} · {video.name}"))
         except (OSError, ValueError, TypeError, KeyError):
             continue
-    return outputs
+    return {path: label for _, path, label in sorted(outputs, reverse=True)}
 
 
 def _completed_video(path: str) -> dict:
@@ -70,7 +70,7 @@ def render_publishing_tab(state: 'AppState') -> None:
             with ui.element('div').classes('w-full p-6'):
                 outputs = _completed_outputs()
                 saved_video = ui.select(
-                    outputs, label='저장된 완성본',
+                    outputs, label='저장된 완성본', with_input=True,
                     value=state.final_video_path if state.final_video_path in outputs else None,
                 ).props('outlined dark').classes('w-full mb-2')
                 saved_video.bind_enabled_from(state, 'is_busy', backward=lambda busy: not busy)
@@ -109,7 +109,7 @@ def render_publishing_tab(state: 'AppState') -> None:
                     ui.button('완성본 불러오기', on_click=load_saved_video).props('flat icon=folder_open').bind_enabled_from(
                         state, 'is_busy', backward=lambda busy: not busy)
                     ui.button('목록 새로고침', on_click=refresh_outputs).props('flat icon=refresh')
-                ui.label('재제작 없이 저장된 영상을 열 수 있습니다. 불러올 때 품질 기록과 파일 해시를 확인합니다.').classes(
+                ui.label('제목·파일명으로 검색 · 파일 최근 수정순. 재제작 없이 열며 품질 기록과 파일 해시를 확인합니다.').classes(
                     'text-xs text-gray-400 mb-4')
 
                 # 입력 필드들

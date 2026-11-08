@@ -5,7 +5,7 @@ from pathlib import Path
 from nicegui import ui
 from typing import TYPE_CHECKING
 
-from shorts_maker.gui.components.common.safe_ui import safe_notify
+from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.services.production_service import ProductionPhase, ProductionProgress
 from shorts_maker.services.raw_review import load_raw_verdict, raw_review_status, save_raw_verdict
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
@@ -29,7 +29,7 @@ SCENE_ACCENT = [
 ]
 
 
-def render_first_frame_reviews(state: 'AppState') -> None:
+def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None:
     """Preview and bind locally supplied Veo first frames before a paid scene request."""
     if not state.script or state.manual_video_mode:
         return
@@ -38,24 +38,32 @@ def render_first_frame_reviews(state: 'AppState') -> None:
                     if scene_mode(state.mode, scene, index) == 'video']
     if not video_scenes:
         return
+    approved_scenes = set()
     with ui.expansion('Veo 첫 프레임 검토', icon='image_search', value=True).classes(
-        'w-full bg-slate-900 border border-amber-700/40 rounded-lg').props('dark'):
+        'w-full bg-slate-900 border border-amber-700/40 rounded-lg').props('dark') as review_group:
         ui.label('각 장면의 내레이션에 맞는 9:16 이미지를 미리 본 뒤 승인하세요. 승인 기록이 없으면 새 Veo 영상은 생성되지 않습니다.').classes(
             'text-xs text-amber-200')
         ui.label('출처: ' + ' · '.join([state.script.source_url, *state.script.supporting_source_urls])).classes(
-            'text-xs text-slate-400')
+            'text-xs text-slate-400 break-all')
         for scene in video_scenes:
-            with ui.card().classes('w-full bg-slate-950 border border-slate-700'):
-                ui.label(f'장면 {scene.scene_number}').classes('font-bold text-white')
+            review_record = {}
+            current_frame = None
+            try:
+                current_frame, _ = verified_first_frame(state.script, scene)
+                review_record = json.loads(review_path(state.script, scene).read_text(encoding='utf-8'))
+                approved_scenes.add(scene.scene_number)
+            except (OSError, ValueError):
+                current_frame = None
+            verdict_label = '첫 프레임 승인됨' if current_frame else '첫 프레임 검토 필요'
+            with ui.expansion(f'장면 {scene.scene_number} · {verdict_label}', value=not current_frame).classes(
+                'w-full bg-slate-950 border border-slate-700 rounded-lg').props('dark') as scene_panel:
                 ui.label(f'내레이션: {scene.script_text}').classes('text-sm text-slate-200')
                 ui.label(f'화면: {scene.visual_description}').classes('text-xs text-slate-300')
                 ui.label(f'움직임: {scene.motion_instruction or "고정 카메라"}').classes('text-xs text-slate-400')
-                review_record = {}
-                try:
-                    current_frame, _ = verified_first_frame(state.script, scene)
-                    review_record = json.loads(review_path(state.script, scene).read_text(encoding='utf-8'))
-                    status_label = ui.label(f'승인된 첫 프레임: {current_frame}').classes('text-xs text-teal-300')
-                except (OSError, ValueError):
+                if current_frame:
+                    status_label = ui.label(f'승인된 첫 프레임: {current_frame}').classes('text-xs text-teal-300 break-all')
+                    ui.image(current_frame).classes('w-full max-w-[180px]')
+                else:
                     status_label = ui.label('첫 프레임 승인 대기').classes('text-xs text-amber-300')
                 path_input = ui.input('첫 프레임 PNG/JPEG 경로', value=review_record.get('frame_path', '')).classes('w-full').props('dark')
                 must_show = ui.textarea('반드시 보여야 할 내용 (한 줄에 하나)', value='\n'.join(review_record.get('must_show', []))).classes('w-full').props('dark')
@@ -80,7 +88,7 @@ def render_first_frame_reviews(state: 'AppState') -> None:
                 def approve(scene_number=scene.scene_number, frame_input=path_input,
                             show_input=must_show, avoid_input=must_avoid,
                             note_input=reviewer_note, snapshot=previewed, status=status_label,
-                            expected_script=rendered_script):
+                            expected_script=rendered_script, panel=scene_panel):
                     if not state.script or state.script.model_dump_json() != expected_script:
                         safe_notify('각본이 변경됐습니다. 장면·영상 제작 화면을 다시 열어 주세요.', type='warning')
                         return
@@ -105,7 +113,12 @@ def render_first_frame_reviews(state: 'AppState') -> None:
                             note_input.value or '', snapshot['sha256'],
                         )
                         status.text = f'승인된 첫 프레임: {snapshot["path"]}'
-                        status.classes(replace='text-xs text-teal-300')
+                        status.classes(replace='text-xs text-teal-300 break-all')
+                        approved_scenes.add(scene_number)
+                        panel.text = f'장면 {scene_number} · 첫 프레임 승인됨'
+                        review_group.text = f'Veo 첫 프레임 검토 · 승인 {len(approved_scenes)}/{len(video_scenes)}'
+                        if on_review_change:
+                            on_review_change()
                         safe_notify(f'장면 {scene_number}의 첫 프레임을 승인했습니다.', type='positive')
                     except (OSError, ValueError) as error:
                         safe_notify(f'첫 프레임 승인 실패: {error}', type='negative')
@@ -113,6 +126,7 @@ def render_first_frame_reviews(state: 'AppState') -> None:
                 with ui.row():
                     ui.button('이미지 미리보기', on_click=preview).props('flat color=amber')
                     ui.button('이 첫 프레임 승인', on_click=approve).props('color=teal').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+        review_group.text = f'Veo 첫 프레임 검토 · 승인 {len(approved_scenes)}/{len(video_scenes)}'
 
 
 def render_raw_clip_reviews(state: 'AppState') -> None:
@@ -124,14 +138,16 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                      if scene_mode(state.mode, scene, index) == 'video']
     if not video_indices:
         return
+    verdicts = {}
     with ui.expansion('Veo 무음 원본 검토', icon='movie_filter', value=True).classes(
-        'w-full bg-slate-900 border border-teal-700/40 rounded-lg').props('dark'):
+        'w-full bg-slate-900 border border-teal-700/40 rounded-lg').props('dark') as review_group:
         ui.label('원본을 소리 없이 끝까지 보고 이야기의 의미와 움직임을 판정하세요. 승인 전에는 전체 편집으로 넘어가지 않습니다.').classes(
             'text-xs text-teal-200')
         for index in video_indices:
             scene = state.script.scenes[index]
-            with ui.card().classes('w-full bg-slate-950 border border-slate-700'):
-                ui.label(f'장면 {scene.scene_number} · {scene.script_text}').classes('text-sm text-white')
+            with ui.expansion(f'장면 {scene.scene_number} · 원본 확인 중', value=True).classes(
+                'w-full bg-slate-950 border border-slate-700 rounded-lg').props('dark') as scene_panel:
+                ui.label(f'내레이션: {scene.script_text}').classes('text-sm text-white')
                 criteria_area = ui.column().classes('w-full')
                 service = state.get_or_create_service()
                 duration = (settings.hybrid_veo_duration_seconds if state.mode == 'hybrid'
@@ -144,23 +160,31 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                 note = ui.input('원본 판정 의견').classes('w-full').props('dark')
                 displayed_frame = {'sha256': None}
                 request_label = cost_label.text
+                request_state = {'allowed': False, 'button': None}
 
                 def refresh(scene_index=index, label=status, area=preview_area,
                             criteria_display=criteria_area, note_input=note, cost=cost_label,
                             shown=displayed_frame, new_request_label=request_label,
-                            expected_script=rendered_script):
+                            expected_script=rendered_script, panel=scene_panel, request=request_state,
+                            scene_number=scene.scene_number):
                     area.clear()
                     criteria_display.clear()
                     shown['sha256'] = None
+                    note_input.value = ''
+                    request['allowed'] = False
+                    verdicts[scene_index] = 'pending'
+                    review_group.text = f'Veo 무음 원본 검토 · 승인 {sum(v == "approved" for v in verdicts.values())}/{len(video_indices)}'
                     cost.text = new_request_label
                     if not state.script or state.script.model_dump_json() != expected_script:
                         label.text = '각본이 변경됐습니다. 장면·영상 제작 화면을 다시 열어 주세요.'
+                        panel.text = f'장면 {scene_number} · 화면 다시 열기 필요'
                         return
                     try:
                         clip, frame_hash = state.get_or_create_service().review_clip_path(state.script, scene_index)
                         criteria = json.loads(review_path(state.script, state.script.scenes[scene_index]).read_text(encoding='utf-8'))
                     except (OSError, ValueError, KeyError, TypeError) as error:
                         label.text = f'원본 검토 중단: {error}'
+                        panel.text = f'장면 {scene_number} · 첫 프레임·요청 기록 확인 필요'
                         return
                     shown['sha256'] = frame_hash
                     with criteria_display:
@@ -168,11 +192,23 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                         ui.label('피해야 할 묘사: ' + ' · '.join(criteria['must_avoid'])).classes('text-xs text-slate-300')
                     if not clip:
                         label.text = '무음 원본 생성 대기'
+                        panel.text = f'장면 {scene_number} · 원본 생성 필요'
+                        request['button'].text = '이 장면 Veo 원본 생성'
+                        request['allowed'] = settings.paid_production_enabled
                         return
                     cost.text = '저장된 무음 원본 재사용 · 새 API 요청 없음'
                     verdict = raw_review_status(state.script, state.script.scenes[scene_index], clip, frame_hash)
+                    verdicts[scene_index] = verdict
+                    review_group.text = f'Veo 무음 원본 검토 · 승인 {sum(v == "approved" for v in verdicts.values())}/{len(video_indices)}'
                     label.text = {'approved': '무음 원본 승인됨', 'rejected': '무음 원본 제외됨 · 새 첫 프레임 또는 장면 설명 필요',
                                   'stale': '원본 판정 무효 · 변경된 파일 확인 필요'}.get(verdict, '무음 원본 판정 대기')
+                    panel.text = f'장면 {scene_number} · ' + {
+                        'approved': '무음 원본 승인됨', 'rejected': '원본 제외 · 수정 필요',
+                        'stale': '판정 무효 · 재검토 필요',
+                    }.get(verdict, '원본 판정 필요')
+                    panel.value = verdict != 'approved'
+                    request['button'].text = '저장된 원본 다시 확인'
+                    request['allowed'] = True
                     if verdict in {'approved', 'rejected'}:
                         try:
                             note_input.value = load_raw_verdict(
@@ -180,6 +216,10 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                             )['reviewer_note']
                         except (OSError, ValueError, KeyError, TypeError):
                             label.text = '원본 판정 기록을 다시 확인하세요.'
+                            verdicts[scene_index] = 'pending'
+                            review_group.text = f'Veo 무음 원본 검토 · 승인 {sum(v == "approved" for v in verdicts.values())}/{len(video_indices)}'
+                            panel.text = f'장면 {scene_number} · 판정 기록 확인 필요'
+                            panel.value = True
                     with area:
                         ui.video(clip).props('controls muted').classes('w-full max-w-[230px]')
 
@@ -234,10 +274,13 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                         safe_notify(f'원본 판정 실패: {error}', type='negative')
 
                 with ui.row():
-                    ui.button('이 장면 Veo 원본 생성', on_click=generate).props('color=amber').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+                    request_state['button'] = ui.button('이 장면 Veo 원본 생성', on_click=generate).props('color=amber').bind_enabled_from(
+                        state, 'is_busy', lambda busy, request=request_state: not busy and request['allowed'])
                     ui.button('원본 승인', on_click=lambda callback=decide: callback('approved')).props('color=teal').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
                     ui.button('원본 제외', on_click=lambda callback=decide: callback('rejected')).props('flat color=red').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
                 refresh()
+        if not settings.paid_production_enabled:
+            ui.label('검토 모드: 새 원본 생성은 중지되어 있습니다. 저장된 원본 재생·판정은 가능합니다.').classes('text-xs text-amber-200')
 
 
 def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
@@ -266,7 +309,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
     scenes_status = exporter.get_scenes_status(state.script, state.manual_script_id)
     ready_count = sum(1 for s in scenes_status if s["exists"])
     total = len(scenes_status)
-    if total and ready_count == total:
+    if total and ready_count == total and settings.paid_production_enabled and not state.is_busy:
         start_edit_btn.enable()
     else:
         start_edit_btn.disable()
@@ -442,8 +485,10 @@ def render_generation_tab(state: 'AppState') -> None:
                 ui.icon('smart_display', size='sm').classes('text-violet-400')
                 with ui.column().classes('gap-0'):
                     ui.label('영상 프로덕션 모니터').classes('text-sm font-bold text-white')
-                    source_label = '수동 업로드 모드' if state.manual_video_mode else 'Vertex AI API 자동 생성 모드'
-                    ui.label(f'Status: {source_label}').classes('text-[11px] text-slate-400 mt-0.5')
+                    source_label = '보유 영상 연결 → 음성·자막 편집' if state.manual_video_mode else '첫 프레임 → 무음 원본 → 음성·자막 편집'
+                    ui.label(source_label).classes('text-[11px] text-slate-300 mt-0.5')
+                    ui.label().bind_text_from(state, 'reviewed_script_sha256',
+                        backward=lambda _: '현재 각본 확인 완료' if state.is_script_reviewed() else '먼저 대본·장면 검토에서 현재 각본을 확인하세요.').classes('text-xs text-amber-200')
 
             # 파이프라인 진행 상태 (자동 / 수동 겸용 액션 바)
             with ui.row().classes('items-center gap-4'):
@@ -494,7 +539,8 @@ def render_generation_tab(state: 'AppState') -> None:
                 auto_btn = ui.button(
                     '영상 제작 시작',
                     on_click=run_production_with_notification
-                ).classes('px-4 py-1.5 font-bold text-xs bg-gradient-to-r from-violet-600 to-indigo-600').props('color=violet unelevated size=sm icon=rocket_launch').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+                ).classes('px-4 py-1.5 font-bold text-xs bg-gradient-to-r from-violet-600 to-indigo-600').props('color=violet unelevated size=sm icon=rocket_launch').bind_enabled_from(
+                    state, 'is_busy', lambda busy: not busy and settings.paid_production_enabled and state.is_script_reviewed())
                 auto_btn.visible = not state.manual_video_mode
 
                 # 상태 인디케이터 스피너
@@ -508,8 +554,15 @@ def render_generation_tab(state: 'AppState') -> None:
             # 자동 모드와 수동 모드 모두의 통합 뷰어
             with ui.column().classes('w-full flex-grow h-auto lg:h-full p-4 lg:p-6 overflow-visible lg:overflow-y-auto gap-5') as main_workspace_area:
 
-                render_first_frame_reviews(state)
-                render_raw_clip_reviews(state)
+                if not settings.paid_production_enabled:
+                    ui.label('검토 모드 · 장면 검토와 기존 완성본 재생이 가능합니다. 새 음성이 필요한 Studio 편집은 중지되며, 유료 제작은 승인된 회차에서 진행합니다.').classes(
+                        'w-full p-3 rounded-lg bg-amber-950/20 border border-amber-700/40 text-sm text-amber-200')
+                @ui.refreshable
+                def raw_reviews():
+                    render_raw_clip_reviews(state)
+
+                render_first_frame_reviews(state, on_review_change=lambda: safe_refresh(raw_reviews))
+                raw_reviews()
 
                 # ── 대형 프리뷰 모니터 카드 (자동 생성 시 혹은 수동 편집 완료 시 띄움) ──
                 with ui.element('div').classes('w-full rounded-xl bg-slate-900 border border-slate-800 overflow-hidden flex flex-col shadow-xl') as preview_monitor_card:
@@ -613,6 +666,9 @@ def render_generation_tab(state: 'AppState') -> None:
                 return
             if not state.is_script_reviewed():
                 safe_notify('기획 탭에서 현재 각본을 확인한 뒤 제작을 시작하세요.', type='warning')
+                return
+            if not settings.paid_production_enabled:
+                safe_notify('검토 모드입니다. Studio 편집에는 새 음성 생성이 필요하며 승인된 유료 실행 범위에서 진행하세요.', type='warning')
                 return
             production_running = True
 

@@ -1,5 +1,20 @@
 # Studio UI and code review
 
+### 2026-11-08 — Local production usability follow-up
+
+Evaluated the existing source → script → first-frame → muted-raw → narration/edit → private-upload path. Source/hash binding, retained requests, paid preflight and private-upload identity remain useful boundaries. The local UI still requires prepared first-frame files and separate raw judgments; its editor does not accept prepared narration the way the offline CLI does. A running local server and queue host are not proof of unattended completion. No new production episode or provider request was needed to reproduce the interface problems.
+
+Applied `make-interfaces-feel-better` to reduce visible form density, clarify action states and make the current workspace section identifiable.
+
+| Before | After |
+| --- | --- |
+| Every approved scene's long prompt/criteria stayed expanded, pushing the preview far below the working area. | First-frame and raw groups show approved/total counts. Approved scenes start collapsed with a status in their title; missing, rejected and stale scenes stay open. Expanding restores the exact image/raw/note. A new frame approval refreshes the raw group; changed bindings still fail the original gate. |
+| Read-only Studio offered generation/edit buttons that could fail after clearing the prior result. | New planning/raw/Studio-edit actions are disabled with nearby explanations. The edit callback also stops before clearing state, while existing raw playback/review and separate prepared-audio CLI editing remain available. |
+| Only five truncated script filenames were listed; completed files were ordered lexically. | Scripts and finished MP4s are searchable by full title/filename and ordered by file modification time. Invalid or outside-root script entries are skipped; quality/hash checks still run when reopening an MP4. |
+| Workspace section selection used unsupported color names, leaving the active section transparent. | Valid component colors distinguish the selected section; `aria-pressed` exposes selection and the two controls have44px hit areas. |
+
+Regression coverage includes older-than-five scripts, title/mtime ordering, malformed/outside entries, multi-scene summary/action isolation, rejected/stale/uncertain states, frame-triggered raw refresh, and preserving the prior cut on a read-only edit attempt. Browser evidence and final test/runtime results are recorded in [STATUS](STATUS.md). These changes improve local review ergonomics, not video quality or measured viewer retention. No paid verification or fresh upload is part of this pass.
+
 ### 2026-11-08 — Full feature review and usage cleanup
 
 Used the click-path-audit workflow to trace each feature's rendered control to its callback, service and retained state; reviewed the staged commits with conventional-commit-review. No new provider call, upload, schedule activation/deletion, owner acceptance or ledger release was performed during this review.
