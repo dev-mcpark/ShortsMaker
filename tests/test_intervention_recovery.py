@@ -140,7 +140,8 @@ class InterventionRecoveryTests(unittest.TestCase):
         media.add_media_file.side_effect = lambda **kwargs: kwargs['url_path']
         button, container = recorder.button('edit'), recorder.column()
         with patch('shorts_maker.gui.components.generation_tab.ui', recorder), patch(
-                'shorts_maker.gui.components.generation_tab.app', media), patch.object(
+                'shorts_maker.gui.components.common.media_preview.ui', recorder), patch(
+                'shorts_maker.gui.components.common.media_preview.app', media), patch.object(
                 settings, 'paid_production_enabled', True):
             render_manual_panel(state, self.exporter, button, container)
             self.assertFalse(button.enabled)
@@ -152,13 +153,13 @@ class InterventionRecoveryTests(unittest.TestCase):
 
     def test_restored_preview_route_survives_old_widget_cleanup(self):
         from nicegui import app, ui
-        from shorts_maker.gui.components.generation_tab import _manual_preview_source
+        from shorts_maker.gui.components.common.media_preview import media_sources
         _, clip = self.workspace_with_clip()
         cleanup = []
         with patch.object(ui.context.client, 'on_delete', side_effect=cleanup.append):
-            first = _manual_preview_source(str(clip))
+            first = media_sources()(str(clip))
             old = ui.video(first)
-            second = _manual_preview_source(str(clip))
+            second = media_sources()(str(clip))
             new = ui.video(second)
         try:
             self.assertNotEqual(first, second)

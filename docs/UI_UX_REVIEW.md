@@ -1,5 +1,20 @@
 # Studio UI and code review
 
+### 2026-11-09 — User-perspective journey review
+
+Used click-path-audit across the seven current menus, with a shared state/reset map and separate read-only creation/operation checks. Existing November8 fixes were retained and not treated as new findings.
+
+| Journey / finding | Correction | Evidence |
+| --- | --- | --- |
+| Return to edited publishing fields: all widget-local text/disclosure disappeared | Path/hash-scoped session drafts, recorded defaults on reopening, explicit reset, stale-video guard and reset preflight | Before/after real browser round trip; separate-video/hash/blank/disclosure tests; no report or YouTube metadata write |
+| Choose an older finished video:81 of103 offered files lacked the hash required by loading | Only basic-valid records offered; actual load still verifies the whole hash; older files remain in the library | Read-only inventory now22 selectable; malformed/legacy filters and preserved-file tests |
+| Switch/refresh previews: deleting an old NiceGUI auto-route widget invalidates another live player | Shared client-owned versioned media-source closures, stable conversion during binding, correct Unicode cleanup | Native video/image lifecycle tests; local player progressed with stable source/no media error; old source HTTP206 after navigation |
+| Navigate during production: the new view stayed blank and manual success could touch a deleted player and report an error | New auto/manual views bind to AppState; success writes no longer target deleted players; failed partial preview remains separate from upload readiness | Delayed mocked production plus native binding tests for both modes and partial failure; no paid run |
+| Review an uploaded scheduled round: misleading draft-load button could replace newer context | Hide after attachment and recheck current schedule/phase/attachment in callback | Live current owner-review/link without draft action; disposable-round stale callback test retains selected final |
+| Start without a script / adjust sidebar while viewing a finished cut | Disable empty confirmation; explain settings affect a new edit | Real empty-workspace control and desktop/mobile form inspection |
+
+**428 offline tests pass**. All seven real menus were opened read-only; test publishing markers were explicitly reset. At1440px desktop and390px touch viewport, inspected form/control bounds fit the page. Source and material management showed no additional confirmed cost/destructive defect in this pass; their writes/deletes stayed offline. Production completion after navigation was verified with delayed mocks, not paid API work. [Private evidence](../outputs/evaluation/studio_usability_review_20261109/review.json) owns exact runtime/media/report/budget readbacks. Session drafts are not disk autosave, and preview routes remain until client deletion. Existing source/scene/whole-cut gates and owner public-release choice remain intact.
+
 ### 2026-11-08 — User intervention and architecture audit
 
 Audited UI controls through AppState, ProductionService, storage, cost gates and provider/editor/uploader adapters using the local `production-audit` workflow and the dependency-boundary lens from `hexagonal-architecture`. The implementation remains a modular monolith with concrete lazy adapters, not a completed Ports & Adapters migration. That scale is suitable for this local single-operator program; no microservices, queue framework or new dependency is needed.

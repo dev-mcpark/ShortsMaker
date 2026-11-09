@@ -94,6 +94,8 @@ def render_main_page() -> None:
             # --- 2C. RIGHT CONFIG PANEL (우측 설정 패널 - Google AI Studio 스타일) ---
             with ui.element('div').classes(CONFIG_PANEL_RIGHT):
                 ui.label('제작 설정').classes('text-xs font-bold text-slate-400 uppercase tracking-widest mb-4')
+                ui.label('음성·음악·화면 변경은 새 편집에 적용됩니다. 완성본 미리보기는 재편집해야 바뀝니다.').classes(
+                    'text-xs text-slate-400 leading-relaxed mb-3')
 
                 # Generation Mode
                 ui.label('화면 구성 방식').classes('text-[10px] text-slate-400 font-semibold mb-1')

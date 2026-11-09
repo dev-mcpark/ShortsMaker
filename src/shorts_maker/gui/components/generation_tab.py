@@ -2,11 +2,11 @@
 import asyncio
 import json
 from pathlib import Path
-from nicegui import app, ui
-from uuid import uuid4
+from nicegui import ui
 from typing import TYPE_CHECKING
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
+from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.services.production_service import ProductionPhase, ProductionProgress
 from shorts_maker.services.raw_review import load_raw_verdict, raw_review_status, save_raw_verdict
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
@@ -30,19 +30,11 @@ SCENE_ACCENT = [
 ]
 
 
-def _manual_preview_source(clip_path: str) -> str:
-    # Old widgets must not delete the route of a newly restored preview of the same file.
-    # shortcut: routes live until the browser client closes; reclaim earlier if long sessions accumulate previews.
-    url = app.add_media_file(local_file=clip_path,
-                             url_path=f'/manual-review/{uuid4().hex}/{Path(clip_path).name}')
-    ui.context.client.on_delete(lambda: app.remove_route(url))
-    return url
-
-
 def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None:
     """Preview and bind locally supplied Veo first frames before a paid scene request."""
     if not state.script or state.manual_video_mode:
         return
+    media_source = media_sources(ui.context.client)
     rendered_script = state.script.model_dump_json()
     video_scenes = [scene for index, scene in enumerate(state.script.scenes)
                     if scene_mode(state.mode, scene, index) == 'video']
@@ -72,7 +64,7 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
                 ui.label(f'움직임: {scene.motion_instruction or "고정 카메라"}').classes('text-xs text-slate-400')
                 if current_frame:
                     status_label = ui.label(f'승인된 첫 프레임: {current_frame}').classes('text-xs text-teal-300 break-all')
-                    ui.image(current_frame).classes('w-full max-w-[180px]')
+                    ui.image(media_source(current_frame)).classes('w-full max-w-[180px]')
                 else:
                     status_label = ui.label('첫 프레임 승인 대기').classes('text-xs text-amber-300')
                 path_input = ui.input('첫 프레임 PNG/JPEG 경로', value=review_record.get('frame_path', '')).classes('w-full').props('dark')
@@ -89,7 +81,7 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
                         snapshot.update(path=path, sha256=digest)
                         area.clear()
                         with area:
-                            ui.image(path).classes('w-full max-w-[230px] max-h-[410px]')
+                            ui.image(media_source(path)).classes('w-full max-w-[230px] max-h-[410px]')
                         safe_notify('이미지를 확인한 뒤 기준과 의견을 적어 승인하세요.', type='info')
                     except (OSError, ValueError) as error:
                         snapshot.update(path=None, sha256=None)
@@ -141,6 +133,7 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
 
 def render_raw_clip_reviews(state: 'AppState') -> None:
     """Generate and judge one muted Veo scene before the whole-cut production run."""
+    media_source = media_sources(ui.context.client)
     if not state.script or state.manual_video_mode:
         return
     rendered_script = state.script.model_dump_json()
@@ -231,7 +224,7 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                             panel.text = f'장면 {scene_number} · 판정 기록 확인 필요'
                             panel.value = True
                     with area:
-                        ui.video(clip).props('controls muted').classes('w-full max-w-[230px]')
+                        ui.video(media_source(clip)).props('controls muted').classes('w-full max-w-[230px]')
 
                 async def generate(scene_index=index, update=refresh, request_cap=reserve,
                                    shown=displayed_frame, expected_script=rendered_script):
@@ -297,6 +290,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                         start_edit_btn: ui.button,
                         scene_cards_container: ui.element) -> None:
     """수동 모드 격자 그리드 씬 업로드 패널 렌더링"""
+    media_source = media_sources(ui.context.client)
     try:
         scene_cards_container.clear()
     except RuntimeError:
@@ -460,7 +454,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                         # 업로드 완료된 클립명 표시
                         if exists:
                             clip_name = scene_info["clip_path"].split('/')[-1]
-                            ui.video(_manual_preview_source(scene_info['clip_path'])).props('controls muted').classes('w-full max-h-[240px] bg-black')
+                            ui.video(media_source(scene_info['clip_path'])).props('controls muted').classes('w-full max-h-[240px] bg-black')
                             with ui.element('div').classes('w-full rounded-lg bg-violet-950/20 border border-violet-500/20 px-2 py-1.5 flex items-center justify-between mb-1.5'):
                                 with ui.row().classes('items-center gap-1.5 overflow-hidden'):
                                     ui.icon('video_file', size='xs').classes('text-violet-400 shrink-0')
@@ -509,6 +503,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
 def render_generation_tab(state: 'AppState') -> None:
     """Google AI Studio 스타일의 리팩토링된 Generation 탭 렌더링"""
     exporter = VeoPromptExporter()
+    media_source = media_sources(ui.context.client)
     rendered_script = state.script.model_dump_json() if state.script else None
 
     # 세션 뷰에 필요한 헬퍼
@@ -644,12 +639,12 @@ def render_generation_tab(state: 'AppState') -> None:
 
                         # 실제 비디오 컴포넌트 (종횡비 9:16 대응)
                         video_player = ui.video('').classes('max-h-full max-w-[200px] h-full shadow-lg border border-slate-800 rounded bg-slate-950')
-                        video_player.visible = False
-
-                        if state.final_video_path:
-                            video_player.set_source(state.final_video_path)
-                            video_player.visible = True
-                            placeholder_content.visible = False
+                        video_player.bind_source_from(state, 'preview_video_path', backward=media_source)
+                        video_player.bind_visibility_from(state, 'preview_video_path', bool)
+                        placeholder_content.bind_visibility_from(state, 'preview_video_path', lambda path: not path)
+                        ui.label('품질 검사를 통과하지 못한 영상의 미리보기입니다. 이 파일은 업로드할 완성본으로 선택되지 않았습니다.').classes(
+                            'text-xs text-amber-200').bind_visibility_from(state, 'failed_video_preview_path',
+                                lambda path: bool(path) and not state.final_video_path)
 
                 # ── 파이프라인 진행 상태 모니터 ──
                 with ui.element('div').classes('w-full rounded-xl bg-slate-900 border border-slate-800 p-5') as pipeline_status_card:
@@ -683,7 +678,8 @@ def render_generation_tab(state: 'AppState') -> None:
             with ui.scroll_area().classes('w-full flex-grow h-auto lg:h-full bg-slate-950') as manual_uploader_area:
                 with ui.column().classes('w-full p-4 lg:p-6 gap-2') as manual_preview:
                     ui.label('편집 결과 미리보기').classes('text-sm font-bold text-white')
-                    manual_video_player = ui.video(state.final_video_path or '').classes('w-full max-w-[220px] max-h-[360px] bg-black')
+                    manual_video_player = ui.video('').classes('w-full max-w-[220px] max-h-[360px] bg-black')
+                    manual_video_player.bind_source_from(state, 'final_video_path', backward=media_source)
                 manual_preview.bind_visibility_from(state, 'final_video_path', bool)
                 scene_cards_container = ui.grid(columns='repeat(auto-fill, minmax(min(100%, 320px), 1fr))').classes('w-full gap-4 p-4 lg:p-6')
 
@@ -740,6 +736,7 @@ def render_generation_tab(state: 'AppState') -> None:
                 state.reset_pipeline()
                 state.pipeline_running = True
                 state.final_video_path = None
+                state.failed_video_preview_path = None
                 state.generated_clips = []
 
                 service = state.new_production_service()
@@ -783,6 +780,7 @@ def render_generation_tab(state: 'AppState') -> None:
 
                 if result.success:
                     state.final_video_path = result.video_path
+                    state.failed_video_preview_path = None
                     state.generated_clips = result.clips
                     update_progress_ui('complete', 100)
                     safe_notify(
@@ -791,28 +789,10 @@ def render_generation_tab(state: 'AppState') -> None:
                         type='positive',
                     )
 
-                    if manual_clip_paths is not None:
-                        manual_video_player.set_source(state.final_video_path)
-                        manual_preview.visible = True
-                    elif video_player and state.final_video_path:
-                        try:
-                            video_player.set_source(state.final_video_path)
-                            video_player.visible = True
-                            if placeholder_content:
-                                placeholder_content.visible = False
-                        except RuntimeError:
-                            pass
                     logger.info(f"Final output video available at: {state.final_video_path}")
                 else:
                     state.generated_clips = result.clips
-                    if result.video_path and video_player:
-                        try:
-                            video_player.set_source(result.video_path)
-                            video_player.visible = True
-                            if placeholder_content:
-                                placeholder_content.visible = False
-                        except RuntimeError:
-                            pass
+                    state.failed_video_preview_path = result.video_path
                     safe_notify(f"프로덕션 실패: {result.error}", type='negative')
                     logger.error(f"Production Failed: {result.error}")
 

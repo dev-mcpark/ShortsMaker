@@ -491,7 +491,8 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                 ui.button(
                     '각본 확인 완료 · 영상 제작으로 →',
                     on_click=confirm_script
-                ).classes('w-full').props('color=green-9 unelevated icon=check_circle size=md').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+                ).classes('w-full').props('color=green-9 unelevated icon=check_circle size=md').bind_enabled_from(
+                    state, 'is_busy', lambda busy: not busy and state.script is not None)
 
         # === Right Panel: 주제 후보 + 각본 미리보기 ===
         with ui.column().classes('w-full lg:w-auto lg:flex-grow min-w-0 min-h-[400px] lg:h-full overflow-hidden flex flex-col flex-nowrap'):

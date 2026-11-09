@@ -4,12 +4,13 @@ import asyncio
 import hashlib
 import json
 import os
+from types import SimpleNamespace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import AsyncMock, Mock, patch
 
-from shorts_maker.gui.components import generation_tab, pipeline_tab, planning_tab, publishing_tab, sources_tab
+from shorts_maker.gui.components import generation_tab, pipeline_tab, planning_tab, publishing_tab, sources_tab, scheduling_tab
 from shorts_maker.gui.state.app_state import AppState
 from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.services.production_service import ProductionProgress, ProductionResult
@@ -22,6 +23,7 @@ class _Element:
         self.value = kwargs.get('value')
         self.callback = kwargs.get('on_click')
         self.props_text = ''
+        self._props = {}
         self.visible = True
         self.text = args[0] if args and isinstance(args[0], str) else ''
         self.enabled = True
@@ -38,6 +40,10 @@ class _Element:
 
     def on_click(self, callback):
         self.callback = callback
+        return self
+
+    def on_value_change(self, callback):
+        self.change_callback = callback
         return self
 
     def bind_enabled_from(self, target, name, backward=None):
@@ -60,6 +66,7 @@ class _UI:
 
     def __init__(self):
         self.elements = []
+        self.context = SimpleNamespace(client=Mock())
 
     def refreshable(self, function):
         function.refresh = Mock()
@@ -152,6 +159,13 @@ class CompletedOutputTests(TestCase):
         os.utime(new, (200, 200))
         self.assertEqual(list(publishing_tab._completed_outputs()), [str(new), str(old)])
 
+    def test_known_unloadable_legacy_records_are_not_offered_for_upload(self):
+        for change in ({'video_sha256': None}, {'schema_version': 2}, {'quality_passed': False}):
+            with self.subTest(change=change):
+                video, _ = self.write_output(**change)
+                self.assertEqual(publishing_tab._completed_outputs(), {})
+                self.assertTrue(video.is_file())
+
     def render(self, state):
         recorder = _UI()
         with patch.object(publishing_tab, 'ui', recorder), \
@@ -212,8 +226,125 @@ class CompletedOutputTests(TestCase):
         asyncio.run(recorder.find('button', 'YouTube에 비공개 업로드').callback())
         state.get_or_create_service.assert_not_called()
 
+    def set_form(self, recorder, title='게시 초안', disclosure='no'):
+        recorder.find('input', '영상 제목').value = title
+        recorder.find('textarea', '영상 설명·출처').value = '직접 수정한 설명'
+        recorder.find('input', '태그 (쉼표로 구분)').value = '건축,일상'
+        next(e for e in recorder.elements if e.kind == 'radio').value = disclosure
+        recorder.find('input', '영상 제목').change_callback()
+
+    def test_publishing_input_survives_rerender_without_writing_report(self):
+        video, _ = self.write_output()
+        sidecar = video.with_suffix('.production.json')
+        original = sidecar.read_bytes()
+        state = AppState(final_video_path=str(video))
+        first = self.render(state)
+        self.set_form(first)
+        second = self.render(state)
+        self.assertEqual(second.find('input', '영상 제목').value, '게시 초안')
+        self.assertEqual(second.find('textarea', '영상 설명·출처').value, '직접 수정한 설명')
+        self.assertEqual(second.find('input', '태그 (쉼표로 구분)').value, '건축,일상')
+        self.assertEqual(next(e for e in second.elements if e.kind == 'radio').value, 'no')
+        self.assertEqual(sidecar.read_bytes(), original)
+
+    def test_unselected_form_is_retained_but_does_not_transfer_to_selected_video(self):
+        state = AppState()
+        self.set_form(self.render(state))
+        self.assertEqual(self.render(state).find('input', '영상 제목').value, '게시 초안')
+        video, _ = self.write_output(title='실제 영상 제목')
+        state.final_video_path = str(video)
+        selected = self.render(state)
+        self.assertEqual(selected.find('input', '영상 제목').value, '실제 영상 제목')
+        self.assertIsNone(next(e for e in selected.elements if e.kind == 'radio').value)
+
+    def test_different_videos_keep_separate_drafts_and_stale_widgets_cannot_change_selection(self):
+        first, _ = self.write_output(self.output / 'first.mp4', title='첫 영상')
+        second, _ = self.write_output(self.output / 'second.mp4', title='둘째 영상')
+        state = AppState(final_video_path=str(first))
+        old = self.render(state)
+        self.set_form(old, '첫 영상 초안', 'yes')
+        state.final_video_path = str(second)
+        self.set_form(self.render(state), '둘째 영상 초안', 'no')
+        self.set_form(old, '늦게 도착한 첫 영상 입력')
+        self.assertEqual(self.render(state).find('input', '영상 제목').value, '둘째 영상 초안')
+        state.final_video_path = str(first)
+        self.assertEqual(self.render(state).find('input', '영상 제목').value, '첫 영상 초안')
+
+    def test_changed_video_hash_resets_form_and_blocks_stale_upload_before_service(self):
+        video, report = self.write_output(title='원래 영상')
+        state = AppState(final_video_path=str(video))
+        old = self.render(state)
+        self.set_form(old, '원래 영상 초안', 'yes')
+        video.write_bytes(b'new video identity')
+        report.update(title='교체 영상', video_sha256=hashlib.sha256(video.read_bytes()).hexdigest())
+        video.with_suffix('.production.json').write_text(json.dumps(report))
+        fresh = self.render(state)
+        self.assertEqual(fresh.find('input', '영상 제목').value, '교체 영상')
+        self.assertIsNone(next(e for e in fresh.elements if e.kind == 'radio').value)
+        state.get_or_create_service = Mock()
+        with patch.object(publishing_tab, 'safe_notify'):
+            asyncio.run(old.find('button', 'YouTube에 비공개 업로드').callback())
+        state.get_or_create_service.assert_not_called()
+
+    def test_explicit_reset_restores_recorded_metadata_without_editing_report(self):
+        video, _ = self.write_output(title='저장된 제목', contains_synthetic_media=True)
+        sidecar = video.with_suffix('.production.json')
+        original = sidecar.read_bytes()
+        state = AppState(final_video_path=str(video))
+        recorder = self.render(state)
+        self.set_form(recorder, '수정한 제목', 'no')
+        recorder.find('button', '게시 입력 되돌리기').callback()
+        self.assertEqual(recorder.find('input', '영상 제목').value, '저장된 제목')
+        self.assertEqual(next(e for e in recorder.elements if e.kind == 'radio').value, 'yes')
+        self.assertEqual(sidecar.read_bytes(), original)
+
+    def test_failed_metadata_reset_preserves_existing_draft(self):
+        video, _ = self.write_output()
+        state = AppState(final_video_path=str(video))
+        recorder = self.render(state)
+        self.set_form(recorder)
+        before = dict(state.publishing_drafts)
+        video.write_bytes(b'changed without new quality record')
+        with patch.object(publishing_tab, 'safe_notify'):
+            recorder.find('button', '게시 입력 되돌리기').callback()
+        self.assertEqual(state.publishing_drafts, before)
+        self.assertEqual(recorder.find('input', '영상 제목').value, '게시 초안')
+
 
 class ScheduleDeletionTests(TestCase):
+    def test_uploaded_round_does_not_offer_old_draft_load_action(self):
+        from test_gui_creation_flows import script
+        with TemporaryDirectory() as temp:
+            manager = ScheduleManager(str(Path(temp) / 'schedules.json'))
+            for uploaded in (False, True):
+                record = manager.create_schedule('검토', '09:00', 'Every 2 Weeks', enabled=False)
+                manager.update_schedule(record['id'], {
+                    'last_result': 'script_review_pending', 'review_operator': 'agent',
+                    'last_script': script().model_dump(mode='json'), 'last_youtube_id': 'private1234' if uploaded else None,
+                })
+                if not uploaded:
+                    draft_id = record['id']
+            before = manager.filename.read_bytes()
+            source = Mock()
+            source.get_categories.return_value = []
+            recorder = _UI()
+            state = AppState(final_video_path='newer-comparison.mp4')
+            with patch.object(scheduling_tab, 'ui', recorder), \
+                    patch.object(scheduling_tab, 'schedule_manager', manager), \
+                    patch.object(scheduling_tab, 'SourceManager', return_value=source), \
+                    patch.object(scheduling_tab, 'card_with_header', lambda *args: recorder.card()):
+                scheduling_tab.render_scheduling_tab(state)
+                actions = [e for e in recorder.elements if e.kind == 'button'
+                           and e.args and e.args[0] == '검토할 각본 불러오기']
+                self.assertEqual(len(actions), 1)
+                self.assertEqual(manager.filename.read_bytes(), before)
+                manager.update_schedule(draft_id, {'last_youtube_id': 'nowattached1'})
+                with patch.object(scheduling_tab, 'safe_notify'):
+                    actions[0].callback()
+                self.assertEqual(state.final_video_path, 'newer-comparison.mp4')
+                self.assertIsNone(state.script)
+            self.assertIsNotNone(manager.get_schedule(draft_id))
+
     def test_pending_or_active_round_cannot_be_deleted_and_history_survives(self):
         with TemporaryDirectory() as temp:
             manager = ScheduleManager(str(Path(temp) / 'schedules.json'))

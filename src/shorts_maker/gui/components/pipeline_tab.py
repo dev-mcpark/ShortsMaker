@@ -12,6 +12,7 @@ from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.utils.config import settings
 from shorts_maker.gui.components.common.progress_utils import format_time, update_scene_grid
+from shorts_maker.gui.components.common.media_preview import media_sources
 
 if TYPE_CHECKING:
     from shorts_maker.gui.state.app_state import AppState
@@ -25,6 +26,7 @@ def render_pipeline_tab(
     update_step_indicators_fn: Callable = None
 ) -> None:
     """Full Pipeline 실행 탭 렌더링 - 2단 슬림 레이아웃"""
+    media_source = media_sources(ui.context.client)
 
     # Progress bar references
     progress_bars: Dict[str, ui.linear_progress] = {}
@@ -256,7 +258,7 @@ def render_pipeline_tab(
 
                     if result.video_path:
                         try:
-                            video_preview.set_source(result.video_path)
+                            video_preview.set_source(media_source(result.video_path))
                             video_preview.visible = True
                             preview_placeholder.visible = False
                         except Exception as e:
@@ -339,7 +341,7 @@ def render_pipeline_tab(
                     try:
                         stop_btn.disable()
                         if state.final_video_path:
-                            video_preview.set_source(state.final_video_path)
+                            video_preview.set_source(media_source(state.final_video_path))
                             video_preview.visible = True
                             preview_placeholder.visible = False
                     except RuntimeError:
@@ -423,7 +425,7 @@ def render_pipeline_tab(
                                     if run.get('video_path'):
                                         def play_history_video(path=run['video_path']):
                                             try:
-                                                video_preview.set_source(path)
+                                                video_preview.set_source(media_source(path))
                                                 video_preview.visible = True
                                                 preview_placeholder.visible = False
                                             except Exception as err:
@@ -501,7 +503,7 @@ def render_pipeline_tab(
 
                     if state.final_video_path:
                         try:
-                            video_preview.set_source(state.final_video_path)
+                            video_preview.set_source(media_source(state.final_video_path))
                             video_preview.visible = True
                             preview_placeholder.visible = False
                         except Exception:

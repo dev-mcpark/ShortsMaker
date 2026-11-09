@@ -8,6 +8,7 @@ from nicegui import ui
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.card_header import card_with_header
+from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.utils.scheduler import ScheduleManager
 from shorts_maker.utils.config import settings
@@ -65,6 +66,7 @@ def _schedule_readiness_messages() -> list[str]:
 
 def render_scheduling_tab(state: 'AppState') -> None:
     """Schedule Management 탭 렌더링"""
+    media_source = media_sources(ui.context.client)
 
     with ui.row().classes('w-full h-auto lg:h-full gap-6 flex flex-col lg:flex-row flex-nowrap'):
         # === Left Panel: Create & Control ===
@@ -361,18 +363,24 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                          else '각본·장면 검토 대기 · 영상 API와 업로드는 실행되지 않음').classes(
                                                     'text-xs text-amber-300')
 
-                                                def load_pending_script(data=schedule.get('last_script')):
+                                                def load_pending_script(sid=schedule['id']):
                                                     try:
-                                                        script = ShortsScript.model_validate(data)
+                                                        current = schedule_manager.get_schedule(sid)
+                                                        if (not current or current.get('enabled')
+                                                                or current.get('last_result') != 'script_review_pending'
+                                                                or current.get('last_youtube_id')):
+                                                            raise ValueError('현재 회차는 각본 검토 단계가 아닙니다. 연결된 완성본을 확인하세요.')
+                                                        script = ShortsScript.model_validate(current.get('last_script'))
                                                         state.load_saved_script(script)
                                                     except (TypeError, ValueError) as error:
                                                         safe_notify(f'저장된 각본 확인 실패: {error}', type='negative')
                                                         return
-                                                    safe_notify('각본을 불러왔습니다. Workspace의 Script Editor에서 장면을 검토하고 확인하세요.', type='info')
+                                                    safe_notify('각본을 불러왔습니다. 제작 작업실 → 1. 대본·장면 검토에서 확인하세요.', type='info')
 
-                                                ui.button('검토할 각본 불러오기', on_click=load_pending_script).props(
-                                                    'flat dense color=amber').bind_enabled_from(
-                                                        state, 'is_busy', backward=lambda busy: not busy)
+                                                if not schedule.get('last_youtube_id'):
+                                                    ui.button('검토할 각본 불러오기', on_click=load_pending_script).props(
+                                                        'flat dense color=amber').bind_enabled_from(
+                                                            state, 'is_busy', backward=lambda busy: not busy)
                                             elif not enabled and schedule.get('last_result') == 'run_in_progress':
                                                 ui.label('제작 완료 미확인 · 출력과 청구 내역 확인 후 일정 재개').classes('text-xs text-amber-300')
                                             elif not enabled and schedule.get('last_result') == 'model_migration_required':
@@ -388,7 +396,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                             if review_path:
                                                 with ui.dialog() as review_dialog, ui.card():
                                                     ui.label('최근 제작 영상').classes('text-lg font-medium')
-                                                    ui.video(review_path).classes('w-full max-w-[270px] max-h-[480px] bg-black')
+                                                    ui.video(media_source(review_path)).classes('w-full max-w-[270px] max-h-[480px] bg-black')
                                                     ui.button('닫기', on_click=review_dialog.close)
                                                 ui.button('최근 영상 재생', on_click=review_dialog.open).props('flat dense color=teal')
                                             elif schedule.get('last_video_path'):

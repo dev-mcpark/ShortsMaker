@@ -46,11 +46,13 @@ class AppState:
     script: Optional["ShortsScript"] = None
     reviewed_script_sha256: Optional[str] = None
     script_editor_drafts: Dict[str, str] = field(default_factory=dict, repr=False)
+    publishing_drafts: Dict[str, Dict[str, Any]] = field(default_factory=dict, repr=False)
     script_context: Optional["ScriptGenerationContext"] = None
     topic_candidates: List["TopicCandidate"] = field(default_factory=list)
     scene_clips: List[str] = field(default_factory=list)
     generated_clips: List[str] = field(default_factory=list)
     final_video_path: Optional[str] = None
+    failed_video_preview_path: Optional[str] = None
     youtube_upload_in_progress: bool = False
 
     # Service Reference (lazy init via property)
@@ -166,6 +168,7 @@ class AppState:
             raise ValueError('작업 중에는 제작 결과를 변경할 수 없습니다.')
         self.reset_pipeline()
         self.final_video_path = None
+        self.failed_video_preview_path = None
         self.scene_clips = []
         self.generated_clips = []
         self._production_service = None
@@ -210,9 +213,14 @@ class AppState:
         self.topic_candidates = []
         self.reviewed_script_sha256 = None
         self.final_video_path = None
+        self.failed_video_preview_path = None
         self.scene_clips = []
         self.generated_clips = []
         self._production_service = None
+
+    @property
+    def preview_video_path(self) -> Optional[str]:
+        return self.final_video_path or self.failed_video_preview_path
 
     def confirm_script_review(self) -> None:
         if self.script is None:

@@ -108,3 +108,7 @@ class StudioDraftTests(TestCase):
         recorder.find('button', '미적용 수정 되돌리기').callback()
         editor.kwargs['on_change'](SimpleNamespace(value=''))
         self.assertFalse(state.has_unapplied_script_draft())
+
+    def test_empty_workspace_cannot_offer_script_confirmation(self):
+        recorder = self.render(AppState())
+        self.assertFalse(recorder.find('button', '각본 확인 완료 · 영상 제작으로 →').enabled)
