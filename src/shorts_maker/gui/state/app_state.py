@@ -168,6 +168,37 @@ class AppState:
             raise ValueError('작업이 끝난 뒤 저장할 대본을 확인하세요.')
         return save_script_copy(self.script, settings.scripts_dir)
 
+    def save_work_draft(self):
+        from shorts_maker.services.work_drafts import save_work_draft
+
+        if self.is_busy:
+            raise ValueError('제작·업로드가 끝난 뒤 작업 초안을 저장하세요.')
+        return save_work_draft(self.script, self.script_editor_text(),
+                               self.first_frame_drafts.get(self.script_editor_key(), {}))
+
+    def restore_work_draft(self, name: str, expected_sha256: str):
+        from shorts_maker.services.work_drafts import read_work_draft, save_work_draft
+
+        if self.is_busy:
+            raise ValueError('제작·업로드가 끝난 뒤 작업 초안을 복원하세요.')
+        record, digest = read_work_draft(name)
+        if digest != expected_sha256:
+            raise ValueError('목록을 읽은 뒤 초안 파일이 바뀌었습니다. 목록을 새로고침하세요.')
+        current_key = self.script_editor_key()
+        target_key = record.script_sha256
+        backups = []
+        applied_text = self.script.model_dump_json(indent=2) if self.script else ''
+        if self.script_editor_text() != applied_text or self.first_frame_drafts.get(current_key):
+            backups.append(self.save_work_draft())
+        target_text = record.applied_script.model_dump_json(indent=2) if record.applied_script else ''
+        text = self.script_editor_drafts.get(target_key, target_text)
+        if target_key != current_key and (text != target_text or self.first_frame_drafts.get(target_key)):
+            backups.append(save_work_draft(record.applied_script, text, self.first_frame_drafts.get(target_key, {})))
+        self.load_saved_script(record.applied_script)
+        self.script_editor_drafts[target_key] = record.editor_text
+        self.first_frame_drafts[target_key] = {int(number): values for number, values in record.first_frames.items()}
+        return backups
+
     def invalidate_video_result(self):
         if self.is_busy:
             raise ValueError('작업 중에는 제작 결과를 변경할 수 없습니다.')
@@ -225,9 +256,9 @@ class AppState:
 
         if self.is_busy:
             raise ValueError('제작 또는 업로드가 진행 중에는 각본을 바꿀 수 없습니다.')
-        if script.generation_mode not in {'image', 'hybrid', 'video'}:
+        if script is not None and script.generation_mode not in {'image', 'hybrid', 'video'}:
             raise ValueError('각본의 제작 모드를 확인하세요.')
-        choices = load_audio_choices(script)
+        choices = load_audio_choices(script) if script is not None else None
         if choices is None:
             defaults = AppState()
             choices = {key: getattr(defaults, key)
@@ -237,7 +268,7 @@ class AppState:
         self.reset_pipeline()
         self.reset_manual_mode()
         self.script = script
-        self.mode = script.generation_mode
+        self.mode = script.generation_mode if script is not None else defaults.mode
         self.script_context = None
         self.prepared_narration_manifest = None
         self.topic_candidates = []
@@ -260,8 +291,8 @@ class AppState:
         ).hexdigest()
 
     def script_editor_key(self) -> str:
-        source = self.script.model_dump_json() if self.script else ''
-        return hashlib.sha256(source.encode('utf-8')).hexdigest()
+        from shorts_maker.services.work_drafts import script_draft_key
+        return script_draft_key(self.script)
 
     def script_editor_text(self) -> str:
         return self.script_editor_drafts.get(

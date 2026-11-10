@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.source_access import load_source_catalog
 from shorts_maker.gui.components.script_form import render_script_form
+from shorts_maker.gui.components.work_drafts_panel import render_work_drafts_panel
 from shorts_maker.gui.config.ui_theme import SCENE_GRADIENTS
 from shorts_maker.planner.script_planner import ShortsScript
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
@@ -61,6 +62,8 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
     editor_source = {'key': state.script_editor_key()}
     previewed_script = {'json': None}
     form_panel = None
+    draft_panel = None
+    draft_view_key = {'value': state.script_editor_key()}
 
     def restore_editor():
         editor_source['key'] = state.script_editor_key()
@@ -85,6 +88,9 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
 
     def update_script_preview():
         nonlocal form_panel
+        if draft_panel is not None and draft_view_key['value'] != state.script_editor_key():
+            draft_view_key['value'] = state.script_editor_key()
+            safe_refresh(draft_panel)
         try:
             script_preview_container.clear()
         except RuntimeError:
@@ -376,6 +382,14 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                     state, 'is_busy', lambda busy: not busy and state.script is not None)
                 ui.label('미적용 수정은 먼저 적용하세요. 저장한 사본은 재시작 후 다시 불러올 수 있으며 원본은 보존됩니다.').classes('text-xs text-slate-400')
 
+            def restore_draft_view():
+                restore_editor()
+                update_script_preview()
+                update_candidates_panel()
+                feedback_section.visible = False
+
+            draft_panel = render_work_drafts_panel(state, restore_draft_view)
+
             # JSON 편집기 (고급)
             with ui.expansion('JSON 편집기', icon='code').classes('w-full').props('header-class="text-xs text-gray-300 px-0"'):
                 editor_area = ui.textarea('각본 JSON', value=state.script_editor_text(),
@@ -423,7 +437,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
 
                 ui.button('미적용 수정 되돌리기', on_click=discard_draft).props('flat color=grey-4').classes('w-full min-h-[44px]').bind_enabled_from(
                     state, 'is_busy', lambda busy: not busy)
-                ui.label('입력은 이 서버 세션에서 대본별로 유지됩니다. 메뉴 이동으로 사라지지 않지만 서버 재시작 전에는 적용 후 새 파일로 저장하세요.').classes('text-xs text-amber-200 mt-1')
+                ui.label('입력은 메뉴 이동 시 유지됩니다. 재시작 전에는 작업 초안 사본을 저장하거나, 적용 후 대본 새 파일로 저장하세요.').classes('text-xs text-amber-200 mt-1')
                 ui.label('적용 후 위의 현재 대본 새 파일로 저장을 누르면 수정본을 보관할 수 있습니다. 출처·각본·장면 검토는 다시 필요합니다.').classes('text-xs text-slate-400 mt-1')
 
             # 피드백 섹션 (스크립트 생성 후 표시)

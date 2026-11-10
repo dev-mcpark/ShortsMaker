@@ -13,6 +13,7 @@ from nicegui.client import Client
 from nicegui.page import page
 
 from shorts_maker.gui.components import generation_tab, planning_tab, pipeline_tab, scheduling_tab, sources_tab
+from shorts_maker.gui.components import script_form, work_drafts_panel
 from shorts_maker.gui.components.common import source_access
 from shorts_maker.gui.state.app_state import AppState
 from shorts_maker.planner.models import ScriptGenerationContext
@@ -31,7 +32,8 @@ class SourceRecoveryTests(TestCase):
         self.root = Path(self.temp.name)
         self.source = self.root / 'feeds.json'
         self.source.write_text('{broken')
-        for name, value in [('rss_sources_file', self.source), ('scripts_dir', self.root / 'scripts')]:
+        for name, value in [('rss_sources_file', self.source), ('scripts_dir', self.root / 'scripts'),
+                            ('output_dir', self.root / 'outputs')]:
             change = patch.object(settings, name, value)
             change.start()
             self.addCleanup(change.stop)
@@ -39,6 +41,7 @@ class SourceRecoveryTests(TestCase):
     def render(self, module, render):
         recorder = _UI()
         with patch.object(module, 'ui', recorder), patch.object(source_access, 'ui', recorder), \
+                patch.object(script_form, 'ui', recorder), patch.object(work_drafts_panel, 'ui', recorder), \
                 patch.object(scheduling_tab, 'schedule_manager', ScheduleManager(str(self.root / 'schedules.json'))):
             render(AppState())
         return recorder
@@ -147,6 +150,11 @@ class SourceRecoveryTests(TestCase):
 
 class RepeatNavigationTests(TestCase):
     def setUp(self):
+        temporary = TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        output = patch.object(settings, 'output_dir', Path(temporary.name))
+        output.start()
+        self.addCleanup(output.stop)
         self.client = Client(page('/repeat-workflows'))
         self.addCleanup(self.client.delete)
 

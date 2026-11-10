@@ -124,6 +124,11 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
                             'must_show': '\n'.join(review_record.get('must_show', [])),
                             'must_avoid': '\n'.join(review_record.get('must_avoid', [])),
                             'reviewer_note': review_record.get('reviewer_note', '')}
+                draft = {name: value for name, value in draft.items() if value != baseline.get(name)}
+                if draft:
+                    state.first_frame_drafts[draft_key][scene.scene_number] = draft
+                else:
+                    state.first_frame_drafts.get(draft_key, {}).pop(scene.scene_number, None)
                 path_input = ui.input('첫 프레임 PNG/JPEG 경로', value=draft.get('frame_path', baseline['frame_path'])).classes('w-full').props('dark')
                 must_show = ui.textarea('반드시 보여야 할 내용 (한 줄에 하나)', value=draft.get('must_show', baseline['must_show'])).classes('w-full').props('dark')
                 must_avoid = ui.textarea('피해야 할 묘사 (한 줄에 하나)', value=draft.get('must_avoid', baseline['must_avoid'])).classes('w-full').props('dark')
@@ -176,13 +181,26 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
 
                 ui.button('보관함에서 이미지 찾기', on_click=pick_image).props('outline icon=folder_open').bind_enabled_from(
                     state, 'is_busy', lambda busy: not busy)
-                ui.label('후보 경로와 검토 입력은 메뉴 이동 시 유지됩니다. 미승인 초안은 서버 재시작 시 사라집니다. 승인은 검토를 마친 뒤에만 진행하세요.').classes('text-xs text-slate-400')
+                ui.label('후보 경로와 검토 입력은 메뉴 이동 시 유지됩니다. 재시작 전에 검토 입력 초안 저장으로 보관할 수 있습니다. 승인은 검토를 마친 뒤에만 진행하세요.').classes('text-xs text-slate-400')
 
-                def discard_frame(fields=inputs, saved=baseline, area=preview_area, snapshot=previewed):
+                def save_frame_draft():
+                    try:
+                        if state.script_editor_key() != draft_key:
+                            raise ValueError('대본이 바뀌었습니다. 현재 화면을 다시 확인하세요.')
+                        path = state.save_work_draft()
+                        safe_notify(f'검토 입력을 작업 초안으로 저장했습니다: {path.name}. 대본·장면 검토에서 복원할 수 있습니다.', type='positive')
+                    except (ValueError, OSError) as error:
+                        safe_notify(f'초안 저장 중단: {error}', type='warning')
+
+                ui.button('검토 입력 초안 저장', on_click=save_frame_draft).props('flat icon=save').bind_enabled_from(
+                    state, 'is_busy', lambda busy: not busy)
+
+                def discard_frame(fields=inputs, saved=baseline, area=preview_area, snapshot=previewed, number=scene.scene_number):
                     if state.is_busy or state.script_editor_key() != draft_key or any(field.is_deleted for field in fields.values()):
                         return
                     for key, field in fields.items():
                         field.value = saved[key]
+                    state.first_frame_drafts.get(draft_key, {}).pop(number, None)
                     snapshot.update(path=None, sha256=None)
                     area.clear()
 
