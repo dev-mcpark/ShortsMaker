@@ -10,6 +10,7 @@ from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.gui.components.common.source_access import load_source_catalog
+from shorts_maker.gui.components.operator_panel import render_operator_panel
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.utils.scheduler import ScheduleManager
 from shorts_maker.utils.config import settings
@@ -288,10 +289,13 @@ def render_scheduling_tab(state: 'AppState') -> None:
 
                         schedule_count_badge = ui.badge('Studio 등록 0개').props('color=teal-9 text-color=white')
 
+                list_snapshot = {'value': None}
+
                 @ui.refreshable
                 def schedule_list():
                     schedules = schedule_manager.load_schedules()
                     next_runs = {item['id']: item['next_run'] for item in schedule_manager.get_next_run_times()}
+                    list_snapshot['value'] = (schedules, next_runs)
                     try:
                         schedule_count_badge.text = f"Studio 등록 {sum(run is not None for run in next_runs.values())}개"
                     except RuntimeError:
@@ -338,6 +342,10 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                         or schedule.get('last_result') == 'private_review_accepted'):
                                                     ui.badge('YouTube').props('color=red-9 text-color=white').classes('text-xs px-2')
 
+                                            if (schedule.get('review_operator') == 'agent'
+                                                    or schedule.get('last_result') == 'script_review_pending'):
+                                                render_operator_panel(state, schedule_manager, schedule,
+                                                                      lambda: (safe_refresh(schedule_list), safe_refresh(history_list)))
                                             with ui.row().classes('gap-4'):
                                                 with ui.row().classes('items-center gap-1'):
                                                     ui.icon('schedule', size='xs').classes('text-amber-400')
@@ -506,8 +514,9 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                             toggle_color = 'amber' if enabled else 'green'
                                             toggle_tip = '일시정지' if enabled else '재개'
                                             if not enabled and schedule.get('last_result') == 'script_review_pending':
-                                                ui.button('비공개 영상 검토 완료', on_click=accept_pending_video).props(
-                                                    'flat dense color=teal')
+                                                if schedule.get('last_youtube_id') and review_path:
+                                                    ui.button('비공개 영상 검토 완료', on_click=accept_pending_video).props(
+                                                        'flat dense color=teal')
                                                 if not schedule.get('last_youtube_id'):
                                                     ui.button('각본 제외', on_click=reject_pending_script).props(
                                                         'flat dense color=amber')
@@ -574,6 +583,13 @@ def render_scheduling_tab(state: 'AppState') -> None:
 
                 history_list()
 
-            # Auto-refresh every 30 seconds
-            ui.timer(30.0, lambda: (safe_refresh(schedule_list), safe_refresh(history_list),
-                                    safe_refresh(readiness_notice)))
+            def refresh_changed_records():
+                latest = (schedule_manager.load_schedules(), {
+                    item['id']: item['next_run'] for item in schedule_manager.get_next_run_times()})
+                # Preserve expanded work and confirmation dialogs while their records are unchanged.
+                if latest != list_snapshot['value']:
+                    safe_refresh(schedule_list)
+                    safe_refresh(history_list)
+                safe_refresh(readiness_notice)
+
+            ui.timer(30.0, refresh_changed_records)

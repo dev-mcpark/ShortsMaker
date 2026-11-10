@@ -419,6 +419,11 @@ class ScheduleManager:
             raise ValueError('일정이 사라져 완료 기록을 저장하지 못했습니다.')
         return updated
 
+    def pending_video_info(self, schedule_id: str, video_path: str) -> Dict[str, str]:
+        """Preview an exact verified attachment without adopting it or changing the schedule."""
+        _, video, video_hash, video_id = self._verified_pending_video(schedule_id, video_path)
+        return {'video_path': str(video), 'video_sha256': video_hash, 'youtube_id': video_id}
+
     def record_private_review_copy(self, schedule_id: str, video_path: str) -> Dict[str, Any]:
         """Attach a matching upload without claiming owner acceptance or re-enabling the next slot."""
         _, video, video_hash, video_id = self._verified_pending_video(schedule_id, video_path)
@@ -437,6 +442,10 @@ class ScheduleManager:
         if (schedule is None or schedule.get('last_result') != 'script_review_pending'
                 or schedule.get('enabled')):
             raise ValueError("검토 대기 중인 각본 일정이 없습니다.")
+        if schedule.get('last_episode_id'):
+            from shorts_maker.services.operating_budget import episode_path
+            if episode_path(schedule['last_episode_id']).with_suffix('.operation.pending.json').exists():
+                raise ValueError('회차 실행 결과를 먼저 대조하세요. 미확인 실행 중에는 영상을 연결·채택할 수 없습니다.')
         if not isinstance(video_path, str) or not video_path:
             raise ValueError("완성 영상 경로가 필요합니다.")
         try:
@@ -444,11 +453,16 @@ class ScheduleManager:
             if (video.suffix.lower() != '.mp4' or not video.is_file()
                     or not video.is_relative_to(settings.output_dir.resolve())):
                 raise ValueError("출력 폴더의 완성 MP4를 선택하세요.")
-            report = json.loads(video.with_suffix('.production.json').read_text(encoding='utf-8'))
+            report_path = video.with_suffix('.production.json').resolve()
+            if not report_path.is_relative_to(settings.output_dir.resolve()):
+                raise ValueError('출력 폴더의 제작 기록이 필요합니다.')
+            report = json.loads(report_path.read_text(encoding='utf-8'))
             with video.open('rb') as stream:
                 video_sha256 = hashlib.file_digest(stream, 'sha256').hexdigest()
         except (OSError, TypeError, UnicodeError, ValueError) as error:
             raise ValueError("영상과 제작 기록을 확인할 수 없습니다.") from error
+        if video.with_suffix('.upload-pending.json').exists():
+            raise ValueError('업로드 결과를 먼저 대조하세요.')
         if (not isinstance(report, dict) or not isinstance(report.get('video_path'), str)
                 or Path(report['video_path']).resolve() != video
                 or not isinstance(schedule.get('last_script'), dict)
