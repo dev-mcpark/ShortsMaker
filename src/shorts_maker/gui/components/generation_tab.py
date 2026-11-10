@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.gui.components.narration_panel import render_narration_panel
+from shorts_maker.gui.components.image_picker import open_image_picker
 from shorts_maker.services.first_frame_candidates import retained_candidate
 from shorts_maker.services.production_service import ProductionPhase, ProductionProgress
 from shorts_maker.services.raw_review import load_raw_verdict, raw_review_status, save_raw_verdict
@@ -45,6 +46,7 @@ def _manual_edit_ready(state, exporter) -> bool:
 def _auto_edit_ready(state, verdicts) -> bool:
     return bool(state.script and not state.is_busy and not state.manual_video_mode and state.is_script_reviewed()
                 and not state.has_unapplied_script_draft()
+                and not state.has_unapplied_first_frame_drafts()
                 and (settings.paid_production_enabled or state.prepared_narration_manifest)
                 and all(verdicts.get(index) == 'approved' for index, scene in enumerate(state.script.scenes)
                         if scene_mode(state.mode, scene, index) == 'video'))
@@ -63,6 +65,8 @@ def _next_edit_step(state, verdicts) -> str:
         return '다음: 기존 내레이션을 연결하거나 API 생성을 활성화하세요.'
     if state.manual_video_mode:
         return '보유 영상: 아래 장면별 파일 연결과 내레이션을 확인한 뒤 편집하세요.'
+    if state.has_unapplied_first_frame_drafts():
+        return '다음: 미적용 첫 프레임 후보·검토 입력을 승인하거나 되돌리세요.'
     indices = [index for index, scene in enumerate(state.script.scenes) if scene_mode(state.mode, scene, index) == 'video']
     approved = sum(verdicts.get(index) == 'approved' for index in indices)
     if approved < len(indices):
@@ -76,6 +80,7 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
         return
     media_source = media_sources(ui.context.client)
     rendered_script = state.script.model_dump_json()
+    draft_key = state.script_editor_key()
     video_scenes = [scene for index, scene in enumerate(state.script.scenes)
                     if scene_mode(state.mode, scene, index) == 'video']
     if not video_scenes:
@@ -114,10 +119,31 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
                     candidate_error = str(error)
                 candidate_notice = ui.label(candidate_error or '').classes('text-xs text-amber-200 break-all')
                 candidate_notice.visible = bool(candidate_error)
-                path_input = ui.input('첫 프레임 PNG/JPEG 경로', value=review_record.get('frame_path') or candidate or '').classes('w-full').props('dark')
-                must_show = ui.textarea('반드시 보여야 할 내용 (한 줄에 하나)', value='\n'.join(review_record.get('must_show', []))).classes('w-full').props('dark')
-                must_avoid = ui.textarea('피해야 할 묘사 (한 줄에 하나)', value='\n'.join(review_record.get('must_avoid', []))).classes('w-full').props('dark')
-                reviewer_note = ui.input('검토 의견', value=review_record.get('reviewer_note', '')).classes('w-full').props('dark')
+                draft = state.first_frame_drafts.get(draft_key, {}).get(scene.scene_number, {})
+                baseline = {'frame_path': review_record.get('frame_path') or candidate or '',
+                            'must_show': '\n'.join(review_record.get('must_show', [])),
+                            'must_avoid': '\n'.join(review_record.get('must_avoid', [])),
+                            'reviewer_note': review_record.get('reviewer_note', '')}
+                path_input = ui.input('첫 프레임 PNG/JPEG 경로', value=draft.get('frame_path', baseline['frame_path'])).classes('w-full').props('dark')
+                must_show = ui.textarea('반드시 보여야 할 내용 (한 줄에 하나)', value=draft.get('must_show', baseline['must_show'])).classes('w-full').props('dark')
+                must_avoid = ui.textarea('피해야 할 묘사 (한 줄에 하나)', value=draft.get('must_avoid', baseline['must_avoid'])).classes('w-full').props('dark')
+                reviewer_note = ui.input('검토 의견', value=draft.get('reviewer_note', baseline['reviewer_note'])).classes('w-full').props('dark')
+                inputs = {'frame_path': path_input, 'must_show': must_show, 'must_avoid': must_avoid,
+                          'reviewer_note': reviewer_note}
+                def remember_frame(field, number=scene.scene_number, fields=inputs, saved=baseline):
+                    def remember(event):
+                        if not state.is_busy and not fields[field].is_deleted and state.script_editor_key() == draft_key:
+                            changed = {key: value.value or '' for key, value in fields.items()
+                                       if (value.value or '') != saved[key]}
+                            drafts = state.first_frame_drafts.setdefault(draft_key, {})
+                            if changed:
+                                drafts[number] = changed
+                            else:
+                                drafts.pop(number, None)
+                    return remember
+                for field, name in ((path_input, 'frame_path'), (must_show, 'must_show'),
+                                    (must_avoid, 'must_avoid'), (reviewer_note, 'reviewer_note')):
+                    field.on_value_change(remember_frame(name))
                 for field in (path_input, must_show, must_avoid, reviewer_note):
                     field.bind_enabled_from(state, 'is_busy', lambda busy: not busy)
                 preview_area = ui.column().classes('w-full')
@@ -136,10 +162,38 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
                         snapshot.update(path=None, sha256=None)
                         safe_notify(f'첫 프레임 미리보기 실패: {error}', type='negative')
 
+                async def pick_image(frame_input=path_input, bound_preview=preview, expected_mode=state.mode):
+                    def current():
+                        return (not frame_input.is_deleted and not state.is_busy and not state.manual_video_mode and state.mode == expected_mode
+                                and state.script is not None and state.script.model_dump_json() == rendered_script)
+
+                    def select(path):
+                        inspect_frame(path)
+                        frame_input.value = path
+                        bound_preview()
+
+                    await open_image_picker(select, current)
+
+                ui.button('보관함에서 이미지 찾기', on_click=pick_image).props('outline icon=folder_open').bind_enabled_from(
+                    state, 'is_busy', lambda busy: not busy)
+                ui.label('후보 경로와 검토 입력은 메뉴 이동 시 유지됩니다. 미승인 초안은 서버 재시작 시 사라집니다. 승인은 검토를 마친 뒤에만 진행하세요.').classes('text-xs text-slate-400')
+
+                def discard_frame(fields=inputs, saved=baseline, area=preview_area, snapshot=previewed):
+                    if state.is_busy or state.script_editor_key() != draft_key or any(field.is_deleted for field in fields.values()):
+                        return
+                    for key, field in fields.items():
+                        field.value = saved[key]
+                    snapshot.update(path=None, sha256=None)
+                    area.clear()
+
+                ui.button('첫 프레임 검토 입력 되돌리기', on_click=discard_frame).props('flat').bind_enabled_from(
+                    state, 'is_busy', lambda busy, number=scene.scene_number:
+                    not busy and state.has_unapplied_first_frame_draft(number))
+
                 def approve(scene_number=scene.scene_number, frame_input=path_input,
                             show_input=must_show, avoid_input=must_avoid,
                             note_input=reviewer_note, snapshot=previewed, status=status_label,
-                            expected_script=rendered_script, panel=scene_panel):
+                            expected_script=rendered_script, panel=scene_panel, fields=inputs, saved=baseline):
                     if not state.script or state.script.model_dump_json() != expected_script:
                         safe_notify('각본이 변경됐습니다. 장면·영상 제작 화면을 다시 열어 주세요.', type='warning')
                         return
@@ -163,6 +217,8 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
                             [line.strip() for line in (avoid_input.value or '').splitlines() if line.strip()],
                             note_input.value or '', snapshot['sha256'],
                         )
+                        saved.update({key: field.value or '' for key, field in fields.items()})
+                        state.first_frame_drafts.get(draft_key, {}).pop(scene_number, None)
                         status.text = f'승인된 첫 프레임: {snapshot["path"]}'
                         status.classes(replace='text-xs text-teal-300 break-all')
                         approved_scenes.add(scene_number)
@@ -351,6 +407,9 @@ def render_raw_clip_reviews(state: 'AppState') -> dict:
                     if state.has_unapplied_script_draft():
                         safe_notify('먼저 미적용 대본 수정을 적용하거나 되돌리세요.', type='warning')
                         return
+                    if state.has_unapplied_first_frame_draft(state.script.scenes[scene_index].scene_number):
+                        safe_notify('첫 프레임 후보·검토 입력을 승인하거나 되돌린 뒤 원본을 생성하세요.', type='warning')
+                        return
                     if not shown['sha256']:
                         try:
                             update()
@@ -404,8 +463,9 @@ def render_raw_clip_reviews(state: 'AppState') -> dict:
 
                 with ui.row():
                     request_state['button'] = ui.button('이 장면 Veo 원본 생성', on_click=generate).props('color=amber').bind_enabled_from(
-                        state, 'is_busy', lambda busy, request=request_state:
-                        not busy and request['allowed'] and not state.has_unapplied_script_draft())
+                    state, 'is_busy', lambda busy, request=request_state, number=scene.scene_number:
+                        not busy and request['allowed'] and not state.has_unapplied_script_draft()
+                        and not state.has_unapplied_first_frame_draft(number))
                     ui.button('원본 승인', on_click=lambda callback=decide: callback('approved')).props('color=teal').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
                     ui.button('원본 제외', on_click=lambda callback=decide: callback('rejected')).props('flat color=red').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
                 refresh()
@@ -855,6 +915,9 @@ def render_generation_tab(state: 'AppState') -> None:
                 return
             if state.has_unapplied_script_draft():
                 safe_notify('먼저 미적용 대본 수정을 적용하거나 되돌리세요.', type='warning')
+                return
+            if state.has_unapplied_first_frame_drafts():
+                safe_notify('먼저 첫 프레임 후보·검토 입력을 승인하거나 되돌리세요.', type='warning')
                 return
             if not settings.paid_production_enabled and not state.prepared_narration_manifest:
                 safe_notify('검토 모드입니다. 기존 내레이션을 연결하거나 API 생성을 활성화하세요.', type='warning')

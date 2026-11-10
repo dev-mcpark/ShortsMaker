@@ -49,6 +49,7 @@ class AppState:
     script: Optional["ShortsScript"] = None
     reviewed_script_sha256: Optional[str] = None
     script_editor_drafts: Dict[str, str] = field(default_factory=dict, repr=False)
+    first_frame_drafts: Dict[str, Dict[int, Dict[str, str]]] = field(default_factory=dict, repr=False)
     publishing_drafts: Dict[str, Dict[str, Any]] = field(default_factory=dict, repr=False)
     script_context: Optional["ScriptGenerationContext"] = None
     prepared_narration_manifest: Optional[str] = None
@@ -324,6 +325,15 @@ class AppState:
         target[field] = value
         self.script_editor_drafts[key] = json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False)
         return True
+
+    def has_unapplied_first_frame_draft(self, scene_number: int) -> bool:
+        return bool(self.first_frame_drafts.get(self.script_editor_key(), {}).get(scene_number))
+
+    def has_unapplied_first_frame_drafts(self) -> bool:
+        from shorts_maker.services.visual_cost import scene_mode
+        return bool(self.script and not self.manual_video_mode and any(
+            self.has_unapplied_first_frame_draft(scene.scene_number)
+            for index, scene in enumerate(self.script.scenes) if scene_mode(self.mode, scene, index) == 'video'))
 
     def has_unapplied_script_draft(self) -> bool:
         from shorts_maker.planner.models import ShortsScript

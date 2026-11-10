@@ -22,6 +22,7 @@ def render_asset_library_tab(state) -> None:
         active_references=lambda: [
             {'video': s.preview_video_path, 'clips': s.generated_clips,
              'drafts': list(s.script_editor_drafts.values()),
+             'first_frame_drafts': s.first_frame_drafts,
              'narration': s.prepared_narration_manifest,
              'script': s.script.model_dump(mode='json') if s.script else None}
             for s in SessionManager._sessions.values()

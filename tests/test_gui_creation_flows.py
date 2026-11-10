@@ -268,7 +268,7 @@ class CreationCallbackTests(unittest.IsolatedAsyncioTestCase):
     async def test_review_actions_cannot_replace_bindings_during_a_run(self):
         state = AppState(script=script(), pipeline_running=True)
         env = {'state': state, 'scene': state.script.scenes[0], 'path_input': SimpleNamespace(value='frame.png'),
-               'must_show': None, 'must_avoid': None, 'reviewer_note': None,
+               'must_show': None, 'must_avoid': None, 'reviewer_note': None, 'inputs': {}, 'baseline': {},
                'previewed': {}, 'status_label': None, 'scene_panel': Mock(), 'safe_notify': Mock(),
                'approve_first_frame': Mock(), 'rendered_script': state.script.model_dump_json()}
         callback('generation_tab.py', 'approve', env)()
