@@ -7,13 +7,14 @@ import json
 import os
 import plistlib
 import signal
+import sqlite3
 import subprocess
 import sys
 import uuid
 from pathlib import Path
 
 from shorts_maker.services.operating_budget import begin_episode, episode_environment, episode_path, load_episode
-from shorts_maker.services.operating_status import operator_status
+from shorts_maker.services.operating_status import operator_status, schedule_sha256
 from shorts_maker.utils.config import PROJECT_ROOT, settings
 from shorts_maker.utils.scheduler import ScheduleManager
 
@@ -26,17 +27,32 @@ def active_episode(manager, schedule_id):
     return schedule, load_episode(schedule.get('last_episode_id'), schedule)
 
 
-def run_scoped(manager, schedule_id, command):
-    schedule, record = active_episode(manager, schedule_id)
-    if schedule.get('last_youtube_id'):
-        raise ValueError('비공개 완성본이 연결된 회차는 제작을 다시 실행할 수 없습니다. 완성본을 검토하세요.')
-    env, status = episode_environment(record)
-    path = episode_path(record['id']).with_suffix('.operation.pending.json')
-    audit = {'command_sha256': hashlib.sha256(json.dumps(command).encode()).hexdigest(), 'status': status}
-    with path.open('x') as file:
-        json.dump(audit, file)
-        file.flush()
-        os.fsync(file.fileno())
+def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedule_sha256=None):
+    lock_path = manager.filename.with_name(f'{manager.filename.name}.lock.sqlite3')
+    connection = sqlite3.connect(lock_path, timeout=0, isolation_level=None)
+    try:
+        connection.execute('BEGIN EXCLUSIVE')
+        if planning:
+            schedule = manager.get_schedule(schedule_id)
+            if (not schedule or schedule.get('review_operator') != 'agent' or schedule.get('enabled')
+                    or schedule.get('last_result') != 'operator_pending'
+                    or (expected_schedule_sha256 and schedule_sha256(schedule) != expected_schedule_sha256)):
+                raise ValueError('실제 일정이 남긴 동일한 제작 대기 항목이 필요합니다.')
+            if not schedule.get('last_episode_id'):
+                episode = begin_episode(schedule['id'], schedule['run_count'])
+                manager.update_schedule(schedule['id'], {'last_episode_id': episode['id']})
+        schedule, record = active_episode(manager, schedule_id)
+        if schedule.get('last_youtube_id'):
+            raise ValueError('비공개 완성본이 연결된 회차는 제작을 다시 실행할 수 없습니다. 완성본을 검토하세요.')
+        env, status = episode_environment(record)
+        path = episode_path(record['id']).with_suffix('.operation.pending.json')
+        audit = {'command_sha256': hashlib.sha256(json.dumps(command).encode()).hexdigest(), 'status': status}
+        with path.open('x') as file:
+            json.dump(audit, file)
+            file.flush()
+            os.fsync(file.fileno())
+    finally:
+        connection.close()  # Release before the child takes the same scheduler lock.
     # A killed parent retains the marker. Inspect its child and provider records before recovery.
     result = subprocess.run(command, cwd=PROJECT_ROOT, env={**os.environ, **env})
     audit['returncode'] = result.returncode
@@ -77,6 +93,8 @@ def main():
     for action in ('plan', '_plan', 'run', 'attach'):
         command = sub.add_parser(action)
         command.add_argument('schedule_id')
+        if action == 'plan':
+            command.add_argument('--expected-schedule-sha256')
         if action == 'run':
             command.add_argument('command', nargs=argparse.REMAINDER)
         elif action == 'attach':
@@ -117,17 +135,10 @@ def main():
             if schedule.get('review_operator') == 'agent':
                 print(json.dumps(operator_status(schedule), ensure_ascii=False))
     elif args.action == 'plan':
-        schedule = manager.get_schedule(args.schedule_id)
-        if (not schedule or schedule.get('review_operator') != 'agent' or schedule.get('enabled')
-                or schedule.get('last_result') != 'operator_pending'):
-            raise ValueError('실제 일정이 남긴 제작 대기 항목이 필요합니다.')
-        if not schedule.get('last_episode_id'):
-            episode = begin_episode(schedule['id'], schedule['run_count'])
-            manager.update_schedule(schedule['id'], {'last_episode_id': episode['id']})
         raise SystemExit(run_scoped(manager, args.schedule_id, [
             sys.executable, str(Path(__file__).resolve()), '--schedules', str(manager.filename.resolve()),
             '_plan', args.schedule_id,
-        ]))
+        ], planning=True, expected_schedule_sha256=args.expected_schedule_sha256))
     elif args.action == '_plan':
         schedule, record = active_episode(manager, args.schedule_id)
         expected, _ = episode_environment(record)

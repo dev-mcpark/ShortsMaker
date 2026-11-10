@@ -23,6 +23,11 @@ _GOOGLE_INITIAL_EXTENSION_KRW = 3300
 _GOOGLE_APPROVED_EXTENSION_MAX_KRW = 6300
 
 
+def default_episode_caps() -> dict:
+    return {'google_remaining_krw': _GOOGLE_EPISODE_CAP_KRW,
+            'openai_remaining_usd': _OPENAI_EPISODE_CAP_MICRO_USD / 1000000}
+
+
 def episode_path(episode_id: str) -> Path:
     if not isinstance(episode_id, str) or not re.fullmatch(r'[0-9a-f]{32}', episode_id):
         raise ValueError('유효한 제작 회차 ID가 필요합니다.')

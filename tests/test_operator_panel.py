@@ -6,14 +6,14 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from nicegui import core, ui
 from nicegui.client import Client
 from nicegui.page import page
 
 from shorts_maker.gui.components.operator_panel import render_operator_panel
-from shorts_maker.gui.components import scheduling_tab
+from shorts_maker.gui.components import operator_panel, scheduling_tab
 from shorts_maker.gui.state.app_state import AppState
 from shorts_maker.services import google_budget, openai_budget
 from shorts_maker.services.operating_budget import begin_episode, episode_path
@@ -25,6 +25,89 @@ from test_gui_creation_flows import script
 
 
 class OperatorPanelTests(IsolatedAsyncioTestCase):
+    def pending(self):
+        self.schedule = self.manager.update_schedule(self.schedule['id'], {
+            'last_result': 'operator_pending', 'last_script': None,
+            'last_video_path': None, 'last_youtube_id': None})
+        settings.paid_production_enabled = True
+
+    async def click_and_wait(self, label, task_name):
+        before = asyncio.all_tasks()
+        self.click(label)
+        tasks = [task for task in asyncio.all_tasks() - before if task_name in task.get_name()]
+        self.assertTrue(tasks)
+        await asyncio.wait_for(asyncio.gather(*tasks), timeout=3)
+
+    async def test_planning_preview_is_read_only_and_cancel_does_not_dispatch(self):
+        self.pending()
+        before = self.manager.filename.read_bytes()
+        self.render()
+        with self.client, patch.object(operator_panel, 'plan_pending_schedule', new_callable=AsyncMock) as plan:
+            await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
+            self.assertEqual(self.manager.filename.read_bytes(), before)
+            self.assertIn('OpenAI $0.300000', '\n'.join(getattr(e, 'text', '') for e in self.client.elements.values()))
+            self.click('취소')
+            await self.click_and_wait('이 회차 기획 실행', 'confirm')
+            plan.assert_not_awaited()
+        self.assertFalse(self.state.is_busy)
+
+    async def test_planning_runs_once_through_navigation_without_replacing_user_work(self):
+        self.pending()
+        original_script = self.state.script.model_dump_json()
+        self.state.remember_script_draft(self.state.script_editor_key(), '미적용 입력 유지')
+        root, _ = self.render()
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def complete(*args):
+            entered.set()
+            await release.wait()
+            return self.manager.update_schedule(self.schedule['id'], {
+                'last_result': 'script_review_pending', 'last_script': script().model_dump(mode='json')})
+        with self.client, patch.object(operator_panel, 'plan_pending_schedule', side_effect=complete) as plan:
+            await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
+            before = asyncio.all_tasks()
+            self.click('이 회차 기획 실행')
+            tasks = [task for task in asyncio.all_tasks() - before if 'confirm' in task.get_name()]
+            await asyncio.wait_for(entered.wait(), 3)
+            self.assertTrue(self.state.is_busy)
+            root.clear()
+            self.render()
+            await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
+            plan.assert_awaited_once()
+            release.set()
+            await asyncio.wait_for(asyncio.gather(*tasks), 3)
+        self.assertFalse(self.state.is_busy)
+        self.assertEqual(self.state.script.model_dump_json(), original_script)
+        self.assertEqual(self.state.script_editor_text(), '미적용 입력 유지')
+        self.assertEqual(self.manager.get_schedule(self.schedule['id'])['last_result'], 'script_review_pending')
+        self.attached.assert_called_once()
+
+    async def test_stale_or_busy_planning_dialog_does_not_clear_another_running_operation(self):
+        self.pending()
+        self.render()
+        with self.client, patch.object(operator_panel, 'plan_pending_schedule', new_callable=AsyncMock) as plan:
+            await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
+            self.state.scheduled_planning_in_progress = True
+            await self.click_and_wait('이 회차 기획 실행', 'confirm')
+            self.assertTrue(self.state.scheduled_planning_in_progress)
+            plan.assert_not_awaited()
+            self.state.scheduled_planning_in_progress = False
+            self.manager.update_schedule(self.schedule['id'], {'name': '다른 설정으로 수정됨'})
+            await self.click_and_wait('이 회차 기획 실행', 'confirm')
+            plan.assert_not_awaited()
+
+    async def test_failed_planning_releases_ui_busy_without_accepting_or_retrying(self):
+        self.pending()
+        before = self.manager.filename.read_bytes()
+        self.render()
+        with self.client, patch.object(operator_panel, 'plan_pending_schedule', new_callable=AsyncMock,
+                                       side_effect=RuntimeError('YOUTUBE_AUTH_REQUIRED')) as plan:
+            await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
+            await self.click_and_wait('이 회차 기획 실행', 'confirm')
+            plan.assert_awaited_once()
+        self.assertFalse(self.state.is_busy)
+        self.assertEqual(before, self.manager.filename.read_bytes())
+        self.assertIsNone(self.manager.get_schedule(self.schedule['id']).get('last_youtube_id'))
+
     async def asyncSetUp(self):
         directory = TemporaryDirectory()
         self.addCleanup(directory.cleanup)

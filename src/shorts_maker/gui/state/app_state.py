@@ -59,6 +59,7 @@ class AppState:
     final_video_path: Optional[str] = None
     failed_video_preview_path: Optional[str] = None
     youtube_upload_in_progress: bool = False
+    scheduled_planning_in_progress: bool = False
 
     # Service Reference (lazy init via property)
     _production_service: Optional["ProductionService"] = field(default=None, repr=False)
@@ -103,7 +104,7 @@ class AppState:
 
     @property
     def is_busy(self) -> bool:
-        return self.pipeline_running or self.youtube_upload_in_progress
+        return self.pipeline_running or self.youtube_upload_in_progress or self.scheduled_planning_in_progress
 
     @property
     def production_service(self) -> Optional["ProductionService"]:

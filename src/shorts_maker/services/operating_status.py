@@ -1,6 +1,13 @@
 """Shared read-only schedule handoff facts and agent episode costs for CLI and Studio."""
 
+import hashlib
+import json
+
 from shorts_maker.services.operating_budget import episode_environment, episode_path, load_episode
+
+
+def schedule_sha256(schedule: dict) -> str:
+    return hashlib.sha256(json.dumps(schedule, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
 def operator_status(schedule: dict) -> dict:

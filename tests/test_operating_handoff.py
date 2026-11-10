@@ -8,6 +8,9 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
+from threading import Event
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,6 +20,8 @@ from zoneinfo import ZoneInfo
 from scripts.operate_schedule import run_scoped
 from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.services import google_budget, openai_budget
+from shorts_maker.services import scheduled_planning
+from shorts_maker.services.operating_status import schedule_sha256
 from shorts_maker.services.operating_budget import begin_episode, episode_environment, episode_path, load_episode
 from shorts_maker.services.production_service import ProductionResult, script_sha256
 from shorts_maker.utils.config import settings
@@ -24,6 +29,102 @@ from shorts_maker.utils.scheduler import ScheduleManager
 
 
 class OperatingHandoffTests(unittest.TestCase):
+    def pending_schedule(self):
+        return self.manager.update_schedule(self.schedule['id'], {
+            'enabled': False, 'last_result': 'operator_pending', 'run_count': 1})
+
+    def test_concurrent_first_planning_creates_one_baseline_and_one_child(self):
+        self.pending_schedule()
+        entered, release = Event(), Event()
+        records = []
+        def begin(*args):
+            record = begin_episode(*args)
+            records.append(record['id'])
+            entered.set()
+            self.assertTrue(release.wait(5))
+            return record
+        def invoke():
+            return run_scoped(self.manager, self.schedule['id'], [sys.executable, '-c', 'pass'], planning=True)
+        with patch('scripts.operate_schedule.begin_episode', side_effect=begin), \
+                patch('scripts.operate_schedule.subprocess.run', return_value=SimpleNamespace(returncode=0)) as child:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                first = pool.submit(invoke)
+                try:
+                    self.assertTrue(entered.wait(5))
+                    with self.assertRaises(sqlite3.OperationalError):
+                        pool.submit(invoke).result(timeout=5)
+                finally:
+                    release.set()
+                self.assertEqual(first.result(timeout=5), 0)
+            child.assert_called_once()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(self.manager.get_schedule(self.schedule['id'])['last_episode_id'], records[0])
+
+    def test_planning_snapshot_recheck_happens_before_baseline_or_child(self):
+        expected = self.pending_schedule()
+        before = self.manager.filename.read_bytes()
+        with patch('scripts.operate_schedule.begin_episode') as begin, patch('scripts.operate_schedule.subprocess.run') as child:
+            with self.assertRaises(ValueError):
+                run_scoped(self.manager, expected['id'], [sys.executable, '-c', 'pass'],
+                           planning=True, expected_schedule_sha256='old dialog')
+            begin.assert_not_called()
+            child.assert_not_called()
+        self.assertEqual(before, self.manager.filename.read_bytes())
+
+    def test_studio_planning_preflight_reads_current_room_without_creating_episode(self):
+        expected = self.pending_schedule()
+        before = self.manager.filename.read_bytes()
+        with patch.object(settings, 'paid_production_enabled', True):
+            room = scheduled_planning.planning_preflight(self.manager, expected)
+            self.assertEqual(room, {'google_remaining_krw': 3000, 'openai_remaining_usd': .30})
+            self.assertNotIn('last_episode_id', self.manager.get_schedule(expected['id']))
+            self.manager.update_schedule(expected['id'], {'name': 'changed since preview'})
+            with self.assertRaises(ValueError):
+                scheduled_planning.planning_preflight(self.manager, expected)
+        self.assertNotEqual(before, self.manager.filename.read_bytes())
+
+    def test_studio_planning_runs_only_fixed_existing_scoped_command(self):
+        from test_gui_creation_flows import script
+        expected = self.pending_schedule()
+        def child(command, **kwargs):
+            self.assertEqual(command[0], sys.executable)
+            self.assertEqual(command[-4:], ['plan', expected['id'], '--expected-schedule-sha256', schedule_sha256(expected)])
+            self.assertNotIn('shell', kwargs)
+            self.manager.update_schedule(expected['id'], {'last_result': 'script_review_pending',
+                                                          'last_script': script().model_dump(mode='json')})
+            return SimpleNamespace(returncode=0, stderr='', stdout='')
+        with patch.object(settings, 'paid_production_enabled', True), \
+                patch.object(scheduled_planning.subprocess, 'run', side_effect=child) as process:
+            result = asyncio.run(scheduled_planning.plan_pending_schedule(self.manager, expected))
+            self.assertEqual(result['last_result'], 'script_review_pending')
+            process.assert_called_once()
+        self.assertNotIn('last_youtube_id', result)
+
+    def test_studio_planning_gate_and_unknown_result_do_not_launch_or_retry(self):
+        record = self.queued_episode()
+        expected = self.manager.get_schedule(self.schedule['id'])
+        with patch.object(scheduled_planning.subprocess, 'run') as child:
+            with patch.object(settings, 'paid_production_enabled', False):
+                with self.assertRaises(RuntimeError):
+                    asyncio.run(scheduled_planning.plan_pending_schedule(self.manager, expected))
+            pending = episode_path(record['id']).with_suffix('.operation.pending.json')
+            pending.write_text('unreconciled')
+            with patch.object(settings, 'paid_production_enabled', True):
+                with self.assertRaises(ValueError):
+                    asyncio.run(scheduled_planning.plan_pending_schedule(self.manager, expected))
+            child.assert_not_called()
+        self.assertEqual(pending.read_text(), 'unreconciled')
+
+    def test_studio_planning_auth_failure_is_actionable_and_not_retried(self):
+        expected = self.pending_schedule()
+        result = SimpleNamespace(returncode=1, stderr='YOUTUBE_AUTH_REQUIRED: fixture', stdout='')
+        with patch.object(settings, 'paid_production_enabled', True), \
+                patch.object(scheduled_planning.subprocess, 'run', return_value=result) as child:
+            with self.assertRaisesRegex(RuntimeError, 'YOUTUBE_AUTH_REQUIRED'):
+                asyncio.run(scheduled_planning.plan_pending_schedule(self.manager, expected))
+            child.assert_called_once()
+        self.assertEqual(self.manager.get_schedule(expected['id']), expected)
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -93,7 +194,7 @@ class OperatingHandoffTests(unittest.TestCase):
                 self.assertEqual(env['GOOGLE_MONTHLY_BUDGET_KRW'], '2520')
                 self.assertAlmostEqual(float(env['OPENAI_MONTHLY_BUDGET_USD']), .285)
                 self.assertEqual(current['google_new_reserved_krw'], 480)
-        with sqlite3.connect(google_budget._database_path()) as db:
+        with closing(sqlite3.connect(google_budget._database_path())) as db, db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM requests WHERE id=?', (old,)).fetchone()[0], 1)
             db.execute('DELETE FROM requests WHERE id=?', (old,))
         with self.assertRaisesRegex(ValueError, '사라졌습니다'):
