@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from shorts_maker.gui.components import planning_tab
+from shorts_maker.gui.components import planning_tab, script_form
 from shorts_maker.gui.state.app_state import AppState
 from test_gui_creation_flows import callback, script
 from test_gui_operation_flows import _UI
@@ -22,7 +22,7 @@ class StudioDraftTests(TestCase):
 
     def render(self, state):
         recorder = _UI()
-        with patch.object(planning_tab, 'ui', recorder):
+        with patch.object(planning_tab, 'ui', recorder), patch.object(script_form, 'ui', recorder):
             planning_tab.render_planning_tab(state)
         return recorder
 

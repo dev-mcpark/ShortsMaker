@@ -177,8 +177,11 @@ class RepeatNavigationTests(TestCase):
         binding._refresh_step()
         editor = next(e for e in self.client.elements.values() if e._props.get('label') == '각본 JSON')
         self.assertFalse(editor.enabled)
-        with self.client:
-            callbacks[0]()
+        async def recover():
+            with patch.object(core, 'loop', asyncio.get_running_loop()), self.client:
+                callbacks[0]()
+                await asyncio.sleep(0)
+        asyncio.run(recover())
         binding._refresh_step()
         self.assertTrue(editor.enabled)
         self.assertTrue(any(getattr(e, 'text', '') == 'returned while away' for e in self.client.elements.values()))

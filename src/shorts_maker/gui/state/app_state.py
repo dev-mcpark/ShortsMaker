@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass, field
 import hashlib
+import json
+import math
 from pathlib import Path
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from datetime import datetime
@@ -267,6 +269,61 @@ class AppState:
     def remember_script_draft(self, key: str, text: str) -> None:
         if not self.is_busy and key == self.script_editor_key():
             self.script_editor_drafts[key] = text
+
+    def script_form_data(self) -> dict:
+        """Read the shared draft without rejecting temporary empty text/number fields."""
+        data = json.loads(self.script_editor_text())
+        if not isinstance(data, dict) or not isinstance(data.get('scenes'), list) or not data['scenes']:
+            raise ValueError('고급 JSON의 대본·장면 구조를 수정하거나 미적용 수정을 되돌리세요.')
+        numbers = []
+        for scene in data['scenes']:
+            if (not isinstance(scene, dict) or type(scene.get('scene_number')) is not int
+                    or scene['scene_number'] < 1
+                    or any(not isinstance(scene.get(field, ''), str)
+                           for field in ('script_text', 'visual_description', 'motion_instruction'))):
+                raise ValueError('고급 JSON의 장면 번호·텍스트 구조를 확인하세요.')
+            numbers.append(scene['scene_number'])
+            duration = scene.get('duration_seconds', 5.0)
+            if duration is not None and (type(duration) not in {int, float} or not math.isfinite(duration)):
+                raise ValueError('고급 JSON의 장면 예상 길이는 숫자여야 합니다.')
+            if not isinstance(scene.get('visual_mode'), (str, type(None))):
+                raise ValueError('고급 JSON의 장면 화면 구성을 확인하세요.')
+        if len(set(numbers)) != len(numbers) or any(not isinstance(data.get(field, ''), str)
+                                                    for field in ('title', 'description', 'generation_mode')):
+            raise ValueError('고급 JSON의 제목·설명·중복 장면 번호를 확인하세요.')
+        return data
+
+    def update_script_form_field(self, key: str, expected_text: str, field: str, value,
+                                 scene_number: Optional[int] = None) -> bool:
+        if self.is_busy or self.script is None or key != self.script_editor_key():
+            raise ValueError('작업 중이거나 대본이 바뀌었습니다. 현재 편집 화면을 다시 여세요.')
+        if expected_text != self.script_editor_text():
+            raise ValueError('다른 편집 화면에서 초안이 바뀌었습니다. 편집 화면을 새로고침하세요.')
+        data = self.script_form_data()
+        if scene_number is None:
+            if field not in {'title', 'description', 'generation_mode'} or not isinstance(value, str):
+                raise ValueError('수정할 대본 항목을 확인하세요.')
+            if field == 'generation_mode' and value not in {'hybrid', 'image', 'video'}:
+                raise ValueError('대본의 기본 화면 구성을 선택하세요.')
+            target = data
+        else:
+            if field not in {'script_text', 'visual_description', 'motion_instruction', 'duration_seconds', 'visual_mode'}:
+                raise ValueError('수정할 장면 항목을 확인하세요.')
+            if field in {'script_text', 'visual_description', 'motion_instruction'} and not isinstance(value, str):
+                raise ValueError('장면 내용은 텍스트로 입력하세요.')
+            if field == 'visual_mode' and value not in {None, 'image', 'video'}:
+                raise ValueError('장면의 화면 구성을 선택하세요.')
+            if field == 'duration_seconds' and value is not None and (
+                    type(value) not in {int, float} or not math.isfinite(value)):
+                raise ValueError('장면 예상 길이는 유한한 숫자로 입력하세요.')
+            target = next((scene for scene in data['scenes'] if scene['scene_number'] == scene_number), None)
+            if target is None:
+                raise ValueError('장면이 바뀌었습니다. 현재 편집 화면을 다시 여세요.')
+        if target.get(field) == value:
+            return False
+        target[field] = value
+        self.script_editor_drafts[key] = json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False)
+        return True
 
     def has_unapplied_script_draft(self) -> bool:
         from shorts_maker.planner.models import ShortsScript

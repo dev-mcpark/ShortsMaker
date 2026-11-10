@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.source_access import load_source_catalog
+from shorts_maker.gui.components.script_form import render_script_form
 from shorts_maker.gui.config.ui_theme import SCENE_GRADIENTS
 from shorts_maker.planner.script_planner import ShortsScript
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
@@ -59,10 +60,20 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
     editor_area = None
     editor_source = {'key': state.script_editor_key()}
     previewed_script = {'json': None}
+    form_panel = None
 
     def restore_editor():
         editor_source['key'] = state.script_editor_key()
         editor_area.value = state.script_editor_text()
+
+    def sync_json_from_form():
+        editor_area.value = state.script_editor_text()
+
+    def remember_json(event):
+        before = state.script_editor_text()
+        state.remember_script_draft(editor_source['key'], event.value or '')
+        if state.script_editor_text() != before and form_panel is not None:
+            safe_refresh(form_panel)
 
     def apply_script(script, context=None):
         audio = {key: getattr(state, key) for key in ('tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume')}
@@ -73,12 +84,14 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
         state.topic_candidates = context.candidates if context else []
 
     def update_script_preview():
+        nonlocal form_panel
         try:
             script_preview_container.clear()
         except RuntimeError:
             return
 
         if not state.script:
+            form_panel = None
             previewed_script['json'] = None
             with script_preview_container:
                 with ui.element('div').classes('w-full h-full flex items-center justify-center py-20'):
@@ -93,6 +106,9 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
         total_duration = sum(s.duration_seconds for s in script.scenes) if script.scenes else 0
 
         with script_preview_container:
+            form_panel = render_script_form(state, sync_json_from_form,
+                                            lambda: save_script(), lambda: discard_draft())
+            ui.label('현재 적용된 대본 · 수정 내용 적용 후 갱신됩니다.').classes('text-xs text-slate-400 mb-2')
             # ── 각본 헤더 ──────────────────────────────────────
             with ui.element('div').classes('w-full p-5 rounded-xl bg-gradient-to-r from-violet-950/20 to-indigo-950/20 border border-violet-500/20 mb-5 backdrop-blur-md'):
                 with ui.row().classes('w-full items-start justify-between mb-2'):
@@ -348,7 +364,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                     try:
                         if (not editor_area.value or ShortsScript.model_validate_json(editor_area.value).model_dump_json()
                                 != state.script.model_dump_json()):
-                            safe_notify('JSON 변경을 먼저 현재 작업에 적용한 뒤 저장하세요.', type='warning')
+                            safe_notify('미적용 수정을 먼저 현재 작업에 적용한 뒤 저장하세요.', type='warning')
                             return
                         path = state.save_script_copy()
                         safe_refresh(saved_scripts)
@@ -358,12 +374,12 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
 
                 ui.button('현재 대본 새 파일로 저장', on_click=save_current_script).props('flat icon=save').classes('w-full').bind_enabled_from(
                     state, 'is_busy', lambda busy: not busy and state.script is not None)
-                ui.label('JSON 수정은 먼저 적용하세요. 저장한 사본은 재시작 후 다시 불러올 수 있으며 원본은 보존됩니다.').classes('text-xs text-slate-400')
+                ui.label('미적용 수정은 먼저 적용하세요. 저장한 사본은 재시작 후 다시 불러올 수 있으며 원본은 보존됩니다.').classes('text-xs text-slate-400')
 
             # JSON 편집기 (고급)
             with ui.expansion('JSON 편집기', icon='code').classes('w-full').props('header-class="text-xs text-gray-300 px-0"'):
                 editor_area = ui.textarea('각본 JSON', value=state.script_editor_text(),
-                    on_change=lambda event: state.remember_script_draft(editor_source['key'], event.value or '')
+                    on_change=remember_json
                 ).classes('w-full font-mono text-xs bg-slate-900 text-green-300 p-2 rounded').props('outlined rows=10').bind_enabled_from(
                     state, 'is_busy', lambda busy: not busy and editor_source['key'] == state.script_editor_key())
 
@@ -377,15 +393,23 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                     try:
                         data = json.loads(editor_area.value)
                         edited_script = ShortsScript(**data)
+                        consumed_key = editor_source['key']
+                        if state.script and edited_script.model_dump_json() == state.script.model_dump_json():
+                            state.script_editor_drafts.pop(consumed_key, None)
+                            restore_editor()
+                            if form_panel is not None:
+                                safe_refresh(form_panel)
+                            safe_notify('현재 대본과 같은 내용입니다. 기존 검토·완성본을 유지합니다.', type='info')
+                            return
                         apply_script(edited_script)
-                        state.script_editor_drafts.pop(state.script_editor_key(), None)
+                        state.script_editor_drafts.pop(consumed_key, None)
                         restore_editor()
                         update_script_preview()
                         update_candidates_panel()
                         feedback_section.visible = False
                         safe_notify('각본 적용됨!', type='positive')
                     except Exception as e:
-                        safe_notify(f'JSON 오류: {e}', type='negative')
+                        safe_notify(f'대본을 적용할 수 없습니다: {e}', type='negative')
 
                 ui.button('현재 작업에 적용', on_click=save_script).props('flat color=green-4 icon=save dense').classes('w-full mt-1').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
                 def discard_draft():
@@ -394,6 +418,8 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                         return
                     state.script_editor_drafts.pop(editor_source['key'], None)
                     restore_editor()
+                    if form_panel is not None:
+                        safe_refresh(form_panel)
 
                 ui.button('미적용 수정 되돌리기', on_click=discard_draft).props('flat color=grey-4').classes('w-full min-h-[44px]').bind_enabled_from(
                     state, 'is_busy', lambda busy: not busy)
@@ -480,7 +506,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                         safe_notify('진행 중인 제작·업로드가 끝난 뒤 각본을 확인하세요.', type='warning')
                         return
                     if state.has_unapplied_script_draft():
-                        safe_notify('미적용 JSON 수정이 있습니다. 먼저 적용하거나 되돌린 뒤 각본을 확인하세요.', type='warning')
+                        safe_notify('미적용 대본 수정이 있습니다. 먼저 적용하거나 되돌린 뒤 각본을 확인하세요.', type='warning')
                         return
                     if state.script and state.script.model_dump_json() != previewed_script['json']:
                         safe_notify('각본이 변경됐습니다. 미리보기를 새로고침하고 다시 확인하세요.', type='warning')

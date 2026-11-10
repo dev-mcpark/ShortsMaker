@@ -56,7 +56,7 @@ def _next_edit_step(state, verdicts) -> str:
     if not state.script:
         return '다음: 대본·장면 검토에서 대본을 기획하거나 불러오세요.'
     if state.has_unapplied_script_draft():
-        return '다음: JSON 편집기의 미적용 수정을 적용하거나 되돌리세요. 이전 대본으로 제작하지 않습니다.'
+        return '다음: 미적용 대본 수정을 적용하거나 되돌리세요. 이전 대본으로 제작하지 않습니다.'
     if not state.is_script_reviewed():
         return '다음: 대본·장면 검토에서 현재 각본 확인을 완료하세요.'
     if not settings.paid_production_enabled and not state.prepared_narration_manifest:
@@ -204,7 +204,7 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
                         safe_notify('현재 각본 확인과 API 생성 활성화가 필요합니다.', type='warning')
                         return
                     if state.has_unapplied_script_draft():
-                        safe_notify('먼저 JSON 편집기의 미적용 수정을 적용하거나 되돌리세요.', type='warning')
+                        safe_notify('먼저 미적용 대본 수정을 적용하거나 되돌리세요.', type='warning')
                         return
                     state.pipeline_running = True
                     try:
@@ -349,7 +349,7 @@ def render_raw_clip_reviews(state: 'AppState') -> dict:
                         safe_notify('현재 각본 검토를 완료하고 다른 제작이 끝난 뒤 진행하세요.', type='warning')
                         return
                     if state.has_unapplied_script_draft():
-                        safe_notify('먼저 JSON 편집기의 미적용 수정을 적용하거나 되돌리세요.', type='warning')
+                        safe_notify('먼저 미적용 대본 수정을 적용하거나 되돌리세요.', type='warning')
                         return
                     if not shown['sha256']:
                         try:
@@ -854,7 +854,7 @@ def render_generation_tab(state: 'AppState') -> None:
                 safe_notify('기획 탭에서 현재 각본을 확인한 뒤 제작을 시작하세요.', type='warning')
                 return
             if state.has_unapplied_script_draft():
-                safe_notify('먼저 JSON 편집기의 미적용 수정을 적용하거나 되돌리세요.', type='warning')
+                safe_notify('먼저 미적용 대본 수정을 적용하거나 되돌리세요.', type='warning')
                 return
             if not settings.paid_production_enabled and not state.prepared_narration_manifest:
                 safe_notify('검토 모드입니다. 기존 내레이션을 연결하거나 API 생성을 활성화하세요.', type='warning')
