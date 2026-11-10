@@ -1,6 +1,6 @@
 # Shared project instructions
 
-ShortsMaker's goal is to sustain repeatable production and upload of source-grounded Korean Shorts within a controlled budget, with measurable quality and eventual YouTube revenue. Optimize for videos worth publishing, not upload volume alone. Automatic uploads are private review copies; public release remains an editorial decision.
+ShortsMaker's primary goal is to improve Studio into a product users can use to run, review, intervene in, and resume the complete source-grounded Korean Shorts workflow through the app. Use budget-controlled production and private upload as a product and video-quality validation loop toward sustainable operation and eventual YouTube revenue. The current objective and acceptance criteria are owned by docs/STATUS.md. Optimize for videos worth publishing, not upload volume alone. Automatic uploads are private review copies; public release remains an editorial decision.
 
 Before editing, read [docs/README.md](docs/README.md) for the code map and [docs/STATUS.md](docs/STATUS.md) for the active milestone. Read task-relevant entries in [docs/DECISIONS.md](docs/DECISIONS.md). Verify these documents against current code and tests; record any drift you find.
 

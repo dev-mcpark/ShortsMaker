@@ -2,8 +2,8 @@
 
 Development map and agent handoff: [docs/README.md](docs/README.md), [docs/STATUS.md](docs/STATUS.md), and [docs/DECISIONS.md](docs/DECISIONS.md). Codex and Claude Code share [AGENTS.md](AGENTS.md) as the project instruction entry.
 
-AI-powered YouTube Shorts automation pipeline using **Google Veo 3.1** and **Gemini image generation**.
-ShortsMaker aims to produce and upload source-grounded Korean Shorts continuously within a controlled budget, improving quality and audience results toward eventual YouTube revenue. It researches, writes scripts, generates visuals, and can upload content to YouTube. Review source claims and the finished video before scaling publication.
+A local Studio app for source-grounded Korean Shorts using **Google Veo 3.1** and **Gemini image generation**.
+ShortsMaker is being developed so users can select sources, edit scripts and scenes, prepare media, review and resume work, manage materials and budgets, and privately upload to YouTube through the app. Real production is the feedback loop for improving the product and video quality toward sustainable operation and eventual revenue. The current objective, remaining app gaps and acceptance evidence are in [docs/STATUS.md](docs/STATUS.md). Review source claims and the finished video before scaling publication.
 Automatic uploads are private review copies; public publication remains a separate editorial decision.
 
 ## Studio 사용법
