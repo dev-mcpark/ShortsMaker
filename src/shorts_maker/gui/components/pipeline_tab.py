@@ -13,6 +13,7 @@ from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.utils.config import settings
 from shorts_maker.gui.components.common.progress_utils import format_time, update_scene_grid
 from shorts_maker.gui.components.common.media_preview import media_sources
+from shorts_maker.gui.components.common.source_access import load_source_catalog
 
 if TYPE_CHECKING:
     from shorts_maker.gui.state.app_state import AppState
@@ -85,8 +86,9 @@ def render_pipeline_tab(
                     value='Auto (RSS)'
                 ).props('color=violet size=32px').classes('text-xs text-slate-300 gap-4 mb-1')
 
+                catalog_manager, catalog = load_source_catalog(SourceManager)
                 category_select = ui.select(
-                    ['전체 분야', *SourceManager().get_categories()],
+                    ['전체 분야', *catalog],
                     value='전체 분야', label='RSS 분야'
                 ).props('outlined dense dark').classes('w-full text-xs')
                 category_select.bind_visibility_from(source_mode, 'value', value='Auto (RSS)')
@@ -112,6 +114,10 @@ def render_pipeline_tab(
             # --- Execution Actions ---
             async def run_full_pipeline():
                 nonlocal start_btn, stop_btn
+
+                if source_mode.value == 'Auto (RSS)' and catalog_manager is None:
+                    safe_notify('RSS 설정을 복구한 뒤 다시 기획하세요.', type='warning')
+                    return
 
                 if state.is_busy:
                     safe_notify('진행 중인 제작·업로드가 끝난 뒤 기획을 시작하세요.', type='warning')
@@ -251,6 +257,8 @@ def render_pipeline_tab(
                     state.pipeline_running = False
                     if result.script is not None:
                         state.load_saved_script(result.script)
+                        state.script_context = result.script_context
+                        state.topic_candidates = result.script_context.candidates if result.script_context else []
                     if result.ready_for_upload:
                         state.final_video_path = result.video_path
                     if result.clips:
@@ -359,7 +367,8 @@ def render_pipeline_tab(
                     '각본 기획 시작',
                     on_click=run_full_pipeline
                 ).classes('flex-grow font-bold text-xs py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600').props('color=purple-9 unelevated icon=play_arrow')
-                start_btn.bind_enabled_from(state, 'is_busy', backward=lambda busy: not busy and settings.paid_production_enabled)
+                start_btn.bind_enabled_from(state, 'is_busy', backward=lambda busy: not busy and settings.paid_production_enabled
+                    and (source_mode.value != 'Auto (RSS)' or catalog_manager is not None))
 
                 stop_btn = ui.button(on_click=stop_pipeline).props('flat round color=red icon=stop aria-label="파이프라인 중단"').classes('bg-slate-800/80')
                 stop_btn.disable()

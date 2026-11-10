@@ -327,6 +327,7 @@ class ScheduleDeletionTests(TestCase):
             before = manager.filename.read_bytes()
             source = Mock()
             source.get_categories.return_value = []
+            source.load_sources.return_value = {}
             recorder = _UI()
             state = AppState(final_video_path='newer-comparison.mp4')
             with patch.object(scheduling_tab, 'ui', recorder), \
@@ -376,6 +377,7 @@ class PlanningCallbackTests(TestCase):
         recorder = _UI()
         source = Mock()
         source.get_categories.return_value = []
+        source.load_sources.return_value = {}
         with patch.object(pipeline_tab, 'ui', recorder), \
                 patch.object(pipeline_tab, 'SourceManager', Mock(return_value=source)), \
                 patch.object(pipeline_tab, 'safe_notify'), \
@@ -426,6 +428,23 @@ class PlanningCallbackTests(TestCase):
         self.assertEqual(state.generated_clips, ['scene.mp4'])
         self.assertEqual(state.pipeline_history[-1]['title'], '각본 기획 실패')
 
+    def test_successful_pipeline_keeps_context_for_workspace_feedback(self):
+        from test_gui_creation_flows import script
+        from shorts_maker.planner.models import ScriptGenerationContext
+        state = AppState()
+        context = ScriptGenerationContext(source_item={'url': 'https://example.com'})
+        service = Mock(progress=ProductionProgress())
+        service.full_pipeline = AsyncMock(return_value=ProductionResult(
+            True, script=script(), review_pending=True, script_context=context))
+        state.new_production_service = Mock(return_value=service)
+        recorder, start = self.render(state, paid=True)
+        with patch.object(pipeline_tab, 'ui', recorder), \
+                patch.object(pipeline_tab, 'settings', Mock(paid_production_enabled=True)), \
+                patch.object(pipeline_tab, 'safe_notify'), patch.object(pipeline_tab, 'safe_refresh'):
+            asyncio.run(start())
+        self.assertIs(state.script_context, context)
+        self.assertFalse(state.is_busy)
+
 
 class SourceCallbackTests(TestCase):
     def render(self, manager):
@@ -455,7 +474,7 @@ class SourceCallbackTests(TestCase):
                 patch.object(sources_tab, 'safe_refresh') as refresh:
             button.callback()
         self.assertEqual(notify.call_args.kwargs['type'], 'negative')
-        refresh.assert_not_called()
+        manager.add_source.assert_called_once()
 
 
 class LocalReviewInterfaceTests(TestCase):

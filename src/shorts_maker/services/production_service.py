@@ -151,6 +151,7 @@ class ProductionResult:
     reused_scenes: int = 0
     report_path: Optional[str] = None
     review_pending: bool = False
+    script_context: Optional[ScriptGenerationContext] = field(default=None, repr=False)
 
 
 class ProductionService:
@@ -664,14 +665,22 @@ class ProductionService:
             return None
 
         try:
+            self._progress.error = None
             self._start_phase(ProductionPhase.PLANNING)
             if not settings.paid_production_enabled:
                 raise ValueError(self.PAID_WORK_DISABLED)
-            context.attempt_count += 1
             self._update_progress(ProductionPhase.PLANNING, 20, "피드백 반영 재생성 중...")
+            if self.is_cancelled():
+                self._update_progress(ProductionPhase.FAILED, 0, "사용자에 의해 취소됨")
+                return None
 
+            context.attempt_count += 1
             planner = self._get_planner()
             final_script = await planner.regenerate(context.source_item, feedback=feedback)
+
+            if self.is_cancelled():
+                self._update_progress(ProductionPhase.FAILED, 0, "사용자에 의해 취소됨")
+                return None
 
             if final_script:
                 num_scenes = len(final_script.scenes) if final_script.scenes else 5
@@ -1226,7 +1235,7 @@ class ProductionService:
         if approved_script is None:
             self._update_progress(ProductionPhase.COMPLETED, 100,
                                   "대본 생성 완료 · 장면 검토 후 제작을 이어가세요")
-            return ProductionResult(success=True, script=script, review_pending=True)
+            return ProductionResult(success=True, script=script, review_pending=True, script_context=_context)
 
         metadata = None
         if auto_upload:

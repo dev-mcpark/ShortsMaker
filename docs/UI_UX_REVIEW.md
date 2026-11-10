@@ -1,5 +1,20 @@
 # Studio UI and code review
 
+### 2026-11-10 — Resumed repeat review of exceptional transitions
+
+The interrupted audit left partial service/source recovery changes, which were retained and completed. The regression matrix checks the same state transitions across entry points rather than treating one repaired screen as proof of every path.
+
+| Transition / confirmed failure | Correction and verification |
+| --- | --- |
+| Regeneration ignored cancellation and could retain a previous error | Service checks before attempt/submission and after await, clears the old error, retains the response artifact/consumed attempt; before/after-cancel tests use mocked planner operations |
+| Feedback controls disappeared/reset on return, and pipeline discarded the context | Context travels in ProductionResult to AppState; visibility/count bind to it; pipeline/service/native-view tests preserve the same context and actual attempt count |
+| A planning view opened during a request stayed stale; old labels could discard a result | Apply returned state before touching old widgets; one-shot view recovery restores preview/editor after idle; an old-script editor remains disabled until restoration |
+| Manual edit readiness stayed disabled after busy→idle | A single readiness binding observes busy/review/paid/workspace/clip conditions; native binding test covers idle→busy→idle |
+| Raw result recording succeeded but refreshing a deleted widget raised a second failure | Stale refresh cannot override the stored outcome/error; explicit local-only status refresh recovers the current view without buying another clip |
+| Malformed/unreadable RSS config broke four views | Shared visible error boundary, original file retention, fail-closed RSS mutations/starts and explicit repair/reload; cross-view native and fixture tests verify recovery |
+
+**447 offline tests pass**. No paid production, upload, acceptance, real source-file mutation or material deletion was used. The running Studio has not been restarted because unsaved-input safety is still awaiting the user's answer; newly changed UI is therefore **not live-browser-verified/applied yet**. [Private evidence](../outputs/evaluation/studio_repeat_review_20261110/review.json) retains hashes, unchanged operating state and the activation boundary. Existing source/raw/whole-cut spending and editorial gates remain intact.
+
 ### 2026-11-09 — User-perspective journey review
 
 Used click-path-audit across the seven current menus, with a shared state/reset map and separate read-only creation/operation checks. Existing November8 fixes were retained and not treated as new findings.

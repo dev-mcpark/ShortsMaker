@@ -5,6 +5,7 @@ from nicegui import ui
 from typing import TYPE_CHECKING
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
+from shorts_maker.gui.components.common.source_access import load_source_catalog
 from shorts_maker.gui.config.ui_theme import SCENE_GRADIENTS
 from shorts_maker.planner.script_planner import ShortsScript
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
@@ -227,8 +228,9 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                     source_mode, 'value', value='직접 URL 입력'
                 ).props('outlined dense dark').classes('w-full mb-2')
 
+                catalog_manager, catalog = load_source_catalog(SourceManager)
                 category_select = ui.select(
-                    ['전체 분야', *SourceManager().get_categories()],
+                    ['전체 분야', *catalog],
                     value='전체 분야', label='RSS 분야'
                 ).bind_visibility_from(
                     source_mode, 'value', value='RSS 자동 발견'
@@ -240,6 +242,9 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                 async def generate_script():
                     if state.is_busy:
                         safe_notify('진행 중인 제작·업로드가 끝난 뒤 각본을 기획하세요.', type='warning')
+                        return
+                    if source_mode.value == 'RSS 자동 발견' and catalog_manager is None:
+                        safe_notify('RSS 설정을 복구한 뒤 다시 기획하세요. 저장된 대본은 계속 열 수 있습니다.', type='warning')
                         return
                     if source_mode.value == '직접 URL 입력' and not url_input.value:
                         safe_notify('URL을 입력해주세요', type='negative')
@@ -260,13 +265,11 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                         if script:
                             state.pipeline_running = False
                             apply_script(script, context)
-                            update_script_preview()
-                            update_candidates_panel()
+                            safe_notify(f'각본 생성 완료: {script.title}', type='positive')
                             try:
+                                update_script_preview()
+                                update_candidates_panel()
                                 restore_editor()
-                                safe_notify(f'각본 생성 완료: {script.title}', type='positive')
-                                feedback_section.visible = bool(context)
-                                regen_counter_label.text = f'재생성: 0/{context.max_attempts if context else 3}회'
                             except RuntimeError:
                                 pass
                         else:
@@ -288,7 +291,8 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                     '각본 생성하기',
                     on_click=generate_script
                 ).classes('w-full mt-2').props('color=pink-9 unelevated icon=auto_awesome size=md').bind_enabled_from(
-                    state, 'is_busy', lambda busy: not busy and settings.paid_production_enabled)
+                    state, 'is_busy', lambda busy: not busy and settings.paid_production_enabled
+                    and (source_mode.value != 'RSS 자동 발견' or catalog_manager is not None))
                 if not settings.paid_production_enabled:
                     ui.label('검토 모드: 새 각본 생성은 중지되어 있습니다. 아래에서 저장된 각본을 불러오세요.').classes('text-xs text-amber-200 mt-2')
 
@@ -361,7 +365,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                 editor_area = ui.textarea('각본 JSON', value=state.script_editor_text(),
                     on_change=lambda event: state.remember_script_draft(editor_source['key'], event.value or '')
                 ).classes('w-full font-mono text-xs bg-slate-900 text-green-300 p-2 rounded').props('outlined rows=10').bind_enabled_from(
-                    state, 'is_busy', lambda busy: not busy)
+                    state, 'is_busy', lambda busy: not busy and editor_source['key'] == state.script_editor_key())
 
                 def save_script():
                     if state.is_busy:
@@ -398,17 +402,19 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
 
             # 피드백 섹션 (스크립트 생성 후 표시)
             with ui.element('div').classes('w-full rounded-xl bg-slate-900/60 border border-orange-500/30 p-4') as feedback_section:
-                feedback_section.visible = False
+                feedback_section.bind_visibility_from(state, 'script_context', lambda context: context is not None)
 
                 with ui.row().classes('items-center gap-2 mb-3'):
                     ui.icon('feedback', size='xs').classes('text-orange-400')
                     ui.label('피드백으로 재생성').classes('text-xs font-bold text-orange-300 uppercase tracking-wider')
-                    regen_counter_label = ui.label('재생성: 0/3회').classes('text-xs text-gray-500 ml-auto')
+                    regen_counter_label = ui.label().bind_text_from(state, 'script_context', backward=lambda context:
+                        f'재생성: {context.attempt_count}/{context.max_attempts}회' if context else '재생성 컨텍스트 없음'
+                    ).classes('text-xs text-gray-500 ml-auto')
 
                 feedback_input = ui.textarea(
                     '피드백',
                     placeholder='예: 후크가 약해요. 더 충격적인 사실로 시작해주세요.'
-                ).props('outlined dark rows=3').classes('w-full mb-2')
+                ).props('outlined dark rows=3').classes('w-full mb-2').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
 
                 async def regenerate_with_feedback():
                     if state.is_busy:
@@ -436,21 +442,21 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                             context=context,
                             feedback=feedback_input.value
                         )
-                        regen_counter_label.text = f'재생성: {context.attempt_count}/{max_att}회'
                         if new_script:
                             state.pipeline_running = False
                             apply_script(new_script, context)
-                            update_script_preview()
+                            safe_notify(f'재생성 완료: {new_script.title}', type='positive')
                             try:
+                                update_script_preview()
+                                update_candidates_panel()
                                 restore_editor()
-                                safe_notify(f'재생성 완료: {new_script.title}', type='positive')
                                 feedback_input.value = ''
                             except RuntimeError:
                                 pass
                         else:
                             message = (service.PAID_WORK_DISABLED
                                        if service.progress.error == service.PAID_WORK_DISABLED
-                                       else '재생성 실패')
+                                       else getattr(service.progress, 'message', '') or '재생성 실패')
                             safe_notify(message, type='negative')
                     except Exception as e:
                         safe_notify(f'재생성 오류: {e}', type='negative')
@@ -547,3 +553,17 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
 
             update_script_preview()
             update_candidates_panel()
+
+            if state.is_busy:
+                def recover_after_operation():
+                    if state.is_busy:
+                        return
+                    recovery_timer.cancel()
+                    try:
+                        update_script_preview()
+                        update_candidates_panel()
+                        restore_editor()
+                    except RuntimeError:
+                        pass  # This view was closed again; AppState still owns the result.
+
+                recovery_timer = ui.timer(0.2, recover_after_operation)

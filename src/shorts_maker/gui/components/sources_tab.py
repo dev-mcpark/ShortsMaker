@@ -1,8 +1,10 @@
 """RSS Sources 관리 탭 컴포넌트 - Google AI Studio 스타일 개편"""
 from nicegui import ui
 from typing import TYPE_CHECKING
+from types import SimpleNamespace
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
+from shorts_maker.gui.components.common.source_access import load_source_catalog
 from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.utils.logger import get_logger
 
@@ -14,7 +16,39 @@ logger = get_logger(__name__)
 
 def render_sources_tab(state: 'AppState') -> None:
     """RSS Sources 탭 렌더링"""
-    source_manager = SourceManager()
+    with ui.column().classes('w-full gap-1') as catalog_notice:
+        source_manager, source_snapshot = load_source_catalog(SourceManager)
+    catalog_status = SimpleNamespace(available=source_manager is not None)
+
+    def reload_catalog():
+        nonlocal source_manager, source_snapshot
+        catalog_notice.clear()
+        with catalog_notice:
+            source_manager, source_snapshot = load_source_catalog(SourceManager)
+        catalog_status.available = source_manager is not None
+
+    def refresh_all(notify=True):
+        reload_catalog()
+        safe_refresh(sources_list)
+        safe_refresh(stats_card)
+        if notify:
+            safe_notify('RSS 소스 동기화 완료!' if catalog_status.available else
+                        'RSS 설정을 읽지 못했습니다. 원본 파일을 확인하세요.',
+                        type='info' if catalog_status.available else 'warning')
+
+    def modify(action, message):
+        if source_manager is None:
+            safe_notify('RSS 설정을 복구하고 목록을 새로고침한 뒤 변경하세요.', type='warning')
+            return False
+        try:
+            action()
+        except (OSError, ValueError) as error:
+            safe_notify(f'RSS 변경 실패: {error}', type='negative')
+            refresh_all(notify=False)
+            return False
+        refresh_all(notify=False)
+        safe_notify(message, type='positive')
+        return True
 
     # 와이드 2단 레이아웃
     with ui.row().classes('w-full h-auto lg:h-full gap-6 flex flex-col lg:flex-row flex-nowrap bg-slate-950 p-1'):
@@ -70,26 +104,24 @@ def render_sources_tab(state: 'AppState') -> None:
                             safe_notify('RSS 피드 URL 주소를 입력해주십시오.', type='warning')
                             return
 
-                        try:
-                            source_manager.add_source(cat_input.value.strip(), url_input.value.strip())
-                        except (OSError, ValueError) as error:
-                            safe_notify(f'RSS 추가 실패: {error}', type='negative')
+                        if not modify(lambda: source_manager.add_source(cat_input.value.strip(), url_input.value.strip()),
+                                      f'RSS 소스 추가 성공: {cat_input.value}'):
                             return
-                        safe_notify(f"✅ RSS 소스 추가 성공: {cat_input.value}", type='positive')
-                        safe_refresh(sources_list)
-                        safe_refresh(stats_card)
                         cat_input.value = ""
                         url_input.value = ""
 
                     ui.button(
                         'RSS 소스 추가',
                         on_click=add_feed
-                    ).classes('w-full font-bold text-xs py-2 bg-gradient-to-r from-violet-600 to-indigo-600').props('color=purple-9 unelevated icon=add')
+                    ).classes('w-full font-bold text-xs py-2 bg-gradient-to-r from-violet-600 to-indigo-600').props('color=purple-9 unelevated icon=add').bind_enabled_from(catalog_status, 'available')
 
             # --- RSS 통계 상황판 ---
             @ui.refreshable
             def stats_card():
-                sources = source_manager.load_sources()
+                if not catalog_status.available:
+                    ui.label('RSS 설정을 읽을 수 없어 통계를 확인하지 못했습니다.').classes('text-amber-200')
+                    return
+                sources = source_snapshot
                 total_cats = len(sources)
                 total_feeds = sum(len(urls) for urls in sources.values())
 
@@ -135,20 +167,13 @@ def render_sources_tab(state: 'AppState') -> None:
 
                         def make_add_rec_fn(c=cat, u=url, n=name):
                             def add_recommended():
-                                try:
-                                    source_manager.add_source(c, u)
-                                except (OSError, ValueError) as error:
-                                    safe_notify(f'RSS 추가 실패: {error}', type='negative')
-                                    return
-                                safe_notify(f"✅ 추가 완료: {n}", type='positive')
-                                safe_refresh(sources_list)
-                                safe_refresh(stats_card)
+                                modify(lambda: source_manager.add_source(c, u), f'추가 완료: {n}')
                             return add_recommended
 
                         ui.button(
                             icon='add',
                             on_click=make_add_rec_fn()
-                        ).props(f'flat round size=xs color=violet aria-label="{name} 피드 추가"').classes('bg-slate-800/80')
+                        ).props(f'flat round size=xs color=violet aria-label="{name} 피드 추가"').classes('bg-slate-800/80').bind_enabled_from(catalog_status, 'available')
 
         # =====================================================================
         # === 2. RIGHT PANEL: ACTIVE SOURCE LIST (가변폭) ===
@@ -163,17 +188,15 @@ def render_sources_tab(state: 'AppState') -> None:
                         ui.label('활성화된 RSS 소스 라이브러리').classes('text-sm font-bold text-white tracking-wide')
 
                     # 새로고침 버튼
-                    def refresh_all():
-                        safe_refresh(sources_list)
-                        safe_refresh(stats_card)
-                        safe_notify('🔄 RSS 소스 동기화 완료!', type='info')
-
-                    ui.button(icon='refresh', on_click=refresh_all).props('flat round color=violet size=sm aria-label="RSS 목록 새로고침"').classes('bg-slate-800/80')
+                    ui.button(icon='refresh', on_click=lambda: refresh_all()).props('flat round color=violet size=sm aria-label="RSS 목록 새로고침"').classes('bg-slate-800/80')
 
                 # 소스 피드 리스트 바디
                 @ui.refreshable
                 def sources_list():
-                    sources = source_manager.load_sources()
+                    if not catalog_status.available:
+                        ui.label('원본 RSS 설정을 복구한 뒤 목록을 새로고침하세요.').classes('text-amber-200')
+                        return
+                    sources = source_snapshot
 
                     if not sources:
                         with ui.element('div').classes('w-full py-20 flex-grow flex items-center justify-center'):
@@ -206,14 +229,8 @@ def render_sources_tab(state: 'AppState') -> None:
                                                         ui.button('취소', on_click=dialog.close)
 
                                                         def confirm():
-                                                            try:
-                                                                source_manager.remove_category(c)
+                                                            if modify(lambda: source_manager.remove_category(c), f'카테고리 삭제됨: {c}'):
                                                                 dialog.close()
-                                                                safe_notify(f'카테고리 삭제됨: {c}', type='warning')
-                                                                safe_refresh(sources_list)
-                                                                safe_refresh(stats_card)
-                                                            except (OSError, ValueError) as error:
-                                                                safe_notify(f'삭제 실패: {error}', type='negative')
 
                                                         ui.button('삭제', on_click=confirm).props('color=red')
                                                 dialog.open()
@@ -237,13 +254,7 @@ def render_sources_tab(state: 'AppState') -> None:
 
                                                 def make_rem_feed_fn(c=category, u=url):
                                                     def remove_feed():
-                                                        try:
-                                                            source_manager.remove_source(c, u)
-                                                            safe_notify('RSS 피드 매핑 제거됨', type='info')
-                                                            safe_refresh(sources_list)
-                                                            safe_refresh(stats_card)
-                                                        except (OSError, ValueError) as error:
-                                                            safe_notify(f'삭제 실패: {error}', type='negative')
+                                                        modify(lambda: source_manager.remove_source(c, u), 'RSS 피드 매핑 제거됨')
                                                     return remove_feed
 
                                                 ui.button(

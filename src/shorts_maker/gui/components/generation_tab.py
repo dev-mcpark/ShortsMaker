@@ -30,6 +30,16 @@ SCENE_ACCENT = [
 ]
 
 
+def _manual_edit_ready(state, exporter) -> bool:
+    if (state.is_busy or not settings.paid_production_enabled or not state.script
+            or not state.is_script_reviewed() or not state.manual_script_id):
+        return False
+    try:
+        return exporter.all_clips_ready(state.script, state.manual_script_id)
+    except (OSError, ValueError):
+        return False
+
+
 def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None:
     """Preview and bind locally supplied Veo first frames before a paid scene request."""
     if not state.script or state.manual_video_mode:
@@ -235,7 +245,10 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                         safe_notify('현재 각본 검토를 완료하고 다른 제작이 끝난 뒤 진행하세요.', type='warning')
                         return
                     if not shown['sha256']:
-                        update()
+                        try:
+                            update()
+                        except RuntimeError:
+                            pass
                         safe_notify('현재 첫 프레임과 요청 비용을 확인한 뒤 다시 진행하세요.', type='warning')
                         return
                     try:
@@ -245,10 +258,16 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                             state.script, scene_index, request_budget_usd=request_cap,
                             expected_frame_sha256=shown['sha256'],
                         )
-                        update()
                         safe_notify(f'무음 원본을 저장했습니다: {clip}', type='positive')
+                        try:
+                            update()
+                        except RuntimeError:
+                            pass
                     except Exception as error:
-                        update()
+                        try:
+                            update()
+                        except RuntimeError:
+                            pass
                         logger.error('Veo 원본 생성 실패: %s', error)
                         safe_notify(f'원본 생성 중단: {error}', type='negative')
                     finally:
@@ -559,6 +578,7 @@ def render_generation_tab(state: 'AppState') -> None:
                     on_click=run_manual_production
                 ).classes('px-4 py-1.5 font-bold text-xs').props('color=violet unelevated size=sm icon=movie_edit')
                 manual_btn.visible = state.manual_video_mode
+                manual_btn.bind_enabled_from(state, 'is_busy', lambda _: _manual_edit_ready(state, exporter))
 
                 # 자동 모드 전용 Start Production 버튼
                 async def run_production_with_notification():
@@ -608,6 +628,9 @@ def render_generation_tab(state: 'AppState') -> None:
                     render_raw_clip_reviews(state)
 
                 render_first_frame_reviews(state, on_review_change=lambda: safe_refresh(raw_reviews))
+                ui.button('원본 상태 새로고침', on_click=lambda: safe_refresh(raw_reviews)).props(
+                    'flat color=teal icon=refresh').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+                ui.label('저장된 요청·원본·판정만 다시 읽습니다. 새 API 요청은 보내지 않습니다.').classes('text-xs text-slate-400')
                 raw_reviews()
 
                 # ── 대형 프리뷰 모니터 카드 (자동 생성 시 혹은 수동 편집 완료 시 띄움) ──

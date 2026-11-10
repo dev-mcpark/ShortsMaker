@@ -9,6 +9,7 @@ from nicegui import ui
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.gui.components.common.media_preview import media_sources
+from shorts_maker.gui.components.common.source_access import load_source_catalog
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.utils.scheduler import ScheduleManager
 from shorts_maker.utils.config import settings
@@ -188,8 +189,9 @@ def render_scheduling_tab(state: 'AppState') -> None:
                             value='Auto-Discovery (RSS)'
                         ).props('color=purple size=32px')
 
+                    catalog_manager, catalog = load_source_catalog(SourceManager)
                     category_select = ui.select(
-                        ['전체 분야', *SourceManager().get_categories()],
+                        ['전체 분야', *catalog],
                         value='전체 분야', label='RSS 분야'
                     ).props('outlined dense dark').classes('w-full mb-3')
                     category_select.bind_visibility_from(source_mode, 'value', value='Auto-Discovery (RSS)')
@@ -244,6 +246,9 @@ def render_scheduling_tab(state: 'AppState') -> None:
 
                     # Create Button
                     def create_schedule():
+                        if source_mode.value == 'Auto-Discovery (RSS)' and catalog_manager is None:
+                            safe_notify('RSS 설정을 복구한 뒤 RSS 예약을 등록하세요.', type='warning')
+                            return
                         time_str = f"{hour_select.value}:{minute_select.value}"
                         try:
                             schedule = schedule_manager.create_schedule(
