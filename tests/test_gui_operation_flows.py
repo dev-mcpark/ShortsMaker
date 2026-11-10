@@ -91,7 +91,7 @@ class CompletedOutputTests(TestCase):
         self.root = Path(self.temp.name).resolve()
         self.output = self.root / 'outputs'
         self.output.mkdir()
-        self.settings = patch.object(publishing_tab, 'settings', Mock(output_dir=self.output))
+        self.settings = patch.object(publishing_tab.settings, 'output_dir', self.output)
         self.settings.start()
         self.addCleanup(self.settings.stop)
 

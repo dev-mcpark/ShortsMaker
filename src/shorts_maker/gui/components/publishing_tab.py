@@ -8,10 +8,14 @@ from pathlib import Path
 from nicegui import ui
 from typing import TYPE_CHECKING
 
-from shorts_maker.gui.components.common.safe_ui import safe_notify
+from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.services.production_service import source_credited_description, script_sha256
+from shorts_maker.services.publishing_drafts import (
+    publishing_key as _publishing_key, save_publishing_draft, saved_publishing_drafts,
+    restore_publishing_draft,
+)
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.logger import get_logger
 
@@ -66,10 +70,6 @@ def _load_completed_video(state: 'AppState', path: str) -> dict:
     return report
 
 
-def _publishing_key(report: dict) -> str:
-    return f"{report['video_path']}:{report['video_sha256']}"
-
-
 def _recorded_metadata(report: dict) -> dict:
     request = report.get('youtube_upload_request') or {}
     snippet = request.get('snippet', {}) if isinstance(request, dict) else {}
@@ -89,6 +89,7 @@ def render_publishing_tab(state: 'AppState') -> None:
     """YouTube Publishing 탭 렌더링"""
 
     binding = {'path': state.final_video_path, 'key': None, 'loading': False}
+    snapshots_open = {'value': False}
     media_source = media_sources(ui.context.client)
     with ui.column().classes('w-full max-w-2xl mx-auto mt-10'):
         with card_with_header('YouTube 비공개 업로드', 'cloud_upload', 'danger'):
@@ -116,6 +117,7 @@ def render_publishing_tab(state: 'AppState') -> None:
                         safe_notify(f'완성본 불러오기 실패: {error}', type='negative')
                         return
                     restore_form(report)
+                    safe_refresh(publishing_snapshots)
                     uploaded_review.refresh()
                     safe_notify('완성본을 불러왔습니다. 영상과 게시 정보를 확인하세요.', type='positive')
 
@@ -169,7 +171,76 @@ def render_publishing_tab(state: 'AppState') -> None:
                 for control in (title_input, desc_input, tags_input, synthetic_input):
                     control.on_value_change(remember_form)
                 restore_form()
-                ui.label('게시 입력은 영상별 서버 세션에 유지됩니다. 메뉴 이동 후에도 복원되며 서버 재시작 시에는 사라집니다.').classes('text-xs text-slate-400 mb-3')
+                ui.label('메뉴 이동 시 입력을 유지합니다. 재시작 전에는 게시 초안을 사본 저장하세요. 같은 영상에만 다시 불러올 수 있습니다.').classes('text-xs text-slate-400 mb-3')
+
+                @ui.refreshable
+                def publishing_snapshots():
+                    expected_key = binding['key']
+
+                    def current_report():
+                        if (state.is_busy or binding['path'] != state.final_video_path or binding['key'] != expected_key
+                                or getattr(snapshot_view, 'is_deleted', False) is True):
+                            raise ValueError('작업이 끝난 뒤 현재 완성본을 다시 불러오세요.')
+                        report = _completed_video(state.final_video_path)
+                        if _publishing_key(report) != expected_key:
+                            raise ValueError('영상이 바뀌었습니다. 완성본을 다시 불러오세요.')
+                        return report
+
+                    with ui.expansion('게시 초안 저장·복원', icon='save', value=snapshots_open['value'],
+                                      on_value_change=lambda event: snapshots_open.update(value=event.value)).classes('w-full mb-4') as snapshot_view:
+                        ui.label('빈 입력·미선택 상태도 저장합니다. 복원은 업로드나 기존 게시 정보 변경을 실행하지 않습니다.').classes('text-xs text-slate-400')
+                        if not state.final_video_path or not expected_key:
+                            ui.label('먼저 저장된 완성본을 불러오세요.').classes('text-sm text-slate-400')
+                            return
+                        try:
+                            choices, digests, warnings = saved_publishing_drafts(current_report())
+                        except (OSError, ValueError, TypeError):
+                            ui.label('초안 목록을 읽을 수 없습니다. 영상·보관 폴더를 확인한 뒤 새로고침하세요.').classes('text-sm text-amber-200')
+                            choices, digests, warnings = {}, {}, []
+                        for warning in warnings[:3]:
+                            ui.label(warning).classes('text-xs text-amber-200')
+
+                        def save_snapshot():
+                            try:
+                                report = current_report()
+                                remember_form()
+                                save_publishing_draft(report, state.publishing_drafts[expected_key])
+                            except (OSError, ValueError, TypeError, KeyError) as error:
+                                safe_notify(f'게시 초안 저장 실패: {error}', type='negative')
+                                return
+                            safe_refresh(publishing_snapshots)
+                            safe_notify('게시 초안을 사본으로 저장했습니다.', type='positive')
+
+                        with ui.row().classes('w-full gap-2'):
+                            ui.button('게시 초안 사본 저장', on_click=save_snapshot).props('flat icon=save').bind_enabled_from(
+                                state, 'is_busy', backward=lambda busy: not busy)
+                            ui.button('게시 초안 목록 새로고침', on_click=lambda: safe_refresh(publishing_snapshots)).props('flat icon=refresh')
+                        saved = ui.select(choices, label='이 영상의 저장된 게시 초안', with_input=True).props('outlined dark').classes('w-full')
+                        saved.bind_enabled_from(state, 'is_busy', backward=lambda busy: not busy)
+                        if not choices:
+                            ui.label('이 영상의 저장된 게시 초안이 없습니다.').classes('text-xs text-slate-400')
+
+                        def load_snapshot():
+                            try:
+                                report = current_report()
+                                if saved.value not in digests:
+                                    raise ValueError('저장된 게시 초안을 선택하세요.')
+                                remember_form()
+                                fields, backup = restore_publishing_draft(
+                                    report, saved.value, digests[saved.value],
+                                    state.publishing_drafts[expected_key], _recorded_metadata(report))
+                            except (OSError, ValueError, TypeError, KeyError) as error:
+                                safe_notify(f'게시 초안 복원 실패: {error}', type='negative')
+                                return
+                            state.publishing_drafts[expected_key] = fields
+                            restore_form(report)
+                            safe_refresh(publishing_snapshots)
+                            safe_notify('게시 초안을 불러왔습니다.' + (' 이전 편집도 사본으로 보관했습니다.' if backup else ''), type='positive')
+
+                        ui.button('게시 초안 불러오기', on_click=load_snapshot).props('flat icon=folder_open').bind_enabled_from(
+                            state, 'is_busy', backward=lambda busy: not busy and bool(choices))
+
+                publishing_snapshots()
 
                 def reset_form():
                     if state.is_busy or binding['path'] != state.final_video_path:

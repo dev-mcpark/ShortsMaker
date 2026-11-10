@@ -17,7 +17,7 @@ from nicegui.page import page
 
 from shorts_maker.gui.components import generation_tab, planning_tab
 from shorts_maker.gui.state.app_state import AppState
-from shorts_maker.services import work_drafts
+from shorts_maker.services import draft_store, work_drafts
 from shorts_maker.services.asset_library import AssetLibrary
 from shorts_maker.services.visual_review import approve_first_frame, inspect_frame
 from shorts_maker.utils.config import settings
@@ -134,7 +134,7 @@ class WorkDraftTests(TestCase):
             self.state.save_work_draft()
         self.state.pipeline_running = False
         with self.assertRaisesRegex(ValueError, '2 MiB'):
-            work_drafts.save_work_draft(self.state.script, '가' * work_drafts._MAX_BYTES, {})
+            work_drafts.save_work_draft(self.state.script, '가' * draft_store.MAX_BYTES, {})
         self.assertEqual(self.state.final_video_path, 'kept.mp4')
 
     def test_unique_atomic_snapshots_and_backup_failure_preserve_prior_work(self):
@@ -144,7 +144,7 @@ class WorkDraftTests(TestCase):
         original = first.read_bytes()
         self.state.remember_script_draft(self.state.script_editor_key(), 'unsaved input')
         _, digest = work_drafts.read_work_draft(first.name)
-        with patch.object(work_drafts.os, 'fsync', side_effect=OSError('fixture disk failure')):
+        with patch.object(draft_store.os, 'fsync', side_effect=OSError('fixture disk failure')):
             with self.assertRaises(OSError):
                 self.state.restore_work_draft(first.name, digest)
         self.assertEqual(first.read_bytes(), original)

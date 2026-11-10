@@ -1000,3 +1000,10 @@ Explicit restore checks the listed file digest and saves changed current/target 
 When opening scene review, compare restored input deltas with the currently verified baseline and remove values that are already identical. Discard must explicitly clear the scene delta even if resetting identical widgets emits no event. Neither case writes approval or invalidates the retained original; required file/hash checks remain authoritative.
 
 Show save/open in Planning and save from first-frame review, preserve the expanded lookup after explicit saves/restores, and refresh bindings when the applied script changes. Use title/time/short identity in the mobile selector; internal filenames remain storage details. Validate real process restart through a provider-blocked temporary app, not only a new AppState object. This is explicit persistence, not background autosave or permission to restart the older owner Studio with unknown unsaved input.
+
+
+## 2026-11-11 — Persist publishing drafts separately from upload records
+
+Keep raw title, description, comma-separated tag text and nullable AI disclosure in explicit immutable private snapshots, bound to the exact canonical output path and SHA-256. Partial fields are draft data, not validated upload metadata. Reuse the bounded atomic snapshot store without changing the existing work-draft schema or key. Snapshot lists are read-only; corrupt files and unreadable folders remain visible as unavailable rather than being deleted or silently reset.
+
+Before save/open, verify the current completed video through the existing quality/hash gate and reject busy, changed-video or deleted-view callbacks. Restore also checks the listed snapshot digest and saves changed current input before replacement; a failed backup leaves current input intact. Do not modify production sidecars, uncertain-upload markers, actual requests, episode attachment, owner adoption or public release. Reset-to-recorded-input remains separate from saved-snapshot retention. This is explicit local persistence, not autosave or permission to restart the older owner Studio.
