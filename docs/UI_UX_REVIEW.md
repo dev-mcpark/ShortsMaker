@@ -129,3 +129,8 @@ Reviewing the first attached scheduled private copy found that the card correctl
 
 
 2026-11-07 browser follow-up: opened the actual running Studio’s Cron view with paid production disabled. The real uploaded Cheonggye card shows `비공개 완성본 사용자 채택 대기`, the matching YouTube review link and `비공개 영상 검토 완료`; `각본 제외` is absent. No acceptance/rejection, scheduler start or paid control was clicked. The schedule still has one run, its exact attached video ID, disabled status and no `accepted_at`; program reservations remain unchanged. The [ignored UI record](../outputs/evaluation/cheonggye_adopted_20261106/review_guard_ui_20261107.json) and screenshot retain this focused check. This closes the earlier button-visibility limit without claiming a new full Studio/accessibility audit.
+
+
+## 2026-11-10 — Owner-operated local production
+
+The owner identified disabled cost-bearing buttons as an obstacle to trying the product. Their common cause was the installed Studio host's explicit false paid switch; this was an operating-mode block, not separate missing implementations for every button. Enable the installed Studio definition and default an unconfigured interactive entry point to direct production. Keep explicit review-only mode, CLI/queue isolation, normal stage readiness and budget/data safeguards. Clarify the header and in-app usage; first-frame automatic generation and retained-audio selection remain CLI/manual preparation limitations rather than features claimed as newly implemented. 449 offline tests passed; safe runtime activation and a real button-readiness check remain pending user unsaved-input confirmation. No paid API or YouTube upload was used in verification.

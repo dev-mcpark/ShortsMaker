@@ -2,6 +2,7 @@
 
 from nicegui import ui, app
 import logging
+import os
 import secrets
 from collections import deque
 
@@ -55,6 +56,9 @@ def main():
 
 def run():
     """Start the Studio server."""
+    # Manual Studio actions are enabled unless review-only operation was explicitly configured.
+    if 'PAID_PRODUCTION_ENABLED' not in os.environ:
+        settings.paid_production_enabled = True
     ui.run(
         title="ShortsMaker Studio",
         favicon="🎬",

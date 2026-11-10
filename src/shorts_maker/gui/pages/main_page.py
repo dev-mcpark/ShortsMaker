@@ -41,7 +41,7 @@ def render_main_page() -> None:
                 'text-xs text-slate-400 max-xl:hidden')
 
             with ui.row().classes('items-center gap-2'):
-                ui.badge('API 생성 가능' if settings.paid_production_enabled else '검토 모드 · API 생성 중지').props(
+                ui.badge('직접 제작 · API 과금' if settings.paid_production_enabled else '검토 모드 · API 생성 중지').props(
                     'color=teal' if settings.paid_production_enabled else 'color=blue-grey')
                 ui.button('대본 기획', on_click=lambda: select_view('pipeline')).props(
                     'color=violet size=sm icon=edit_note unelevated no-caps')
@@ -362,7 +362,9 @@ def render_main_page() -> None:
 ### 예약 운영과 비용
 **예약 운영**에서 제작 주기·현재 대기 사유·검토할 영상을 확인합니다. 현재 운영 목표는 14일 주기이며, 예약 시각은 제작 시작 시각입니다. 검토나 예산 문제로 멈춘 회차가 자동으로 다음 회차로 넘어가지는 않습니다.
 
-**검토 모드 · API 생성 중지** 상태에서는 새 대본·음성·이미지·영상 API 생성이 차단됩니다. 저장된 자료 검토는 가능하며, 유료 제작은 승인된 회차 예산으로 진행합니다. 보유 영상을 연결해도 새 음성은 별도 API 비용이 들 수 있습니다.
+로컬 Studio에서는 대본 생성·재생성, 장면 생성, 음성·영상 편집을 직접 실행할 수 있습니다. 버튼을 누르면 API 비용이 발생할 수 있으며, 월 예산·비주얼 비용 상한과 장면 검토 조건은 계속 적용됩니다. 보유 영상을 연결해도 새 음성은 별도 API 비용이 들 수 있습니다. 비공개 업로드 후 공개 전환은 YouTube에서 직접 결정하세요.
+
+명시적으로 `PAID_PRODUCTION_ENABLED=false`를 설정한 경우에만 **검토 모드 · API 생성 중지**로 실행됩니다. 에이전트 예약 제작은 직접 사용과 별도로 기존 회차 한도를 적용합니다.
 
 화면의 임시 입력은 서버 재시작 시 사라질 수 있습니다. 대본 JSON은 **현재 작업에 적용 → 현재 대본 새 파일로 저장** 순서로 수정본을 보관하세요. 보유 영상 연결 화면의 **선택한 작업 이어가기**로 같은 대본의 클립 작업을 복원할 수 있습니다. 음성·음악은 **각본별 음성·음악 설정 저장**으로 보존하세요.
 
