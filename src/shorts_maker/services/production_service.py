@@ -152,6 +152,7 @@ class ProductionResult:
     report_path: Optional[str] = None
     review_pending: bool = False
     script_context: Optional[ScriptGenerationContext] = field(default=None, repr=False)
+    narration_manifest_path: Optional[str] = None
 
 
 class ProductionService:
@@ -464,6 +465,12 @@ class ProductionService:
             requests += 1
         return total, requests
 
+    async def generate_first_frame(self, script: ShortsScript, scene_index: int,
+                                   *, request_budget_usd: float) -> str:
+        from shorts_maker.services.first_frame_candidates import generate_candidate
+
+        return await generate_candidate(self, script, scene_index, request_budget_usd)
+
     async def generate_review_clip(self, script: ShortsScript, scene_index: int,
                                    *, request_budget_usd: float | None = None,
                                    expected_frame_sha256: str | None = None,
@@ -704,6 +711,7 @@ class ProductionService:
         manual_clip_paths: Optional[Dict[int, str]] = None,
         finish_phase: bool = True,
         prepared_audio_paths: Optional[List[str]] = None,
+        retain_narration: bool = False,
     ) -> ProductionResult:
         """
         스크립트에서 비디오 생성
@@ -713,6 +721,7 @@ class ProductionService:
             manual_clip_paths: 수동 모드 시 {scene_number: file_path} 딕셔너리.
                                None이면 VEO API를 통한 자동 생성.
             prepared_audio_paths: 재사용할 씬별 내레이션 파일. 호출자가 보관/삭제합니다.
+            retain_narration: 새 음성을 편집 전에 보관해 다음 Studio 편집에서 재사용합니다.
 
         Returns:
             ProductionResult 객체
@@ -721,6 +730,7 @@ class ProductionService:
         clips = []
         editor = None
         audio_paths = None
+        narration_manifest = None
         estimated_cost = 0.0
         generated_scenes = 0
         reused_scenes = 0
@@ -804,6 +814,10 @@ class ProductionService:
                     editor.preflight_music(script)
                 if prepared_audio_paths is None:
                     audio_paths = await editor.prepare_narration(script)
+                    if retain_narration:
+                        from shorts_maker.services.prepared_narration import retain_narration_set
+                        narration_manifest = await asyncio.to_thread(
+                            retain_narration_set, script, audio_paths, getattr(editor, 'tts_voice', 'alloy'))
                 else:
                     if len(prepared_audio_paths) != num_scenes:
                         raise ValueError("씬 수와 내레이션 수가 일치하지 않습니다.")
@@ -958,6 +972,8 @@ class ProductionService:
                     for index, (scene, mode) in enumerate(zip(script.scenes, visual_modes))
                 ],
                 "estimated_visual_output_cost_usd": round(estimated_cost, 4),
+                "prepared_audio_paths": list(prepared_audio_paths) if prepared_audio_paths is not None else None,
+                "narration_manifest_path": narration_manifest,
                 "music_direction": getattr(script, "music_direction", ""),
                 "bgm_track": Path(music_path).name if music_path else None,
                 "bgm_volume": (getattr(editor, "bgm_volume", self.editor_options.get("bgm_volume", 0.2))
@@ -980,6 +996,7 @@ class ProductionService:
                 result.estimated_visual_cost_usd = round(estimated_cost, 4)
                 result.generated_scenes = generated_scenes
                 result.reused_scenes = reused_scenes
+                result.narration_manifest_path = narration_manifest
                 return result
 
             self._update_progress(ProductionPhase.EDITING, 100, "✓ 편집 완료")
@@ -996,11 +1013,14 @@ class ProductionService:
                 generated_scenes=generated_scenes,
                 reused_scenes=reused_scenes,
                 report_path=report_path,
+                narration_manifest_path=narration_manifest,
             )
 
         except Exception as e:
             self.logger.error(f"비디오 프로덕션 오류: {e}")
-            return self._failed_result(str(e), clips)
+            result = self._failed_result(str(e), clips)
+            result.narration_manifest_path = narration_manifest
+            return result
         finally:
             if audio_paths and editor and prepared_audio_paths is None:
                 editor.cleanup_temp_files()

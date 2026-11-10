@@ -572,6 +572,8 @@ class ProductionGateTests(unittest.TestCase):
                     prepared_audio_paths=["prepared.wav"],
                 ))
                 self.assertTrue(result.success)
+                report = json.loads(Path(result.report_path).read_text())
+                self.assertEqual(report['prepared_audio_paths'], ['prepared.wav'])
                 local._editor.prepare_narration.assert_not_awaited()
 
             with patch("scripts.paired_review.VideoEditor") as narrator:

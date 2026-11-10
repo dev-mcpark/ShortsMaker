@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.media_preview import media_sources
+from shorts_maker.gui.components.narration_panel import render_narration_panel
+from shorts_maker.services.first_frame_candidates import retained_candidate
 from shorts_maker.services.production_service import ProductionPhase, ProductionProgress
 from shorts_maker.services.raw_review import load_raw_verdict, raw_review_status, save_raw_verdict
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
@@ -31,7 +33,7 @@ SCENE_ACCENT = [
 
 
 def _manual_edit_ready(state, exporter) -> bool:
-    if (state.is_busy or not settings.paid_production_enabled or not state.script
+    if (state.is_busy or not (settings.paid_production_enabled or state.prepared_narration_manifest) or not state.script
             or not state.is_script_reviewed() or not state.manual_script_id):
         return False
     try:
@@ -77,10 +79,19 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
                     ui.image(media_source(current_frame)).classes('w-full max-w-[180px]')
                 else:
                     status_label = ui.label('첫 프레임 승인 대기').classes('text-xs text-amber-300')
-                path_input = ui.input('첫 프레임 PNG/JPEG 경로', value=review_record.get('frame_path', '')).classes('w-full').props('dark')
+                candidate, candidate_error = None, None
+                try:
+                    candidate = retained_candidate(state.script, scene)
+                except ValueError as error:
+                    candidate_error = str(error)
+                candidate_notice = ui.label(candidate_error or '').classes('text-xs text-amber-200 break-all')
+                candidate_notice.visible = bool(candidate_error)
+                path_input = ui.input('첫 프레임 PNG/JPEG 경로', value=review_record.get('frame_path') or candidate or '').classes('w-full').props('dark')
                 must_show = ui.textarea('반드시 보여야 할 내용 (한 줄에 하나)', value='\n'.join(review_record.get('must_show', []))).classes('w-full').props('dark')
                 must_avoid = ui.textarea('피해야 할 묘사 (한 줄에 하나)', value='\n'.join(review_record.get('must_avoid', []))).classes('w-full').props('dark')
                 reviewer_note = ui.input('검토 의견', value=review_record.get('reviewer_note', '')).classes('w-full').props('dark')
+                for field in (path_input, must_show, must_avoid, reviewer_note):
+                    field.bind_enabled_from(state, 'is_busy', lambda busy: not busy)
                 preview_area = ui.column().classes('w-full')
                 previewed = {'path': None, 'sha256': None}
 
@@ -134,6 +145,60 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
                         safe_notify(f'장면 {scene_number}의 첫 프레임을 승인했습니다.', type='positive')
                     except (OSError, ValueError) as error:
                         safe_notify(f'첫 프레임 승인 실패: {error}', type='negative')
+
+                def refresh_candidate(current_scene=scene, frame_input=path_input, bound_preview=preview,
+                                      notice=candidate_notice):
+                    if state.is_busy or not state.script or state.script.model_dump_json() != rendered_script:
+                        return
+                    try:
+                        saved = retained_candidate(state.script, current_scene)
+                        if saved:
+                            notice.visible = False
+                            frame_input.value = saved
+                            bound_preview()
+                        else:
+                            safe_notify('저장된 첫 프레임 후보가 없습니다.', type='info')
+                    except (OSError, ValueError) as error:
+                        notice.text, notice.visible = str(error), True
+                        safe_notify(str(error), type='negative')
+
+                estimate = estimated_scene_cost('image', settings.image_model_id)
+                generation = {'done': bool(current_frame or candidate or candidate_error)}
+
+                async def generate_frame(index=state.script.scenes.index(scene), frame_input=path_input,
+                                         bound_preview=preview, ceiling=estimate, request=generation):
+                    if state.is_busy or not state.script or state.script.model_dump_json() != rendered_script:
+                        safe_notify('작업 중이거나 각본이 변경됐습니다. 현재 제작 화면을 다시 확인하세요.', type='warning')
+                        return
+                    if not state.is_script_reviewed() or not settings.paid_production_enabled:
+                        safe_notify('현재 각본 확인과 API 생성 활성화가 필요합니다.', type='warning')
+                        return
+                    state.pipeline_running = True
+                    try:
+                        service = state.new_production_service()
+                        saved = await service.generate_first_frame(state.script, index, request_budget_usd=ceiling)
+                        request['done'] = True
+                        if service.is_cancelled():
+                            safe_notify('첫 프레임 요청 결과는 저장됐지만 취소되어 자동 선택하지 않았습니다.', type='warning')
+                            return
+                        safe_notify('첫 프레임 후보 저장 완료 · 내용을 검토한 뒤 별도로 승인하세요.', type='positive')
+                        if state.script and state.script.model_dump_json() == rendered_script:
+                            try:
+                                frame_input.value = saved
+                                bound_preview()
+                            except RuntimeError:
+                                pass
+                    except Exception as error:
+                        safe_notify(f'첫 프레임 생성 중단: {error}', type='negative')
+                    finally:
+                        state.pipeline_running = False
+
+                ui.label(f'후보 이미지 · {settings.image_model_id} · 출력 예약 추정 ${estimate:.3f} · 장면당 1회, 자동 재시도 없음').classes('text-xs text-slate-400')
+                ui.button('첫 프레임 후보 생성', on_click=generate_frame).props('color=amber').bind_enabled_from(
+                    state, 'is_busy', lambda busy, request=generation:
+                    not busy and not request['done'] and settings.paid_production_enabled and state.is_script_reviewed())
+                ui.label('생성 결과는 자동 승인되지 않습니다. 메뉴 이동 후에는 후보 새로고침으로 이어가세요. 새 후보가 필요하면 장면 설명을 수정한 새 대본에서 진행하세요.').classes('text-xs text-slate-400')
+                ui.button('첫 프레임 후보 새로고침', on_click=refresh_candidate).props('flat').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
 
                 with ui.row():
                     ui.button('이미지 미리보기', on_click=preview).props('flat color=amber')
@@ -196,8 +261,12 @@ def render_raw_clip_reviews(state: 'AppState') -> None:
                         clip, frame_hash = state.get_or_create_service().review_clip_path(state.script, scene_index)
                         criteria = json.loads(review_path(state.script, state.script.scenes[scene_index]).read_text(encoding='utf-8'))
                     except (OSError, ValueError, KeyError, TypeError) as error:
-                        label.text = f'원본 검토 중단: {error}'
-                        panel.text = f'장면 {scene_number} · 첫 프레임·요청 기록 확인 필요'
+                        if str(error).startswith('FIRST_FRAME_REVIEW_REQUIRED:'):
+                            label.text = '위에서 첫 프레임을 승인하면 무음 원본을 생성할 수 있습니다.'
+                            panel.text = f'장면 {scene_number} · 첫 프레임 승인 대기'
+                        else:
+                            label.text = f'원본 검토 중단: {error}'
+                            panel.text = f'장면 {scene_number} · 첫 프레임·요청 기록 확인 필요'
                         return
                     shown['sha256'] = frame_hash
                     with criteria_display:
@@ -345,15 +414,15 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
         return
     ready_count = sum(1 for s in scenes_status if s["exists"])
     total = len(scenes_status)
-    if (total and ready_count == total and settings.paid_production_enabled
+    if (total and ready_count == total and (settings.paid_production_enabled or state.prepared_narration_manifest)
             and not state.is_busy and state.is_script_reviewed()):
         start_edit_btn.enable()
     else:
         start_edit_btn.disable()
 
     with scene_cards_container:
-        if not settings.paid_production_enabled:
-            ui.label('검토 모드: 클립 연결·복원·재생은 가능합니다. 새 음성이 필요한 편집은 승인된 유료 회차에서 진행합니다.').classes(
+        if not settings.paid_production_enabled and not state.prepared_narration_manifest:
+            ui.label('검토 모드: 클립 연결·복원·재생은 가능합니다. 기존 내레이션을 연결하면 새 음성 없이 편집할 수 있습니다.').classes(
                 'col-span-full w-full p-3 border border-amber-700/40 rounded-lg text-sm text-amber-200')
         workspaces.pop(state.manual_script_id, None)
         if workspaces:
@@ -544,6 +613,8 @@ def render_generation_tab(state: 'AppState') -> None:
     # 전체를 아우르는 반응형 컬럼 구조
     with ui.column().classes('w-full h-auto lg:h-full gap-0 overflow-visible lg:overflow-hidden bg-slate-950'):
 
+        narration_panel = render_narration_panel(state)
+
         # ── 1. TOP PIPELINE ACTION BAR ──
         with ui.element('div').classes('w-full px-4 lg:px-6 py-4 bg-slate-900 border-b border-slate-800 flex flex-wrap items-center justify-between shrink-0 gap-4'):
             with ui.row().classes('items-center gap-3'):
@@ -599,14 +670,14 @@ def render_generation_tab(state: 'AppState') -> None:
                             if not clip or raw_review_status(state.script, scene, clip, frame_hash) != 'approved':
                                 safe_notify('Veo 무음 원본을 아래에서 생성·검토한 뒤 승인하세요.', type='warning')
                                 return
-                    ui.notify('🎬 비디오 자동 생성을 구동합니다. Vertex AI 비용 모니터링을 진행하십시오...', type='info')
+                    ui.notify('검토된 장면과 선택한 내레이션으로 제작을 시작합니다.', type='info')
                     await run_production()
 
                 auto_btn = ui.button(
                     '영상 제작 시작',
                     on_click=run_production_with_notification
                 ).classes('px-4 py-1.5 font-bold text-xs bg-gradient-to-r from-violet-600 to-indigo-600').props('color=violet unelevated size=sm icon=rocket_launch').bind_enabled_from(
-                    state, 'is_busy', lambda busy: not busy and settings.paid_production_enabled and state.is_script_reviewed())
+                    state, 'is_busy', lambda busy: not busy and (settings.paid_production_enabled or bool(state.prepared_narration_manifest)) and state.is_script_reviewed())
                 auto_btn.visible = not state.manual_video_mode
 
                 # 상태 인디케이터 스피너
@@ -620,8 +691,8 @@ def render_generation_tab(state: 'AppState') -> None:
             # 자동 모드와 수동 모드 모두의 통합 뷰어
             with ui.column().classes('w-full flex-grow h-auto lg:h-full p-4 lg:p-6 overflow-visible lg:overflow-y-auto gap-5') as main_workspace_area:
 
-                if not settings.paid_production_enabled:
-                    ui.label('검토 모드 · 장면 검토와 기존 완성본 재생이 가능합니다. 새 음성이 필요한 Studio 편집은 중지되며, 유료 제작은 승인된 회차에서 진행합니다.').classes(
+                if not settings.paid_production_enabled and not state.prepared_narration_manifest:
+                    ui.label('검토 모드 · 기존 내레이션과 모든 장면 영상을 연결하면 새 API 호출 없이 편집할 수 있습니다.').classes(
                         'w-full p-3 rounded-lg bg-amber-950/20 border border-amber-700/40 text-sm text-amber-200')
                 @ui.refreshable
                 def raw_reviews():
@@ -737,8 +808,13 @@ def render_generation_tab(state: 'AppState') -> None:
             if not state.is_script_reviewed():
                 safe_notify('기획 탭에서 현재 각본을 확인한 뒤 제작을 시작하세요.', type='warning')
                 return
-            if not settings.paid_production_enabled:
-                safe_notify('검토 모드입니다. Studio 편집에는 새 음성 생성이 필요하며 승인된 유료 실행 범위에서 진행하세요.', type='warning')
+            if not settings.paid_production_enabled and not state.prepared_narration_manifest:
+                safe_notify('검토 모드입니다. 기존 내레이션을 연결하거나 API 생성을 활성화하세요.', type='warning')
+                return
+            try:
+                prepared_audio = state.prepared_audio_paths()
+            except (OSError, ValueError, TypeError) as error:
+                safe_notify(f'연결한 내레이션을 다시 확인하세요: {error}', type='negative')
                 return
             production_running = True
 
@@ -793,14 +869,18 @@ def render_generation_tab(state: 'AppState') -> None:
                 monitor_task = asyncio.create_task(monitor_progress())
 
                 logger.info("=== Production Pipeline Execution Triggered ===")
-                result = await service.produce_video(
-                    state.script,
-                    manual_clip_paths=manual_clip_paths
-                )
+                options = {'manual_clip_paths': manual_clip_paths, 'retain_narration': True}
+                if prepared_audio is not None:
+                    options['prepared_audio_paths'] = prepared_audio
+                result = await service.produce_video(state.script, **options)
 
                 production_running = False
                 await monitor_task
 
+                retained_voice = getattr(result, 'narration_manifest_path', None)
+                if retained_voice:
+                    state.prepared_narration_manifest = retained_voice
+                    safe_refresh(narration_panel)
                 if result.success:
                     state.final_video_path = result.video_path
                     state.failed_video_preview_path = None

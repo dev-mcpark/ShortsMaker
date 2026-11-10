@@ -31,6 +31,7 @@ class GenerationNavigationTests(IsolatedAsyncioTestCase):
                 generation_tab, 'media_sources', return_value=source), patch.object(
                 generation_tab, 'render_first_frame_reviews', Mock()), patch.object(
                 generation_tab, 'render_raw_clip_reviews', Mock()), patch.object(
+                generation_tab, 'render_narration_panel', Mock()), patch.object(
                 generation_tab, 'render_manual_panel', Mock()), patch.object(
                 generation_tab, 'VeoPromptExporter', Mock()):
             generation_tab.render_generation_tab(state)
@@ -38,20 +39,26 @@ class GenerationNavigationTests(IsolatedAsyncioTestCase):
         self.assertEqual(len(players), 2)
         return players
 
-    async def complete_after_navigation(self, *, success=True, manual=False):
+    async def complete_after_navigation(self, *, success=True, manual=False, prepared=False, retained=False):
         state = AppState(script=script(), manual_video_mode=manual)
         state.confirm_script_review()
+        if prepared:
+            state.prepared_narration_manifest = '/tmp/narration.json'
+            state.prepared_audio_paths = Mock(return_value=['/tmp/retained-voice.mp3'])
         state.failed_video_preview_path = '/tmp/previous-partial.mp4'
         started, release = asyncio.Event(), asyncio.Event()
         progress = SimpleNamespace(phase=ProductionPhase.EDITING, scene_progresses=[], progress_percent=50)
 
         async def produce(*args, **kwargs):
+            if prepared:
+                self.assertEqual(kwargs['prepared_audio_paths'], ['/tmp/retained-voice.mp3'])
             started.set()
             await release.wait()
             progress.phase = ProductionPhase.COMPLETED if success else ProductionPhase.FAILED
             return SimpleNamespace(success=success,
                                    video_path='/tmp/new-final.mp4' if success else '/tmp/new-partial.mp4',
                                    clips=['scene.mp4'], estimated_visual_cost_usd=0, reused_scenes=1,
+                                   narration_manifest_path='/tmp/retained/narration.json' if retained else None,
                                    error=None if success else 'quality check failed')
 
         service = SimpleNamespace(produce_video=produce, set_progress_callback=Mock(), progress=progress)
@@ -67,8 +74,9 @@ class GenerationNavigationTests(IsolatedAsyncioTestCase):
             'manual_preview': SimpleNamespace(visible=False), 'manual_video_player': old_manual_player,
             'injected_video_player': old_player, 'injected_placeholder': SimpleNamespace(visible=False),
             'update_scene_grid': Mock(), 'update_progress_ui': Mock(),
+            'safe_refresh': Mock(), 'narration_panel': Mock(),
             'rendered_script': state.script.model_dump_json(),
-            'settings': SimpleNamespace(paid_production_enabled=True),
+            'settings': SimpleNamespace(paid_production_enabled=not prepared),
         }
         tree = ast.parse(Path(generation_tab.__file__).read_text())
         core = next(node for node in ast.walk(tree)
@@ -103,6 +111,19 @@ class GenerationNavigationTests(IsolatedAsyncioTestCase):
         self.assertIsNone(state.failed_video_preview_path)
         self.assertEqual(players[0].source, '/offline-media/new-final.mp4')
         self.assertTrue(players[0].visible)
+
+    async def test_read_only_ui_passes_retained_narration_to_the_normal_editor(self):
+        state, _ = await self.complete_after_navigation(manual=True, prepared=True)
+        self.assertEqual(state.final_video_path, '/tmp/new-final.mp4')
+
+    async def test_completed_edit_retains_voice_selection_after_navigation(self):
+        state, _ = await self.complete_after_navigation(manual=True, retained=True)
+        self.assertEqual(state.prepared_narration_manifest, '/tmp/retained/narration.json')
+
+    async def test_failed_edit_retains_voice_without_promoting_a_failed_video(self):
+        state, _ = await self.complete_after_navigation(manual=True, retained=True, success=False)
+        self.assertEqual(state.prepared_narration_manifest, '/tmp/retained/narration.json')
+        self.assertIsNone(state.final_video_path)
 
     async def test_new_manual_view_receives_success_without_false_deleted_widget_error(self):
         state, players = await self.complete_after_navigation(manual=True)

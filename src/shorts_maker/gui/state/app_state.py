@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 import hashlib
+from pathlib import Path
 from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from datetime import datetime
 
@@ -48,6 +49,7 @@ class AppState:
     script_editor_drafts: Dict[str, str] = field(default_factory=dict, repr=False)
     publishing_drafts: Dict[str, Dict[str, Any]] = field(default_factory=dict, repr=False)
     script_context: Optional["ScriptGenerationContext"] = None
+    prepared_narration_manifest: Optional[str] = None
     topic_candidates: List["TopicCandidate"] = field(default_factory=list)
     scene_clips: List[str] = field(default_factory=list)
     generated_clips: List[str] = field(default_factory=list)
@@ -191,6 +193,28 @@ class AppState:
             key: getattr(self, key) for key in ('tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume')
         })
 
+    def prepared_audio_paths(self) -> Optional[List[str]]:
+        from shorts_maker.services.prepared_narration import narration_paths
+
+        if self.prepared_narration_manifest is None:
+            return None
+        if self.script is None:
+            raise ValueError('내레이션을 사용할 대본이 없습니다.')
+        return narration_paths(self.script, self.prepared_narration_manifest)
+
+    def select_prepared_narration(self, manifest_path: Optional[str]) -> None:
+        from shorts_maker.services.prepared_narration import narration_paths
+        from shorts_maker.editor.video_editor import VideoEditor
+
+        if self.is_busy or self.script is None:
+            raise ValueError('작업이 끝난 뒤 현재 대본의 음성을 선택하세요.')
+        if manifest_path:
+            paths = narration_paths(self.script, manifest_path)
+            VideoEditor.validate_narration(paths, self.script)
+            manifest_path = str(Path(manifest_path).resolve())
+        self.invalidate_video_result()
+        self.prepared_narration_manifest = manifest_path or None
+
     def load_saved_script(self, script) -> None:
         from shorts_maker.services.audio_choices import load_audio_choices
 
@@ -210,6 +234,7 @@ class AppState:
         self.script = script
         self.mode = script.generation_mode
         self.script_context = None
+        self.prepared_narration_manifest = None
         self.topic_candidates = []
         self.reviewed_script_sha256 = None
         self.final_video_path = None
