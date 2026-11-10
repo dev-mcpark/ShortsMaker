@@ -16,6 +16,7 @@ from shorts_maker.gui.config.ui_theme import SIDEBAR_LEFT, WORKSPACE_CENTER, CON
 from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.config import settings
 from shorts_maker.services.openai_models import PRIMARY_CHAT_MODEL
+from shorts_maker.gui.components.budget_panel import render_budget_panel
 
 
 def render_main_page() -> None:
@@ -96,6 +97,7 @@ def render_main_page() -> None:
                 ui.label('제작 설정').classes('text-xs font-bold text-slate-400 uppercase tracking-widest mb-4')
                 ui.label('음성·음악·화면 변경은 새 편집에 적용됩니다. 완성본 미리보기는 재편집해야 바뀝니다.').classes(
                     'text-xs text-slate-400 leading-relaxed mb-3')
+                render_budget_panel()
 
                 # Generation Mode
                 ui.label('화면 구성 방식').classes('text-[10px] text-slate-400 font-semibold mb-1')
