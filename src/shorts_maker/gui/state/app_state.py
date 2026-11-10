@@ -212,6 +212,8 @@ class AppState:
             paths = narration_paths(self.script, manifest_path)
             VideoEditor.validate_narration(paths, self.script)
             manifest_path = str(Path(manifest_path).resolve())
+        if (manifest_path or None) == self.prepared_narration_manifest:
+            return
         self.invalidate_video_result()
         self.prepared_narration_manifest = manifest_path or None
 

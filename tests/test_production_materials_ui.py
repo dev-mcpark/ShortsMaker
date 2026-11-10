@@ -179,6 +179,22 @@ class ProductionMaterialsTests(IsolatedAsyncioTestCase):
         self.assertEqual(state.final_video_path, 'retained.mp4')
         self.assertIsNone(state.prepared_narration_manifest)
 
+    def test_reconnecting_same_voice_or_clearing_an_empty_selection_preserves_the_edit(self):
+        manifest, audio = self.narration()
+        state = AppState(script=self.script, final_video_path='retained.mp4')
+        state.select_prepared_narration(None)
+        self.assertEqual(state.final_video_path, 'retained.mp4')
+        state.select_prepared_narration(str(manifest))
+        state.final_video_path = 'retained.mp4'
+        service = state._production_service = Mock()
+        state.select_prepared_narration(str(manifest))
+        self.assertEqual(state.final_video_path, 'retained.mp4')
+        self.assertIs(state._production_service, service)
+        audio.write_bytes(b'changed after selecting')
+        with self.assertRaises(ValueError):
+            state.select_prepared_narration(str(manifest))
+        self.assertEqual(state.final_video_path, 'retained.mp4')
+
     async def test_studio_retains_new_voice_before_editor_cleanup_for_the_next_edit(self):
         _, audio = self.narration()
         clip, output = self.root / 'clip.mp4', self.output / 'final.mp4'
