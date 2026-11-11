@@ -149,6 +149,20 @@ class ScriptFormUiTests(IsolatedAsyncioTestCase):
         self.assertFalse(self.state.is_script_reviewed())
         self.assertFalse(self.state.has_unapplied_script_draft())
 
+    async def test_duration_field_accepts_saved_integer_and_fractional_seconds_without_step_mismatch(self):
+        root = self.render()
+        duration = self.field(root, '장면 예상 길이 (초)')
+        self.assertEqual(duration._props['step'], 'any')
+        with self.client:
+            duration.set_value(5.25)
+        await self.flush()
+        self.assertEqual(self.state.script.scenes[0].duration_seconds, 5.0)
+        self.assertEqual(json.loads(self.state.script_editor_text())['scenes'][0]['duration_seconds'], 5.25)
+        with self.client:
+            self.click(root, '수정 내용 적용')
+        await self.flush()
+        self.assertEqual(self.state.script.scenes[0].duration_seconds, 5.25)
+
     async def test_advanced_changes_refresh_plain_fields_and_empty_narration_can_recover(self):
         root = self.render()
         draft = self.state.script.model_dump()

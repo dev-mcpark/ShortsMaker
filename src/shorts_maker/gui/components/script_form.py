@@ -68,8 +68,8 @@ def render_script_form(state, on_change, on_apply, on_discard):
                                                 ('움직임·영상 프롬프트', 'motion_instruction', 3)]:
                         ui.textarea(f'장면 {number} · {label}', value=scene.get(field, ''), on_change=change(field, number)).props(
                             f'outlined dark rows={rows}').classes('w-full').bind_enabled_from(state, 'is_busy', ready)
-                    ui.number('장면 예상 길이 (초)', value=scene.get('duration_seconds', 5.0), min=.1, step=.5,
-                              on_change=change('duration_seconds', number)).props('outlined dark').classes('w-full').bind_enabled_from(state, 'is_busy', ready)
+                    ui.number('장면 예상 길이 (초)', value=scene.get('duration_seconds', 5.0), min=.1,
+                              on_change=change('duration_seconds', number)).props('outlined dark step=any').classes('w-full').bind_enabled_from(state, 'is_busy', ready)
                     visual_modes = {'': '기본 모드 따름', 'image': '이미지', 'video': 'Veo 영상'}
                     override = ui.select(visual_modes, label='이 장면의 화면 구성 · 혼합 모드에서 적용',
                                          value=scene.get('visual_mode') if scene.get('visual_mode') in visual_modes else '',

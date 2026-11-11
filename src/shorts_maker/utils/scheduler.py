@@ -427,6 +427,7 @@ class ScheduleManager:
         from shorts_maker.services.operating_status import schedule_sha256
         from shorts_maker.services.production_service import script_sha256
         from shorts_maker.services.script_store import save_script_copy
+        from shorts_maker.services.scheduled_script_history import validated_revisions
         from shorts_maker.services.work_drafts import script_draft_key
         from shorts_maker.utils.config import settings
 
@@ -469,15 +470,7 @@ class ScheduleManager:
                     raise ValueError('미확인 업로드 기록을 먼저 대조하세요. 현재 각본은 유지됩니다.') from error
                 if info.get('script_sha256') == original_hash:
                     raise ValueError('이 각본의 업로드 결과를 먼저 대조하세요.')
-            history = schedule.get('script_revisions', [])
-            if not isinstance(history, list) or any(not isinstance(row, dict) for row in history):
-                raise ValueError('기존 각본 수정 이력을 확인하세요. 덮어쓰지 않습니다.')
-            previous = original_hash
-            for row in reversed(history):
-                if (not isinstance(row.get('script'), dict) or row.get('replacement_sha256') != previous
-                        or row.get('script_sha256') != script_sha256(row['script'])):
-                    raise ValueError('각본 수정 이력의 해시가 일치하지 않습니다. 덮어쓰지 않습니다.')
-                previous = row['script_sha256']
+            history = validated_revisions(schedule['last_script'], schedule.get('script_revisions', []))
             stored = save_script_copy(script, settings.output_dir / 'evaluation' / 'scheduled_script_revisions')
             previous_path = schedule.get('last_script_path')
             if not previous_path and schedule.get('last_episode_id'):

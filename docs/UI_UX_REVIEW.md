@@ -1,5 +1,11 @@
 # Studio UI and code review
 
+### 2026-11-11 — Reopen retained versions without losing current text work
+
+Execution history had no access to saved full scripts or their prior revisions. A searchable run selector now includes older-than-ten archived runs; a read-only modal shows versions, source, narration and visual/motion briefs. Explicit copy-open validates the fresh run, selected version and unchanged workspace, then backs up current applied/unfinished text and target draft inputs through existing work snapshots. Late/busy/deleted/changed-record/settings or failed backups cannot replace the workspace. Existing scope stays bound; model verdicts, original/attached episodes and costs are unchanged. The selected stored version is shown rather than an old draft overlay. Incomplete summaries and damaged chains have no reconstruct/fallback path.
+
+582 offline tests pass. Provider-blocked desktop/mobile QA exercised preview/close, version switching, copy-open, saved-work UI restoration and44px/no-overflow controls. In the resulting editor, saved5s was browser-invalid because minimum0.1 and step0.5 disagreed; step=any aligns native input with the existing finite-positive validator. Browser checks now accept both5 and5.25 without step mismatch; explicit apply still precedes model changes. This is free fixture verification, not deployment or paid production evidence.
+
 ### 2026-11-11 — Episode-bound creation from the existing workspace
 
 Previously, loading an agent review script used the ordinary monthly-only Studio service; the app had no adapter for retaining its episode cap through paid production. An explicit pending-agent loader now binds the workspace, and the existing frame/raw/edit/private-upload controls route through the existing scoped CLI and original services. The banner, smaller month/episode room, Lite cache/price/model display and confirmed manual detachment make the context visible. Old buttons cannot spend after a scope switch; applying/free-loading a script does not silently remove its scope. Missing/corrupt typed receipts retain the existing operation lock. Provider-specific uncertain markers and exclusions stay authoritative even after a terminal child error. Cancellation cooperates with the child rather than killing an unknown paid request.

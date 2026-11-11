@@ -235,27 +235,42 @@ class AppState:
         return save_work_draft(self.script, self.script_editor_text(),
                                self.first_frame_drafts.get(self.script_editor_key(), {}))
 
+    def open_historical_script(self, script):
+        """Keep current text work before opening a review-only historical copy."""
+        if self.is_busy:
+            raise ValueError('진행 중인 작업이 끝난 뒤 과거 대본을 여세요.')
+        backups = self._backup_text_work(script, save_applied=True)
+        self.load_saved_script(script)
+        self.script_editor_drafts.pop(self.script_editor_key(), None)
+        self.first_frame_drafts.pop(self.script_editor_key(), None)
+        return backups
+
     def restore_work_draft(self, name: str, expected_sha256: str):
-        from shorts_maker.services.work_drafts import read_work_draft, save_work_draft
+        from shorts_maker.services.work_drafts import read_work_draft
 
         if self.is_busy:
             raise ValueError('제작·업로드가 끝난 뒤 작업 초안을 복원하세요.')
         record, digest = read_work_draft(name)
         if digest != expected_sha256:
             raise ValueError('목록을 읽은 뒤 초안 파일이 바뀌었습니다. 목록을 새로고침하세요.')
-        current_key = self.script_editor_key()
-        target_key = record.script_sha256
+        backups = self._backup_text_work(record.applied_script)
+        self.load_saved_script(record.applied_script)
+        self.script_editor_drafts[record.script_sha256] = record.editor_text
+        self.first_frame_drafts[record.script_sha256] = {int(number): values for number, values in record.first_frames.items()}
+        return backups
+
+    def _backup_text_work(self, target_script, *, save_applied=False):
+        from shorts_maker.services.work_drafts import save_work_draft, script_draft_key
+        current_key, target_key = self.script_editor_key(), script_draft_key(target_script)
         backups = []
         applied_text = self.script.model_dump_json(indent=2) if self.script else ''
-        if self.script_editor_text() != applied_text or self.first_frame_drafts.get(current_key):
+        if ((save_applied and (self.script is not None or self.script_editor_text()))
+                or self.script_editor_text() != applied_text or self.first_frame_drafts.get(current_key)):
             backups.append(self.save_work_draft())
-        target_text = record.applied_script.model_dump_json(indent=2) if record.applied_script else ''
+        target_text = target_script.model_dump_json(indent=2) if target_script else ''
         text = self.script_editor_drafts.get(target_key, target_text)
         if target_key != current_key and (text != target_text or self.first_frame_drafts.get(target_key)):
-            backups.append(save_work_draft(record.applied_script, text, self.first_frame_drafts.get(target_key, {})))
-        self.load_saved_script(record.applied_script)
-        self.script_editor_drafts[target_key] = record.editor_text
-        self.first_frame_drafts[target_key] = {int(number): values for number, values in record.first_frames.items()}
+            backups.append(save_work_draft(target_script, text, self.first_frame_drafts.get(target_key, {})))
         return backups
 
     def invalidate_video_result(self):

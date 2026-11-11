@@ -11,6 +11,7 @@ from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.gui.components.common.source_access import load_source_catalog
 from shorts_maker.gui.components.operator_panel import render_operator_panel
+from shorts_maker.gui.components.scheduled_script_history import render_script_history_browser
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.utils.scheduler import ScheduleManager
 from shorts_maker.utils.config import settings
@@ -557,6 +558,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                 ui.label('일정이 실행되면 여기에 표시됩니다.').classes('text-xs text-gray-400')
                         return
 
+                    render_script_history_browser(state, schedule_manager, run_schedules)
                     with ui.scroll_area().classes('h-[25vh]'):
                         with ui.element('div').classes('p-4 space-y-2'):
                             for schedule in run_schedules[:10]:
