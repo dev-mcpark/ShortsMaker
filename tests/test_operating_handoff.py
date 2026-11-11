@@ -21,7 +21,8 @@ from scripts.operate_schedule import run_scoped
 from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.services import google_budget, openai_budget
 from shorts_maker.services import scheduled_planning
-from shorts_maker.services.operating_status import schedule_sha256
+from shorts_maker.services.operating_status import operator_status, schedule_sha256
+from shorts_maker.services.work_drafts import script_draft_key
 from shorts_maker.services.operating_budget import begin_episode, episode_environment, episode_path, load_episode
 from shorts_maker.services.production_service import ProductionResult, script_sha256
 from shorts_maker.utils.config import settings
@@ -29,6 +30,137 @@ from shorts_maker.utils.scheduler import ScheduleManager
 
 
 class OperatingHandoffTests(unittest.TestCase):
+    def revision_fixture(self):
+        from test_gui_creation_flows import script
+        record = self.queued_episode()
+        original = script()
+        current = self.manager.update_schedule(self.schedule['id'], {
+            'last_result': 'script_review_pending', 'last_script': original.model_dump(mode='json')})
+        modified = original.model_copy(update={'title': '수정 대본'})
+        return record, current, original, modified
+
+    def revise(self, current, modified, **options):
+        return self.manager.revise_pending_script(current['id'], modified.model_dump(mode='json'),
+            expected_schedule_sha256=options.get('expected', schedule_sha256(current)),
+            reviewed_script_sha256=options.get('receipt', script_draft_key(modified)))
+
+    def test_reviewed_revision_preserves_episode_costs_and_enables_exact_video_attachment(self):
+        record, current, original, modified = self.revision_fixture()
+        reservation = google_budget.reserve_google_output('video', 'veo-3.1-lite-generate-001', 4)
+        google_budget.mark_google_result(reservation, 'failed')
+        original_file = episode_path(record['id']).with_suffix('.script.json')
+        original_file.write_text(original.model_dump_json(indent=2))
+        paths = [episode_path(record['id']), google_budget._database_path(), openai_budget._database_path(), original_file]
+        before = [p.read_bytes() for p in paths]
+        video = settings.output_dir / 'revision.mp4';video.write_bytes(b'local fixture')
+        report = {'schema_version': 1, 'video_path': str(video), 'source_url': modified.source_url,
+                  'script_sha256': script_sha256(modified.model_dump(mode='json')), 'quality_passed': True,
+                  'video_sha256': hashlib.sha256(video.read_bytes()).hexdigest(), 'youtube_id': 'fixture_private',
+                  'youtube_upload_request': {'status': {'privacyStatus': 'private'}}, 'uploaded_at_utc': '2026-11-11T00:00:00Z'}
+        video.with_suffix('.production.json').write_text(json.dumps(report))
+        with self.assertRaises(ValueError):
+            self.manager.pending_video_info(current['id'], str(video))
+        revised = self.revise(current, modified)
+        self.assertEqual(before, [p.read_bytes() for p in paths])
+        self.assertEqual(revised['last_episode_id'], current['last_episode_id'])
+        self.assertEqual(revised['run_count'], current['run_count'])
+        self.assertEqual(revised['last_result'], 'script_review_pending')
+        self.assertFalse(revised['enabled'])
+        self.assertNotIn('last_youtube_id', revised)
+        self.assertEqual(revised['script_revisions'][0]['script'], original.model_dump(mode='json'))
+        self.assertEqual(revised['script_revisions'][0]['script_path'], str(original_file))
+        replacement = Path(revised['last_script_path'])
+        self.assertNotEqual(replacement, original_file)
+        self.assertEqual(json.loads(replacement.read_text()), modified.model_dump(mode='json'))
+        self.assertEqual(operator_status(revised)['planned_script_path'], str(replacement))
+        self.assertEqual(self.manager.pending_video_info(current['id'], str(video))['youtube_id'], 'fixture_private')
+        report['script_sha256'] = script_sha256(original.model_dump(mode='json'))
+        video.with_suffix('.production.json').write_text(json.dumps(report))
+        with self.assertRaises(ValueError):
+            self.manager.pending_video_info(current['id'], str(video))
+        replacement.write_text('{}')
+        status = operator_status(revised)
+        self.assertIsNone(status['planned_script_path'])
+        self.assertIn('planned_script_error', status)
+        for pointer in ('', None, str(self.root / 'outside.json')):
+            status = operator_status({**revised, 'last_script_path': pointer})
+            self.assertIsNone(status['planned_script_path'])
+            self.assertIn('planned_script_error', status)
+
+    def test_revision_file_failure_preserves_current_schedule_and_history(self):
+        _, current, _, modified = self.revision_fixture()
+        before = self.manager.filename.read_bytes()
+        with patch('shorts_maker.services.script_store.os.fsync', side_effect=OSError('fixture disk full')):
+            with self.assertRaises(OSError):
+                self.revise(current, modified)
+        self.assertEqual(self.manager.filename.read_bytes(), before)
+        self.assertEqual(list((settings.output_dir / 'evaluation/scheduled_script_revisions').glob('*.tmp')), [])
+
+    def test_revision_rejects_stale_review_and_changed_source_without_mutating_schedule(self):
+        _, current, _, modified = self.revision_fixture()
+        before = self.manager.filename.read_bytes()
+        for script, options in ((modified, {'expected': 'stale'}), (modified, {'receipt': 'unreviewed'}),
+                                (modified.model_copy(update={'source_url': 'https://example.com/other'}), {})):
+            with self.assertRaises(ValueError):
+                self.revise(current, script, **options)
+            self.assertEqual(self.manager.filename.read_bytes(), before)
+
+    def test_attached_enabled_rejected_and_uncertain_operation_cannot_be_revised(self):
+        record, current, _, modified = self.revision_fixture()
+        for changes in ({'last_youtube_id': 'existing_video'}, {'last_video_path': '/kept.mp4'},
+                        {'enabled': True}, {'last_result': 'script_rejected'}):
+            self.manager.save_schedules([{**current, **changes}])
+            changed = self.manager.get_schedule(current['id']);before = self.manager.filename.read_bytes()
+            with self.assertRaises(ValueError):
+                self.revise(changed, modified)
+            self.assertEqual(self.manager.filename.read_bytes(), before)
+        self.manager.save_schedules([current])
+        marker = episode_path(record['id']).with_suffix('.operation.pending.json')
+        marker.write_text('unknown request')
+        with self.assertRaises(ValueError):
+            self.revise(current, modified)
+        self.assertEqual(marker.read_text(), 'unknown request')
+
+    def test_paid_execution_lock_blocks_revision_until_the_other_child_finishes(self):
+        _, current, _, modified = self.revision_fixture()
+        lock = self.manager.filename.with_name(self.manager.filename.name + '.lock.sqlite3')
+        with closing(sqlite3.connect(lock, isolation_level=None)) as db:
+            db.execute('BEGIN EXCLUSIVE')
+            with self.assertRaisesRegex(ValueError, '실행'):
+                self.revise(current, modified)
+        self.assertEqual(self.revise(current, modified)['last_script']['title'], modified.title)
+
+    def test_revision_history_is_append_only_noop_safe_and_moves_with_its_original_run(self):
+        _, current, original, modified = self.revision_fixture()
+        revised = self.revise(current, modified)
+        before = self.manager.filename.read_bytes()
+        self.assertEqual(self.revise(revised, modified), revised)
+        self.assertEqual(before, self.manager.filename.read_bytes())
+        newest = modified.model_copy(update={'title': '세 번째 대본'})
+        second = self.revise(revised, newest)
+        self.assertEqual(len(second['script_revisions']), 2)
+        self.assertEqual(second['script_revisions'][0]['script'], original.model_dump(mode='json'))
+        damaged = {**second, 'script_revisions': [*second['script_revisions'], {}]}
+        self.manager.save_schedules([damaged]);before = self.manager.filename.read_bytes()
+        with self.assertRaises(ValueError):
+            self.revise(damaged, newest.model_copy(update={'title': '아직 저장하면 안됨'}))
+        self.assertEqual(self.manager.filename.read_bytes(), before)
+        self.manager.save_schedules([second])
+        next_run = self.manager.update_schedule(current['id'], {
+            'run_count': current['run_count'] + 1, 'last_run': datetime.now().isoformat(), 'last_result': 'operator_pending'})
+        self.assertNotIn('script_revisions', next_run)
+        self.assertEqual(next_run['run_history'][-1]['script_revisions'], second['script_revisions'])
+
+    def test_uncertain_upload_blocks_replacing_the_draft_and_preserves_both_files(self):
+        _, current, original, modified = self.revision_fixture()
+        marker = settings.output_dir / 'unknown.upload-pending.json';marker.write_text('unverified')
+        report = settings.output_dir / 'unknown.production.json'
+        report.write_text(json.dumps({'script_sha256': script_sha256(original.model_dump(mode='json'))}))
+        before = [p.read_bytes() for p in (self.manager.filename, marker, report)]
+        with self.assertRaisesRegex(ValueError, '업로드'):
+            self.revise(current, modified)
+        self.assertEqual(before, [p.read_bytes() for p in (self.manager.filename, marker, report)])
+
     def pending_schedule(self):
         return self.manager.update_schedule(self.schedule['id'], {
             'enabled': False, 'last_result': 'operator_pending', 'run_count': 1})

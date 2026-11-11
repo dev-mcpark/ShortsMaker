@@ -25,6 +25,69 @@ from test_gui_creation_flows import script
 
 
 class OperatorPanelTests(IsolatedAsyncioTestCase):
+    def prepare_revision(self):
+        self.state.load_saved_script(script().model_copy(update={'title': '직접 다듬은 대본'}))
+        self.state.confirm_script_review()
+
+    async def test_revision_preview_cancel_and_confirm_are_explicit_and_preserve_review_authority(self):
+        self.prepare_revision()
+        self.render()
+        before = self.manager.filename.read_bytes()
+        receipt = self.state.reviewed_script_sha256
+        with self.client:
+            self.click('확인한 수정 대본을 회차에 저장')
+            self.assertEqual(before, self.manager.filename.read_bytes())
+            self.click('취소')
+            self.click('이 수정 대본으로 회차 저장')
+            self.assertEqual(before, self.manager.filename.read_bytes())
+            self.click('확인한 수정 대본을 회차에 저장')
+            confirms = [e for e in self.client.elements.values() if getattr(e, 'text', '') == '이 수정 대본으로 회차 저장']
+            next(e.handler for e in confirms[-1]._event_listeners.values() if e.type == 'click')(None)
+        current = self.manager.get_schedule(self.schedule['id'])
+        self.assertEqual(current['last_script']['title'], '직접 다듬은 대본')
+        self.assertEqual(len(current['script_revisions']), 1)
+        self.assertEqual(current['last_episode_id'], self.episode['id'])
+        self.assertFalse(current['enabled'])
+        self.assertEqual(current['last_result'], 'script_review_pending')
+        self.assertIsNone(current.get('last_youtube_id'))
+        self.assertEqual(self.state.reviewed_script_sha256, receipt)
+        self.assertIsNone(self.state.production_service)
+        self.attached.assert_called_once()
+
+    async def test_unapplied_changed_or_busy_revision_dialog_cannot_save(self):
+        self.prepare_revision()
+        self.render()
+        with self.client:
+            self.click('확인한 수정 대본을 회차에 저장')
+            before = self.manager.filename.read_bytes()
+            self.state.remember_script_draft(self.state.script_editor_key(), '{not yet applied')
+            self.click('이 수정 대본으로 회차 저장')
+            self.assertEqual(before, self.manager.filename.read_bytes())
+            self.state.script_editor_drafts.clear()
+            self.state.pipeline_running = True
+            self.click('이 수정 대본으로 회차 저장')
+            self.assertTrue(self.state.pipeline_running)
+            self.assertEqual(before, self.manager.filename.read_bytes())
+            self.state.pipeline_running = False
+            self.state.load_saved_script(script().model_copy(update={'title': '확인 창 이후 수정'}))
+            self.state.confirm_script_review()
+            self.click('이 수정 대본으로 회차 저장')
+            self.assertEqual(before, self.manager.filename.read_bytes())
+
+    async def test_attached_round_has_no_revision_action_and_deleted_view_cannot_save(self):
+        self.prepare_revision()
+        root, _ = self.render()
+        with self.client:
+            self.click('확인한 수정 대본을 회차에 저장')
+            button = next(e for e in self.client.elements.values() if getattr(e, 'text', '') == '이 수정 대본으로 회차 저장')
+            confirm = next(e.handler for e in button._event_listeners.values() if e.type == 'click')
+            before = self.manager.filename.read_bytes()
+            root.clear();confirm(None)
+            self.assertEqual(before, self.manager.filename.read_bytes())
+        self.schedule = self.manager.record_private_review_copy(self.schedule['id'], str(self.video))
+        root, _ = self.render()
+        self.assertNotIn('확인한 수정 대본을 회차에 저장', self.text(root))
+
     def pending(self):
         self.schedule = self.manager.update_schedule(self.schedule['id'], {
             'last_result': 'operator_pending', 'last_script': None,

@@ -20,6 +20,48 @@ def render_operator_panel(state, manager, schedule, on_attached):
     expected = identity(schedule)
     readout, loading = {}, {'value': False}
 
+    def revision_preview():
+        def current():
+            if (state.is_busy or panel.is_deleted or not state.script or not state.is_script_reviewed()
+                    or state.has_unapplied_script_draft()
+                    or schedule_sha256(manager.get_schedule(schedule['id']) or {}) != schedule_sha256(schedule)):
+                raise ValueError('수정 내용을 적용·확인한 뒤 현재 회차에서 다시 저장하세요.')
+        try:
+            current()
+            script_text = state.script.model_dump_json()
+            receipt = state.reviewed_script_sha256
+            if state.script.source_url != (schedule.get('last_script') or {}).get('source_url'):
+                raise ValueError('이 회차와 같은 출처의 수정 각본을 불러오세요.')
+        except (ValueError, RuntimeError) as error:
+            safe_notify(str(error), type='warning')
+            return
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-xl bg-slate-900 text-white'):
+            ui.label('확인한 수정 대본을 이 회차에 저장').classes('text-lg font-bold')
+            ui.label(f'이전: {(schedule.get("last_script") or {}).get("title", "제목 없음")}').classes('text-sm text-slate-300')
+            ui.label(f'수정: {state.script.title}').classes('text-sm text-teal-200')
+            ui.label('이전 대본은 회차 이력에 남깁니다. 기존 영상·승인·제외·비용 기록은 유지하며, 수정한 장면은 다시 확인해야 합니다.').classes('text-sm text-slate-300')
+            ui.label('API 호출·비용 한도 확대·영상 채택·일정 재개를 실행하지 않습니다.').classes('text-xs text-slate-400')
+
+            def confirm():
+                if dialog.is_deleted or not dialog.value:
+                    return
+                try:
+                    current()
+                    if state.script.model_dump_json() != script_text or state.reviewed_script_sha256 != receipt:
+                        raise ValueError('대본 또는 확인 상태가 바뀌었습니다. 수정본을 다시 확인하세요.')
+                    manager.revise_pending_script(schedule['id'], state.script.model_dump(mode='json'),
+                        expected_schedule_sha256=schedule_sha256(schedule), reviewed_script_sha256=receipt)
+                    dialog.close()
+                    on_attached()
+                    safe_notify('수정 대본을 회차에 저장했습니다. 장면 검토 후 제작을 이어가세요.', type='positive')
+                except (ValueError, RuntimeError, OSError) as error:
+                    safe_notify(f'회차 대본 저장 중단: {error}', type='warning')
+
+            with ui.row().classes('w-full flex-wrap'):
+                ui.button('취소', on_click=dialog.close).props('flat').style('min-height:44px')
+                ui.button('이 수정 대본으로 회차 저장', on_click=confirm).props('color=teal').style('min-height:44px')
+        dialog.open()
+
     async def plan_preview():
         def current():
             if (state.is_busy or getattr(panel, 'is_deleted', False) is True
@@ -87,6 +129,8 @@ def render_operator_panel(state, manager, schedule, on_attached):
             ui.label('실행 결과 대조 필요 · 요청 기록을 확인하기 전 재실행·연결을 중단합니다.').classes('text-xs text-amber-200')
         if 'budget_error' in data:
             ui.label(f'회차 비용 확인 필요: {data["budget_error"]}').classes('text-xs text-amber-200 break-all')
+        if data.get('planned_script_error'):
+            ui.label(data['planned_script_error']).classes('text-xs text-amber-200')
         if budget := data.get('budget'):
             ui.label(f'Google 회차 누적 예약 ₩{budget["google_new_reserved_krw"]:,} · 전체 상한까지 여유 ₩{budget["google_remaining_krw"]:,}').classes('text-xs text-teal-200')
             ui.label(f'OpenAI 회차 누적 예약 ${budget["openai_new_reserved_usd"]:.6f} · 전체 상한까지 여유 ${budget["openai_remaining_usd"]:.6f}').classes('text-xs text-teal-200')
@@ -170,6 +214,10 @@ def render_operator_panel(state, manager, schedule, on_attached):
             ui.button('예약 회차 기획 시작', on_click=plan_preview).props('outline color=teal').bind_enabled_from(
                 state, 'is_busy', lambda busy: not busy)
         if schedule.get('last_result') == 'script_review_pending' and not schedule.get('last_youtube_id') and not schedule.get('enabled'):
+            if not schedule.get('last_video_path'):
+                ui.label('작업실에서 대본을 수정·적용·확인했다면 이 회차에도 수정본을 저장하세요.').classes('text-xs text-slate-300')
+                ui.button('확인한 수정 대본을 회차에 저장', on_click=revision_preview).props('flat icon=save').style('min-height:44px').bind_enabled_from(
+                    state, 'is_busy', lambda busy: not busy and state.is_script_reviewed() and not state.has_unapplied_script_draft())
             ui.label('완성본·업로드에서 확인된 비공개 영상을 불러온 뒤 연결하세요. 이 버튼은 업로드하거나 새 영상을 만들지 않습니다.').classes('text-xs text-slate-300')
             ui.button('선택 완성본을 이 회차에 연결', on_click=attach_preview).props('outline color=teal').bind_enabled_from(
                 state, 'is_busy', lambda busy: not busy and bool(state.final_video_path))

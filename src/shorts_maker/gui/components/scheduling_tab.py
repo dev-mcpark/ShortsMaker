@@ -373,7 +373,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                     'text-xs text-amber-300')
                                             elif not enabled and schedule.get('last_result') == 'script_review_pending':
                                                 ui.label('비공개 완성본 사용자 채택 대기' if schedule.get('last_youtube_id')
-                                                         else '각본·장면 검토 대기 · 영상 API와 업로드는 실행되지 않음').classes(
+                                                         else '각본·장면 검토 대기 · 제작·업로드 결과는 별도 확인').classes(
                                                     'text-xs text-amber-300')
 
                                                 def load_pending_script(sid=schedule['id']):

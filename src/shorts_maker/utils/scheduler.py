@@ -36,7 +36,7 @@ _RUN_FIELDS = (
     'last_run', 'run_count', 'last_result', 'last_script', 'last_planned_url',
     'last_rendered_url', 'last_video_path', 'last_video_sha256', 'last_youtube_id', 'accepted_at',
     'queued_at', 'last_episode_id',
-    'scheduled_for', 'late_by_seconds', 'skipped_slots',
+    'scheduled_for', 'late_by_seconds', 'skipped_slots', 'script_revisions', 'last_script_path',
 )
 
 
@@ -418,6 +418,89 @@ class ScheduleManager:
         if updated is None:
             raise ValueError('일정이 사라져 완료 기록을 저장하지 못했습니다.')
         return updated
+
+    def revise_pending_script(self, schedule_id: str, script_data: dict, *,
+                              expected_schedule_sha256: str, reviewed_script_sha256: str) -> Dict[str, Any]:
+        """Explicitly retain/replace an unattached reviewed draft without reopening spending."""
+        from shorts_maker.planner.models import ShortsScript
+        from shorts_maker.services.operating_budget import episode_path, load_episode
+        from shorts_maker.services.operating_status import schedule_sha256
+        from shorts_maker.services.production_service import script_sha256
+        from shorts_maker.services.script_store import save_script_copy
+        from shorts_maker.services.work_drafts import script_draft_key
+        from shorts_maker.utils.config import settings
+
+        db = None
+        try:
+            db = sqlite3.connect(self.filename.with_name(f'{self.filename.name}.lock.sqlite3'), timeout=0, isolation_level=None)
+            db.execute('BEGIN EXCLUSIVE')
+            schedule = self.get_schedule(schedule_id)
+            if (not schedule or schedule_sha256(schedule) != expected_schedule_sha256
+                    or schedule.get('last_result') != 'script_review_pending' or schedule.get('enabled')
+                    or schedule.get('last_video_path') or schedule.get('last_youtube_id')):
+                raise ValueError('변경되지 않은 각본 검토 대기 회차만 수정할 수 있습니다. 연결된 완성본은 유지합니다.')
+            if schedule.get('last_episode_id'):
+                path = episode_path(schedule['last_episode_id'])
+                pending = path.with_suffix('.operation.pending.json')
+                if pending.exists() or pending.is_symlink():
+                    raise ValueError('이전 회차 실행 결과를 먼저 대조하세요.')
+                if schedule.get('review_operator') == 'agent':
+                    load_episode(schedule['last_episode_id'], schedule)
+            old = ShortsScript.model_validate(schedule.get('last_script'))
+            script = ShortsScript.model_validate(script_data)
+            if reviewed_script_sha256 != script_draft_key(script):
+                raise ValueError('현재 수정 각본을 먼저 확인하세요.')
+            if not old.source_url or script.source_url != old.source_url:
+                raise ValueError('같은 출처의 수정본만 저장하세요. 다른 소재는 새 작업으로 진행하세요.')
+            replacement = script.model_dump(mode='json')
+            original_hash = script_sha256(schedule['last_script'])
+            replacement_hash = script_sha256(replacement)
+            if original_hash == replacement_hash:
+                return schedule
+            for marker in settings.output_dir.glob('*.upload-pending.json'):
+                report = marker.with_name(marker.name.removesuffix('.upload-pending.json') + '.production.json')
+                try:
+                    if report.is_symlink() or not report.resolve().is_relative_to(settings.output_dir.resolve()):
+                        raise ValueError('invalid upload record path')
+                    info = json.loads(report.read_text(encoding='utf-8'))
+                    if not isinstance(info, dict):
+                        raise ValueError('invalid upload record')
+                except (OSError, ValueError, TypeError) as error:
+                    raise ValueError('미확인 업로드 기록을 먼저 대조하세요. 현재 각본은 유지됩니다.') from error
+                if info.get('script_sha256') == original_hash:
+                    raise ValueError('이 각본의 업로드 결과를 먼저 대조하세요.')
+            history = schedule.get('script_revisions', [])
+            if not isinstance(history, list) or any(not isinstance(row, dict) for row in history):
+                raise ValueError('기존 각본 수정 이력을 확인하세요. 덮어쓰지 않습니다.')
+            previous = original_hash
+            for row in reversed(history):
+                if (not isinstance(row.get('script'), dict) or row.get('replacement_sha256') != previous
+                        or row.get('script_sha256') != script_sha256(row['script'])):
+                    raise ValueError('각본 수정 이력의 해시가 일치하지 않습니다. 덮어쓰지 않습니다.')
+                previous = row['script_sha256']
+            stored = save_script_copy(script, settings.output_dir / 'evaluation' / 'scheduled_script_revisions')
+            previous_path = schedule.get('last_script_path')
+            if not previous_path and schedule.get('last_episode_id'):
+                original_path = episode_path(schedule['last_episode_id']).with_suffix('.script.json')
+                previous_path = str(original_path) if original_path.is_file() else None
+            updated = self.update_schedule(schedule_id, {
+                'last_script': replacement,
+                'last_script_path': str(stored.resolve()),
+                'script_revisions': [*history, {
+                    'script': schedule['last_script'], 'script_sha256': original_hash,
+                    'script_path': previous_path,
+                    'replacement_sha256': replacement_hash, 'review_receipt_sha256': reviewed_script_sha256,
+                    'replaced_at': datetime.now().astimezone().isoformat(),
+                }],
+            })
+            if updated is None:
+                raise ValueError('일정이 사라져 수정본을 저장하지 못했습니다.')
+            return updated
+        except sqlite3.Error as error:
+            raise ValueError('다른 회차 실행이 진행 중이거나 일정 잠금을 읽을 수 없습니다. 실행 상태를 확인하세요.') from error
+        finally:
+            if db:
+                db.close()
 
     def pending_video_info(self, schedule_id: str, video_path: str) -> Dict[str, str]:
         """Preview an exact verified attachment without adopting it or changing the schedule."""
