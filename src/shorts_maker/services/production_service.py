@@ -363,11 +363,10 @@ class ProductionService:
             "visual_description": scene.visual_description,
             "motion_instruction": scene.motion_instruction if mode == "video" else None,
             "mode": mode,
-            "model": model_id or (settings.veo_model_id if mode == "video" else settings.image_model_id),
+            "model": model_id or (self.video_spec()[0] if mode == "video" else settings.image_model_id),
             "format": "720p-silent" if mode == "video" else "1K-vertical",
             "duration": (duration_seconds if duration_seconds is not None else
-                         settings.hybrid_veo_duration_seconds if self.mode == "hybrid"
-                         else settings.veo_duration_seconds) if mode == "video" else None,
+                         self.video_spec()[1]) if mode == "video" else None,
             "overlay": overlay,
         }
         if mode == "video":
@@ -411,6 +410,9 @@ class ProductionService:
         finally:
             temporary.unlink(missing_ok=True)
         return str(destination)
+
+    def video_spec(self) -> tuple[str, int]:
+        return settings.veo_model_id, (settings.hybrid_veo_duration_seconds if self.mode == 'hybrid' else settings.veo_duration_seconds)
 
     def review_clip_path(self, script: ShortsScript, scene_index: int) -> tuple[str | None, str]:
         """Find the cached raw Veo clip for one reviewed scene, without an API request."""
@@ -458,9 +460,8 @@ class ProductionService:
             directory = self._scene_cache_dir(scene, mode, frame_hash)
             if self._cached_clip(directory, mode):
                 continue
-            model = settings.veo_model_id if mode == 'video' else settings.image_model_id
-            duration = (settings.hybrid_veo_duration_seconds if self.mode == 'hybrid'
-                        else settings.veo_duration_seconds)
+            model = self.video_spec()[0] if mode == 'video' else settings.image_model_id
+            duration = self.video_spec()[1]
             total += estimated_scene_cost(mode, model, duration)
             requests += 1
         return total, requests

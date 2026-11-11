@@ -288,7 +288,7 @@ class ProductionMaterialsTests(IsolatedAsyncioTestCase):
             with self.subTest(message=message):
                 state = AppState(script=self.script)
                 state.get_or_create_service = Mock(return_value=SimpleNamespace(
-                    max_veo_attempts=1, review_clip_path=Mock(side_effect=ValueError(message))))
+                    max_veo_attempts=1, video_spec=lambda: ('veo-3.1-fast-generate-001', 6), review_clip_path=Mock(side_effect=ValueError(message))))
                 recorder = _UI()
                 with patch.object(generation_tab, 'ui', recorder), patch.object(
                         generation_tab, 'media_sources', return_value=lambda p: p):

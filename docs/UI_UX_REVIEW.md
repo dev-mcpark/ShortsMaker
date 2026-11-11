@@ -1,5 +1,11 @@
 # Studio UI and code review
 
+### 2026-11-11 — Episode-bound creation from the existing workspace
+
+Previously, loading an agent review script used the ordinary monthly-only Studio service; the app had no adapter for retaining its episode cap through paid production. An explicit pending-agent loader now binds the workspace, and the existing frame/raw/edit/private-upload controls route through the existing scoped CLI and original services. The banner, smaller month/episode room, Lite cache/price/model display and confirmed manual detachment make the context visible. Old buttons cannot spend after a scope switch; applying/free-loading a script does not silently remove its scope. Missing/corrupt typed receipts retain the existing operation lock. Provider-specific uncertain markers and exclusions stay authoritative even after a terminal child error. Cancellation cooperates with the child rather than killing an unknown paid request.
+
+572 offline tests pass, including12 new state/native/worker/process cases and a genuine fixed CLI→worker subprocess with all real provider methods blocked. Desktop1440px/mobile390px QA verified budget readout, a mocked scoped frame/image preview without approval, cancel/confirm manual detach, preserved fixture schedule/baselines/review and44px controls/no overflow. The running Studio was not restarted and the new adapter has not executed a real paid episode or upload. STATUS owns deployment and operating limits.
+
 ### 2026-11-10 — Resumed repeat review of exceptional transitions
 
 The interrupted audit left partial service/source recovery changes, which were retained and completed. The regression matrix checks the same state transitions across entry points rather than treating one repaired screen as proof of every path.

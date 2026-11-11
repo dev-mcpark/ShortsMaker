@@ -61,6 +61,8 @@ class AppState:
     failed_video_preview_path: Optional[str] = None
     youtube_upload_in_progress: bool = False
     scheduled_planning_in_progress: bool = False
+    operating_scope: Optional[Dict[str, str]] = None
+    _execution_version: int = 0
 
     # Service Reference (lazy init via property)
     _production_service: Optional["ProductionService"] = field(default=None, repr=False)
@@ -132,6 +134,8 @@ class AppState:
             return self._production_service
         overlay = self.build_character_overlay_config()
         if (self._production_service is None
+                or getattr(self._production_service, 'scope', None) != self.operating_scope
+                or (self.operating_scope and self._production_service.review_receipt != self.reviewed_script_sha256)
                 or self._production_service.mode != self.mode
                 or self._production_service.editor_options != self._editor_options()
                 or (self._production_service.character_overlay_config.to_dict()
@@ -159,14 +163,59 @@ class AppState:
         from shorts_maker.services.production_service import ProductionService
         from shorts_maker.utils.config import settings
 
-        settings.update_api_keys(openai_key=self.openai_key, gcp_project=self.gcp_project)
-        self._production_service = ProductionService(
+        if self.operating_scope:
+            from shorts_maker.services.scoped_production import ScopedProductionService
+            factory = lambda **options: ScopedProductionService(self.operating_scope, self.reviewed_script_sha256, **options)
+        else:
+            settings.update_api_keys(openai_key=self.openai_key, gcp_project=self.gcp_project)
+            factory = ProductionService
+        self._production_service = factory(
             mode=self.mode,
             parallel_clips=parallel_clips,
             character_overlay_config=self.build_character_overlay_config(),
             editor_options=self._editor_options(),
         )
         return self._production_service
+
+    def execution_key(self) -> tuple:
+        return self._execution_version, json.dumps(self.operating_scope, sort_keys=True)
+
+    @property
+    def video_model_label(self) -> str:
+        from shorts_maker.services.operating_budget import episode_video_spec
+        from shorts_maker.utils.config import settings
+        model = episode_video_spec(self.mode)[0] if self.operating_scope else settings.veo_model_id
+        return f'영상 모델 · {model}' + (' · 회차 고정' if self.operating_scope else '')
+
+    def require_execution_context(self, expected: tuple) -> None:
+        if self.execution_key() != expected:
+            raise ValueError('제작 회차 연결이 바뀌었습니다. 현재 화면을 다시 열어 주세요.')
+        if self.operating_scope:
+            from shorts_maker.utils.paid_gate import require_paid_production_enabled
+            from shorts_maker.services.studio_episode_action import EpisodeScope, scope_status
+            require_paid_production_enabled()
+            scope_status(EpisodeScope.model_validate(self.operating_scope), self.script)
+
+    def load_scheduled_script(self, manager, schedule_id: str) -> None:
+        from shorts_maker.planner.models import ShortsScript
+        from shorts_maker.services.studio_episode_action import EpisodeScope, scope_status
+        current = manager.get_schedule(schedule_id)
+        if not current or current.get('review_operator') != 'agent':
+            raise ValueError('에이전트 회차를 선택하세요.')
+        scope = EpisodeScope(schedules_file=str(manager.filename.resolve()), schedule_id=schedule_id,
+                             episode_id=current.get('last_episode_id'))
+        current, _ = scope_status(scope)
+        script = ShortsScript.model_validate(current['last_script'])
+        self.load_saved_script(script)
+        self.operating_scope = scope.model_dump()
+        self._execution_version += 1
+
+    def detach_operating_scope(self) -> None:
+        if self.is_busy:
+            raise ValueError('진행 중인 회차 작업이 끝난 뒤 전환하세요.')
+        self.operating_scope = None
+        self._execution_version += 1
+        self._production_service = None
 
     # ── State mutators ────────────────────────────────────────────────────────
 

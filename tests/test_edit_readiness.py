@@ -108,7 +108,7 @@ class EditReadinessTests(IsolatedAsyncioTestCase):
 
     async def test_stale_first_frame_and_raw_events_cannot_buy_using_an_unapplied_draft(self):
         state = self.state
-        service = SimpleNamespace(max_veo_attempts=1, generate_review_clip=AsyncMock(),
+        service = SimpleNamespace(max_veo_attempts=1, video_spec=lambda: ('veo-3.1-fast-generate-001', 6), generate_review_clip=AsyncMock(),
                                   review_clip_path=Mock(side_effect=ValueError('FIRST_FRAME_REVIEW_REQUIRED: scene')))
         state.get_or_create_service = Mock(return_value=service)
         state.new_production_service = Mock()
@@ -143,7 +143,7 @@ class EditReadinessTests(IsolatedAsyncioTestCase):
     async def test_old_frame_and_raw_events_cannot_spend_after_switching_to_local_clips(self):
         state = self.state
         service = SimpleNamespace(generate_first_frame=AsyncMock(return_value='unused.png'),
-                                  is_cancelled=Mock(return_value=False), max_veo_attempts=1,
+                                  is_cancelled=Mock(return_value=False), max_veo_attempts=1, video_spec=lambda: ('veo-3.1-fast-generate-001', 6),
                                   generate_review_clip=AsyncMock(),
                                   review_clip_path=Mock(side_effect=ValueError('FIRST_FRAME_REVIEW_REQUIRED: scene')))
         state.new_production_service = Mock(return_value=service)

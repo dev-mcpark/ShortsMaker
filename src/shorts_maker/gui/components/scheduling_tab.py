@@ -384,7 +384,12 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                                 or current.get('last_youtube_id')):
                                                             raise ValueError('현재 회차는 각본 검토 단계가 아닙니다. 연결된 완성본을 확인하세요.')
                                                         script = ShortsScript.model_validate(current.get('last_script'))
-                                                        state.load_saved_script(script)
+                                                        if current.get('review_operator') == 'agent':
+                                                            state.load_scheduled_script(schedule_manager, sid)
+                                                        else:
+                                                            if state.operating_scope:
+                                                                raise ValueError('먼저 제작 작업실에서 회차 연결을 해제하세요.')
+                                                            state.load_saved_script(script)
                                                     except (TypeError, ValueError) as error:
                                                         safe_notify(f'저장된 각본 확인 실패: {error}', type='negative')
                                                         return

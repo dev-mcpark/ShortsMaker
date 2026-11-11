@@ -292,7 +292,7 @@ def render_publishing_tab(state: 'AppState') -> None:
                     on_click=load_metadata
                 ).props('flat color=white icon=download').classes('mb-4')
 
-                async def upload_video():
+                async def upload_video(expected_execution=state.execution_key()):
                     """YouTube에 비디오 업로드"""
                     if state.is_busy:
                         return
@@ -314,6 +314,7 @@ def render_publishing_tab(state: 'AppState') -> None:
                         return
 
                     try:
+                        state.require_execution_context(expected_execution)
                         service = state.get_or_create_service()
                         state.youtube_upload_in_progress = True
                         safe_notify('YouTube에 비공개로 업로드 중입니다.', type='info')

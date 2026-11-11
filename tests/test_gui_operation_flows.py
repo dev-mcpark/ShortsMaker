@@ -549,6 +549,7 @@ class LocalReviewInterfaceTests(TestCase):
         recorder = _UI()
         verdicts = {1: 'approved', 2: 'rejected', 3: 'stale'}
         service = Mock(max_veo_attempts=1)
+        service.video_spec.return_value = ('veo-3.1-fast-generate-001', 6)
         service.review_clip_path.side_effect = lambda script, index: ('cached.mp4', 'hash')
         self.state.get_or_create_service = lambda: service
         with patch.object(generation_tab, 'ui', recorder), patch.object(
@@ -574,6 +575,7 @@ class LocalReviewInterfaceTests(TestCase):
     def test_missing_raw_cannot_be_generated_in_review_mode(self):
         recorder = _UI()
         service = Mock(max_veo_attempts=1)
+        service.video_spec.return_value = ('veo-3.1-fast-generate-001', 6)
         service.review_clip_path.side_effect = [
             (None, 'hash'), ValueError('uncertain request'), (None, 'hash')]
         self.state.get_or_create_service = lambda: service

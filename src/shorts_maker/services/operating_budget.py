@@ -28,6 +28,10 @@ def default_episode_caps() -> dict:
             'openai_remaining_usd': _OPENAI_EPISODE_CAP_MICRO_USD / 1000000}
 
 
+def episode_video_spec(mode: str) -> tuple[str, int]:
+    return 'veo-3.1-lite-generate-001', 6 if mode == 'hybrid' else 8
+
+
 def episode_path(episode_id: str) -> Path:
     if not isinstance(episode_id, str) or not re.fullmatch(r'[0-9a-f]{32}', episode_id):
         raise ValueError('유효한 제작 회차 ID가 필요합니다.')
@@ -156,8 +160,8 @@ def episode_environment(record: dict) -> tuple[dict[str, str], dict]:
         'SHORTSMAKER_EPISODE_ID': record['id'], 'PAID_PRODUCTION_ENABLED': 'true',
         'GOOGLE_MONTHLY_BUDGET_KRW': str(google_ceiling),
         'OPENAI_MONTHLY_BUDGET_USD': str(openai_ceiling),
-        'VEO_MODEL_ID': 'veo-3.1-lite-generate-001', 'VEO_DURATION_SECONDS': '8',
-        'HYBRID_VEO_DURATION_SECONDS': '6',
+        'VEO_MODEL_ID': episode_video_spec('video')[0], 'VEO_DURATION_SECONDS': str(episode_video_spec('video')[1]),
+        'HYBRID_VEO_DURATION_SECONDS': str(episode_video_spec('hybrid')[1]),
         'GOOGLE_USD_KRW_RESERVE_RATE': str(max(2000, settings.google_usd_krw_rate)),
         'MAX_VISUAL_COST_USD': str(min(1.5, remaining_google / max(2000, settings.google_usd_krw_rate))),
     }

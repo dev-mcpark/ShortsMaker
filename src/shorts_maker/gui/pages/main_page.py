@@ -1,6 +1,7 @@
 """제작 순서와 검토 경로를 보여주는 Studio 메인 화면."""
 
 from nicegui import ui
+from shorts_maker.gui.components.episode_workspace import render_episode_workspace
 
 from shorts_maker.gui.state import get_session_state
 from shorts_maker.gui.components import (
@@ -110,7 +111,7 @@ def render_main_page() -> None:
                     value=state.mode
                 ).props('outlined dense dark aria-label="비주얼 생성 모드"').classes('w-full mb-2').bind_value_from(state, 'mode')
                 ui.label(f'대본 모델 · {PRIMARY_CHAT_MODEL}').classes('text-[11px] text-slate-400 break-all')
-                ui.label(f'영상 모델 · {settings.veo_model_id}').classes('text-[11px] text-slate-400 break-all mb-3')
+                ui.label().bind_text_from(state, 'video_model_label').classes('text-[11px] text-slate-400 break-all mb-3')
 
                 def on_mode_change(e):
                     if state.is_busy:
@@ -282,6 +283,7 @@ def render_main_page() -> None:
                 center_container.clear()
 
                 with center_container:
+                    render_episode_workspace(state, render_active_view)
                     if state.current_view == 'workspace':
                         # Google AI Studio 워크스페이스: 내부 상단에 Prompt Editor / Visual Preview 토글 바 제공
                         with ui.element('div').classes('w-full bg-slate-900 border-b border-slate-800 px-3 lg:px-6 py-2 flex flex-wrap items-center justify-between gap-2 shrink-0'):
@@ -368,6 +370,8 @@ def render_main_page() -> None:
 
 ### 예약 운영과 비용
 **예약 운영**에서 제작 주기·현재 대기 사유·검토할 영상을 확인합니다. 현재 운영 목표는 14일 주기이며, 예약 시각은 제작 시작 시각입니다. 검토나 예산 문제로 멈춘 회차가 자동으로 다음 회차로 넘어가지는 않습니다.
+
+에이전트 회차의 **검토할 각본 불러오기**로 작업실을 연결하면 상단에 **예약 회차 제작**이 표시됩니다. 기존 첫 프레임·원본·편집·업로드 버튼은 월·회차 잔여 중 작은 한도로 실행하며, **회차 잔여 확인**으로 조회할 수 있습니다. 서버에 저장된 API 설정과 Lite 무음720p를 사용합니다. 다른 작업은 **회차 연결 해제** 후 수동 전환을 확인하세요. 연결 해제는 기존 회차·입력·재료를 삭제하거나 일정을 재개하지 않습니다. 재시작 후에는 같은 회차의 대본을 다시 불러와 검토하세요. 불확실한 실행은 자동 재시도하지 않습니다.
 
 예약 대본을 작업실에서 다듬었다면 수정 내용을 적용·확인한 뒤 **확인한 수정 대본을 회차에 저장 → 이 수정 대본으로 회차 저장**을 사용하세요. 같은 출처의 검토한 수정본을 별도 사본으로 남기며, 이전 대본·비용·판정은 보존합니다. 이미 영상이 연결됐거나 실행 결과가 미확인이면 저장을 중단합니다. 저장은 API 호출·일정 재개·영상 채택이 아닙니다.
 

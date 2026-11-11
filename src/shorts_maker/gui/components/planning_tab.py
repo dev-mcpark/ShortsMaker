@@ -30,13 +30,14 @@ ACCENT_COLORS = [
 ]
 
 
-def estimate_new_visual_cost(script: ShortsScript, mode: str) -> float:
+def estimate_new_visual_cost(script: ShortsScript, mode: str, video_spec=None) -> float:
     """Upper estimate before cache/manual reuse, using the production model and durations."""
     total = 0.0
     for index, scene in enumerate(script.scenes):
         visual_mode = scene_mode(mode, scene, index)
-        model = settings.veo_model_id if visual_mode == 'video' else settings.image_model_id
-        duration = settings.hybrid_veo_duration_seconds if mode == 'hybrid' else settings.veo_duration_seconds
+        video_model, duration = video_spec or (settings.veo_model_id,
+            settings.hybrid_veo_duration_seconds if mode == 'hybrid' else settings.veo_duration_seconds)
+        model = video_model if visual_mode == 'video' else settings.image_model_id
         total += estimated_scene_cost(visual_mode, model, duration)
     return total
 
@@ -215,7 +216,8 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                     with ui.column().classes('items-center gap-1'):
                         def cost_label(mode: str) -> str:
                             try:
-                                return f'${estimate_new_visual_cost(script, mode):.3f}'
+                                from shorts_maker.services.operating_budget import episode_video_spec
+                                return f'${estimate_new_visual_cost(script, mode, episode_video_spec(mode) if state.operating_scope else None):.3f}'
                             except ValueError:
                                 return '가격 미등록'
                         ui.label().bind_text_from(state, 'mode', backward=cost_label).classes('text-xl font-extrabold text-amber-400 tracking-tight')

@@ -27,7 +27,8 @@ def active_episode(manager, schedule_id):
     return schedule, load_episode(schedule.get('last_episode_id'), schedule)
 
 
-def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedule_sha256=None):
+def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedule_sha256=None,
+               studio_request=None, request_sha256=None):
     lock_path = manager.filename.with_name(f'{manager.filename.name}.lock.sqlite3')
     connection = sqlite3.connect(lock_path, timeout=0, isolation_level=None)
     try:
@@ -42,6 +43,17 @@ def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedu
                 episode = begin_episode(schedule['id'], schedule['run_count'])
                 manager.update_schedule(schedule['id'], {'last_episode_id': episode['id']})
         schedule, record = active_episode(manager, schedule_id)
+        if studio_request is not None:
+            from shorts_maker.services.studio_episode_action import read_request, worker_command
+            request = read_request(studio_request, request_sha256)
+            if (command != worker_command(studio_request, request_sha256)
+                    or request.scope.schedule_id != schedule_id or request.scope.episode_id != record['id']
+                    or Path(request.scope.schedules_file).resolve() != manager.filename.resolve()
+                    or request.schedule_sha256 != schedule_sha256(schedule)):
+                raise ValueError('변경되지 않은 회차의 고정 Studio 요청만 실행할 수 있습니다.')
+            receipt = Path(studio_request).with_suffix('.result.json')
+            if receipt.exists() or receipt.is_symlink():
+                raise ValueError('이미 실행 결과가 있는 요청입니다. 다시 제출하지 않습니다.')
         if schedule.get('last_youtube_id'):
             raise ValueError('비공개 완성본이 연결된 회차는 제작을 다시 실행할 수 없습니다. 완성본을 검토하세요.')
         env, status = episode_environment(record)
@@ -60,6 +72,10 @@ def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedu
         json.dump(audit, file)
         file.flush()
         os.fsync(file.fileno())
+    if studio_request is not None:
+        from shorts_maker.services.studio_episode_action import validate_receipt
+        # Missing/corrupt results retain the existing episode pending gate for reconciliation.
+        validate_receipt(studio_request, request_sha256)
     path.replace(path.with_name(f'{record["id"]}.operation.{uuid.uuid4().hex}.json'))
     return result.returncode
 
@@ -96,6 +112,8 @@ def main():
         if action == 'plan':
             command.add_argument('--expected-schedule-sha256')
         if action == 'run':
+            command.add_argument('--studio-request')
+            command.add_argument('--request-sha256')
             command.add_argument('command', nargs=argparse.REMAINDER)
         elif action == 'attach':
             command.add_argument('video_path')
@@ -161,7 +179,10 @@ def main():
         command = args.command[1:] if args.command[:1] == ['--'] else args.command
         if not command or Path(command[0]).resolve() != Path(sys.executable).resolve():
             raise ValueError('프로젝트 Python으로 기존 제작 경로를 실행하세요.')
-        raise SystemExit(run_scoped(manager, args.schedule_id, command))
+        if bool(args.studio_request) != bool(args.request_sha256):
+            raise ValueError('회차 작업 경로와 해시를 함께 지정하세요.')
+        raise SystemExit(run_scoped(manager, args.schedule_id, command,
+                                   studio_request=args.studio_request, request_sha256=args.request_sha256))
     elif args.action == 'attach':
         active_episode(manager, args.schedule_id)
         result = manager.record_private_review_copy(args.schedule_id, args.video_path)

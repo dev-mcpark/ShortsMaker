@@ -34,6 +34,8 @@ SCENE_ACCENT = [
 
 
 def _manual_edit_ready(state, exporter) -> bool:
+    if state.operating_scope and not settings.paid_production_enabled:
+        return False
     if (state.is_busy or not (settings.paid_production_enabled or state.prepared_narration_manifest) or not state.script
             or state.has_unapplied_script_draft() or not state.is_script_reviewed() or not state.manual_script_id):
         return False
@@ -44,6 +46,8 @@ def _manual_edit_ready(state, exporter) -> bool:
 
 
 def _auto_edit_ready(state, verdicts) -> bool:
+    if state.operating_scope and not settings.paid_production_enabled:
+        return False
     return bool(state.script and not state.is_busy and not state.manual_video_mode and state.is_script_reviewed()
                 and not state.has_unapplied_script_draft()
                 and not state.has_unapplied_first_frame_drafts()
@@ -55,6 +59,8 @@ def _auto_edit_ready(state, verdicts) -> bool:
 def _next_edit_step(state, verdicts) -> str:
     if state.is_busy:
         return '작업 진행 중 · 완료 또는 중지 결과를 기다려 주세요.'
+    if state.operating_scope and not settings.paid_production_enabled:
+        return '회차 실행은 API 활성화가 필요합니다. 무료 수동 편집은 회차 연결을 해제한 뒤 진행하세요.'
     if not state.script:
         return '다음: 대본·장면 검토에서 대본을 기획하거나 불러오세요.'
     if state.has_unapplied_script_draft():
@@ -269,7 +275,7 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
 
                 async def generate_frame(index=state.script.scenes.index(scene), frame_input=path_input,
                                          bound_preview=preview, ceiling=estimate, request=generation,
-                                         expected_mode=state.mode):
+                                         expected_mode=state.mode, expected_execution=state.execution_key()):
                     if (state.is_busy or state.manual_video_mode or state.mode != expected_mode
                             or not state.script or state.script.model_dump_json() != rendered_script):
                         safe_notify('작업 중이거나 각본·제작 방식이 변경됐습니다. 현재 제작 화면을 다시 확인하세요.', type='warning')
@@ -279,6 +285,11 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
                         return
                     if state.has_unapplied_script_draft():
                         safe_notify('먼저 미적용 대본 수정을 적용하거나 되돌리세요.', type='warning')
+                        return
+                    try:
+                        state.require_execution_context(expected_execution)
+                    except (OSError, ValueError, RuntimeError) as error:
+                        safe_notify(str(error), type='warning')
                         return
                     state.pipeline_running = True
                     try:
@@ -336,10 +347,9 @@ def render_raw_clip_reviews(state: 'AppState') -> dict:
                 ui.label(f'내레이션: {scene.script_text}').classes('text-sm text-white')
                 criteria_area = ui.column().classes('w-full')
                 service = state.get_or_create_service()
-                duration = (settings.hybrid_veo_duration_seconds if state.mode == 'hybrid'
-                            else settings.veo_duration_seconds)
-                reserve = service.max_veo_attempts * estimated_scene_cost('video', settings.veo_model_id, duration)
-                cost_label = ui.label(f'새 원본 요청: {settings.veo_model_id} · {duration}초 · 예약 추정 ${reserve:.3f}').classes(
+                model, duration = service.video_spec()
+                reserve = service.max_veo_attempts * estimated_scene_cost('video', model, duration)
+                cost_label = ui.label(f'새 원본 요청: {model} · {duration}초 · 예약 추정 ${reserve:.3f}').classes(
                     'text-xs text-amber-200')
                 status = ui.label('첫 프레임 승인 후 원본을 생성하세요.').classes('text-xs text-slate-300')
                 preview_area = ui.column().classes('w-full')
@@ -414,7 +424,8 @@ def render_raw_clip_reviews(state: 'AppState') -> dict:
                         ui.video(media_source(clip)).props('controls muted').classes('w-full max-w-[230px]')
 
                 async def generate(scene_index=index, update=refresh, request_cap=reserve,
-                                   shown=displayed_frame, expected_script=rendered_script, expected_mode=state.mode):
+                                   shown=displayed_frame, expected_script=rendered_script, expected_mode=state.mode,
+                                   expected_execution=state.execution_key()):
                     if (state.manual_video_mode or state.mode != expected_mode
                             or not state.script or state.script.model_dump_json() != expected_script):
                         safe_notify('각본·제작 방식이 변경됐습니다. 장면·영상 제작 화면을 다시 열어 주세요.', type='warning')
@@ -436,6 +447,7 @@ def render_raw_clip_reviews(state: 'AppState') -> dict:
                         safe_notify('현재 첫 프레임과 요청 비용을 확인한 뒤 다시 진행하세요.', type='warning')
                         return
                     try:
+                        state.require_execution_context(expected_execution)
                         service = state.get_or_create_service()
                         state.pipeline_running = True
                         clip = await service.generate_review_clip(
@@ -917,7 +929,7 @@ def render_generation_tab(state: 'AppState') -> None:
 
         # ── 4. EVENT HANDLERS CORE (동적 렌더러 연동) ──
         async def _run_production_core(manual_clip_paths=None, expected_mode=state.mode,
-                                       expected_manual_mode=state.manual_video_mode):
+                                       expected_manual_mode=state.manual_video_mode, expected_execution=state.execution_key()):
             nonlocal video_player, placeholder_content
             if state.is_busy:
                 safe_notify('이미 제작이 진행 중입니다.', type='warning')
@@ -941,8 +953,9 @@ def render_generation_tab(state: 'AppState') -> None:
                 safe_notify('검토 모드입니다. 기존 내레이션을 연결하거나 API 생성을 활성화하세요.', type='warning')
                 return
             try:
+                state.require_execution_context(expected_execution)
                 prepared_audio = state.prepared_audio_paths()
-            except (OSError, ValueError, TypeError) as error:
+            except (OSError, ValueError, TypeError, RuntimeError) as error:
                 safe_notify(f'연결한 내레이션을 다시 확인하세요: {error}', type='negative')
                 return
             production_running = True

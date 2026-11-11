@@ -180,6 +180,7 @@ class ImagePickerTests(IsolatedAsyncioTestCase):
         original = review.read_bytes()
         service = Mock()
         service.max_veo_attempts = 1
+        service.video_spec.return_value = ('veo-3.1-fast-generate-001', 6)
         service.review_clip_path.return_value = (None, frame_hash)
         service.generate_review_clip = AsyncMock()
         self.state.get_or_create_service = Mock(return_value=service)
