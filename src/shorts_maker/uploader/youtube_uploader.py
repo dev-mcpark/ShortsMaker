@@ -1,6 +1,11 @@
 import os
 import json
 import asyncio
+import sqlite3
+import tempfile
+from contextlib import contextmanager
+from pathlib import Path
+from urllib.parse import urlsplit
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -10,8 +15,56 @@ from googleapiclient.errors import HttpError
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 
+AUTH_TIMEOUT_SECONDS = 300
+
 class YouTubeAuthRequired(RuntimeError):
     """Upload never started because its account could not be authenticated."""
+
+
+def validate_authorization_url(url: str) -> str:
+    parsed = urlsplit(url)
+    if (parsed.scheme != 'https' or parsed.hostname != 'accounts.google.com'
+            or parsed.username or parsed.password or parsed.port not in (None, 443)):
+        raise ValueError('Google 로그인 주소를 확인할 수 없습니다.')
+    return url
+
+
+@contextmanager
+def _authentication_lock(token: Path):
+    lock = token.with_name(token.name + '.auth.lock.sqlite3')
+    if token.is_symlink() or lock.is_symlink():
+        raise ValueError('인증 파일의 연결 경로를 확인하세요.')
+    lock.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    descriptor = os.open(lock, os.O_CREAT | os.O_RDWR, 0o600)
+    os.close(descriptor)
+    db = sqlite3.connect(lock, timeout=0, isolation_level=None)
+    try:
+        try:
+            db.execute('BEGIN EXCLUSIVE')
+        except sqlite3.OperationalError as error:
+            if error.sqlite_errorcode not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+                raise
+            raise YouTubeAuthRequired('YOUTUBE_AUTH_BUSY: 다른 인증 작업이 끝난 뒤 확인하세요.') from None
+        yield
+    finally:
+        db.close()
+
+
+def _save_token(token: Path, content: str):
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=token.parent, prefix='.token_', delete=False) as file:
+            temporary = Path(file.name)
+            file.write(content)
+            file.flush()
+            os.fsync(file.fileno())
+        if token.is_symlink():
+            raise ValueError('인증 파일의 연결 경로가 바뀌었습니다.')
+        os.replace(temporary, token)
+    finally:
+        if temporary:
+            temporary.unlink(missing_ok=True)
+
 
 class YouTubeUploader:
     def __init__(self):
@@ -22,16 +75,22 @@ class YouTubeUploader:
         self.client_secrets_file = str(settings.client_secrets_path)
         self.token_file = str(settings.token_file_path)
 
-    def get_authenticated_service(self, *, interactive: bool = True):
+    def get_authenticated_service(self, *, interactive: bool = True, on_authorization_url=None):
+        with _authentication_lock(Path(self.token_file)):
+            return self._authenticate(interactive=interactive, on_authorization_url=on_authorization_url)
+
+    def _authenticate(self, *, interactive: bool, on_authorization_url):
         creds = None
         # token.json 파일에 저장된 인증 정보가 있는지 확인 (보안: JSON 형식 사용)
         if os.path.exists(self.token_file):
             try:
                 with open(self.token_file, 'r', encoding='utf-8') as token:
                     token_data = json.load(token)
+                    if not isinstance(token_data, dict):
+                        raise ValueError('invalid token structure')
                     creds = Credentials.from_authorized_user_info(token_data, self.scopes)
-            except (json.JSONDecodeError, ValueError) as e:
-                self.logger.warning(f"토큰 파일 손상됨, 재인증 필요: {e}")
+            except (json.JSONDecodeError, ValueError):
+                self.logger.warning('저장된 토큰 형식을 확인할 수 없어 재인증이 필요합니다.')
                 creds = None
 
         # 인증 정보가 없거나 유효하지 않으면 로그인 시도
@@ -39,8 +98,8 @@ class YouTubeUploader:
             if creds and creds.expired and creds.refresh_token:
                 try:
                     creds.refresh(Request())
-                except Exception as e:
-                    self.logger.warning(f"토큰 갱신 실패, 재인증 진행: {e}")
+                except Exception:
+                    self.logger.warning('저장된 토큰 갱신에 실패했습니다. 인증 정보를 확인하세요.')
                     creds = None
 
             if not creds or not creds.valid:
@@ -51,11 +110,22 @@ class YouTubeUploader:
 
                 flow = InstalledAppFlow.from_client_secrets_file(
                     self.client_secrets_file, self.scopes)
-                creds = flow.run_local_server(port=0)
+                original_url = flow.authorization_url
+                def authorization_url(**kwargs):
+                    url, state = original_url(**kwargs)
+                    validate_authorization_url(url)
+                    if on_authorization_url:
+                        on_authorization_url(url)
+                    return url, state
+                flow.authorization_url = authorization_url
+                options = {'port': 0, 'timeout_seconds': AUTH_TIMEOUT_SECONDS}
+                if on_authorization_url:
+                    options['authorization_prompt_message'] = None
+                creds = flow.run_local_server(**options)
 
-            # 인증 정보를 JSON 형식으로 안전하게 저장
-            with open(self.token_file, 'w', encoding='utf-8') as token:
-                token.write(creds.to_json())
+            if not creds or not creds.valid:
+                raise YouTubeAuthRequired('YOUTUBE_AUTH_REQUIRED: 유효한 인증을 받지 못했습니다.')
+            _save_token(Path(self.token_file), creds.to_json())
 
         return build(self.api_service_name, self.api_version, credentials=creds)
 
@@ -123,9 +193,26 @@ class YouTubeUploader:
         return None
 
 
-if __name__ == "__main__":
+def auth_command(arguments):
+    if arguments == ['--auth-only']:
+        YouTubeUploader().get_authenticated_service()
+        print('YouTube upload authorization ready.')
+        return 0
+    if arguments not in (['--auth-only', '--json-progress'], ['--auth-check', '--json-progress']):
+        raise ValueError('Usage: python -m shorts_maker.uploader.youtube_uploader --auth-only')
+    def emit_url(url):
+        print(json.dumps({'event': 'authorization_url', 'url': url}), flush=True)
+    try:
+        YouTubeUploader().get_authenticated_service(interactive=arguments[0] == '--auth-only', on_authorization_url=emit_url)
+    except Exception as error:
+        code = ('busy' if isinstance(error, YouTubeAuthRequired) and str(error).startswith('YOUTUBE_AUTH_BUSY')
+                else 'client_missing' if isinstance(error, FileNotFoundError) else 'auth_required')
+        print(json.dumps({'event': 'error', 'code': code}), flush=True)
+        return 1
+    print(json.dumps({'event': 'ready'}), flush=True)
+    return 0
+
+
+if __name__ == '__main__':
     import sys
-    if sys.argv[1:] != ["--auth-only"]:
-        raise SystemExit("Usage: python -m shorts_maker.uploader.youtube_uploader --auth-only")
-    YouTubeUploader().get_authenticated_service()
-    print("YouTube upload authorization ready.")
+    raise SystemExit(auth_command(sys.argv[1:]))

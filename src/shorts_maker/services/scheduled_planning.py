@@ -50,7 +50,7 @@ async def plan_pending_schedule(manager, expected: dict) -> dict:
         logger.error('Scheduled planning stopped (%s): %s', result.returncode, (result.stderr or '')[-4000:])
         output = (result.stderr or '') + (result.stdout or '')
         if 'YOUTUBE_AUTH_REQUIRED' in output:
-            raise RuntimeError('YOUTUBE_AUTH_REQUIRED: 업로드 계정을 다시 연결한 뒤 회차 상태를 확인하세요. 자동 재시도하지 않습니다.')
+            raise RuntimeError('YOUTUBE_AUTH_REQUIRED: 완성본·업로드 → YouTube 업로드 연결에서 계정을 다시 연결한 뒤 회차 상태를 확인하세요. 자동 재시도하지 않습니다.')
         raise RuntimeError(f'예약 기획이 중단됐습니다(종료 {result.returncode}). 회차 상태와 운영 기록을 확인하세요. 자동 재시도하지 않습니다.')
     current = manager.get_schedule(expected['id'])
     if (not current or current.get('last_result') != 'script_review_pending'

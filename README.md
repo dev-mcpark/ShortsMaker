@@ -32,6 +32,12 @@ Automatic uploads are private review copies; public publication remains a separa
 
 직접 실행 일정도 같은 연결 흐름을 사용합니다. 이때 에이전트 회차 예산을 새로 만들지 않습니다. 에이전트 기획은 앱에서 기존 위임 운영 경로를 시작하지만, 회차에 묶인 유료 후속 제작 실행은 아직 기존 운영 경로를 사용합니다. 이 기능만으로 앱 내 자율 운영 전체가 완성된 것은 아닙니다.
 
+### 영상 없이 YouTube 연결 확인하기
+
+**완성본·업로드 → YouTube 업로드 연결 → 저장된 인증 확인**은 로그인 창을 열지 않고 저장된 인증을 확인·갱신합니다. 연결이 필요하면 **업로드 계정 연결**을 누르고 Studio가 실행 중인 Mac의 기본 브라우저에서 기존 채널 계정과 YouTube 업로드 권한을 확인하세요. 창이 보이지 않으면 **로그인 창 직접 열기** 링크를 같은 Mac에서 여세요.
+
+메뉴를 이동해도 대기 상태와 링크를 다시 볼 수 있습니다. **인증 대기 취소**는 해당 인증 자식 프로세스를 종료하며, 대기는 최대 5분입니다. 완료·실패·취소 후 로그인 링크를 지웁니다. 확인 결과는 현재 저장 인증의 준비 상태이며 실제 업로드 때 권한을 다시 검사합니다. 연결만으로 영상 업로드·제작·일정 재개를 실행하지 않습니다. OAuth 클라이언트 파일이 없으면 기존 클라이언트의 설치 설정을 복원하세요. 상세 경로와 Google 설정은 아래 설치 안내를 참조하세요.
+
 ### 미완성 작업을 저장하고 다시 열기
 
 **제작 작업실 → 1. 대본·장면 검토 → 저장된 작업 초안 → 작업 초안 새 사본 저장**은 입력 중인 대본과 첫 프레임의 경로·검토 기준·메모를 별도 파일로 보관합니다. JSON이 미완성이거나 아직 적용한 대본이 없어도 저장할 수 있습니다. 장면 검토 화면의 **검토 입력 초안 저장**도 같은 사본을 만듭니다. 사본당 최대 2 MiB이며 기존 사본을 교체하지 않습니다.
@@ -278,7 +284,7 @@ Place your secrets in the `config/credentials/` directory:
 - `service_account.json`: Your Google Cloud Service Account key.
 - `client_secrets.json`: Your YouTube OAuth 2.0 Client Secret.
 
-If YouTube upload authorization expires, run `.venv/bin/python -m shorts_maker.uploader.youtube_uploader --auth-only` and finish the browser sign-in. This reconnects the upload account without creating or uploading a video. An approved-script run with private auto-upload checks saved authorization before media work and stops with `YOUTUBE_AUTH_REQUIRED` if it cannot refresh without interaction. Agent-operated scheduled planning also enforces this noninteractive check before any paid planning call; failure preserves the disabled `operator_pending` episode and its budget baseline for reconnection and resumption. The ordinary publishing action can still prompt for sign-in when used manually; an authentication failure before the media request leaves the reviewed video retryable.
+If YouTube upload authorization expires, use Studio's **완성본·업로드 → YouTube 업로드 연결** to check saved authorization or reconnect without uploading. The optional CLI fallback remains `.venv/bin/python -m shorts_maker.uploader.youtube_uploader --auth-only`; finish sign-in on the Mac running Studio. This reconnects the upload account without creating or uploading a video. An approved-script run with private auto-upload checks saved authorization before media work and stops with `YOUTUBE_AUTH_REQUIRED` if it cannot refresh without interaction. Agent-operated scheduled planning also enforces this noninteractive check before any paid planning call; failure preserves the disabled `operator_pending` episode and its budget baseline for reconnection and resumption. The ordinary publishing action can still prompt for sign-in when used manually; an authentication failure before the media request leaves the reviewed video retryable.
 
 An External OAuth app in Testing has a [seven-day consent/refresh-token lifetime](https://support.google.com/cloud/answer/15549945?hl=en), except for basic identity-only scopes; YouTube upload is outside that exception. Refreshing an access token does not establish a longer testing grant. For agent-operated staged production, check saved upload authentication **before spending on the due episode's planning**, even though upload happens later. If necessary, use the existing auth-only flow once for the same account, upload scope and access duration. Pause paid work if owner sign-in, MFA or a different permission is required. This does not prove unattended future reauthorization. Changing the OAuth app's publishing status, audience, scopes or access duration requires a separate owner decision; the app's video uploads remain private. If Publish app is disabled despite populated basic Branding fields, retain the evidence and establish the supported remedy rather than repeatedly rewriting settings or inventing website URLs.
 

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from shorts_maker.utils.character_overlay import CharacterOverlayConfig
     from shorts_maker.planner.models import ShortsScript, ScriptGenerationContext, TopicCandidate
     from shorts_maker.services.production_service import ProductionService, ProductionPhase, ProductionProgress, SceneProgress
+    from shorts_maker.services.youtube_connection import YouTubeConnection
 
 
 @dataclass
@@ -63,6 +64,7 @@ class AppState:
 
     # Service Reference (lazy init via property)
     _production_service: Optional["ProductionService"] = field(default=None, repr=False)
+    _youtube_connection: Optional['YouTubeConnection'] = field(default=None, repr=False)
 
     # Error State
     last_error: Optional[str] = None
@@ -104,7 +106,14 @@ class AppState:
 
     @property
     def is_busy(self) -> bool:
-        return self.pipeline_running or self.youtube_upload_in_progress or self.scheduled_planning_in_progress
+        return (self.pipeline_running or self.youtube_upload_in_progress or self.scheduled_planning_in_progress
+                or bool(self._youtube_connection and self._youtube_connection.running))
+
+    def get_youtube_connection(self) -> 'YouTubeConnection':
+        from shorts_maker.services.youtube_connection import YouTubeConnection
+        if self._youtube_connection is None:
+            self._youtube_connection = YouTubeConnection()
+        return self._youtube_connection
 
     @property
     def production_service(self) -> Optional["ProductionService"]:

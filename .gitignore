@@ -19,8 +19,10 @@ token.pickle
 token.json
 
 # Credentials (config/credentials/ 폴더)
-config/credentials/*.json
+config/credentials/*
 !config/credentials/.gitkeep
+.token_*
+*.auth.lock.sqlite3*
 
 # Project specific
 outputs/

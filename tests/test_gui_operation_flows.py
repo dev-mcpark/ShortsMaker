@@ -169,6 +169,7 @@ class CompletedOutputTests(TestCase):
     def render(self, state):
         recorder = _UI()
         with patch.object(publishing_tab, 'ui', recorder), \
+                patch.object(publishing_tab, 'render_youtube_connection_panel'), \
                 patch.object(publishing_tab, 'card_with_header', lambda *args: recorder.card()):
             publishing_tab.render_publishing_tab(state)
         return recorder

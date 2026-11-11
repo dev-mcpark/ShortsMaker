@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.gui.components.common.media_preview import media_sources
+from shorts_maker.gui.components.youtube_connection_panel import render_youtube_connection_panel
 from shorts_maker.services.production_service import source_credited_description, script_sha256
 from shorts_maker.services.publishing_drafts import (
     publishing_key as _publishing_key, save_publishing_draft, saved_publishing_drafts,
@@ -94,6 +95,7 @@ def render_publishing_tab(state: 'AppState') -> None:
     with ui.column().classes('w-full max-w-2xl mx-auto mt-10'):
         with card_with_header('YouTube 비공개 업로드', 'cloud_upload', 'danger'):
             with ui.element('div').classes('w-full p-6'):
+                render_youtube_connection_panel(state)
                 outputs = _completed_outputs()
                 saved_video = ui.select(
                     outputs, label='저장된 완성본', with_input=True,
