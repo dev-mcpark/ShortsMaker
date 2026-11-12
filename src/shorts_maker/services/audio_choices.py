@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from shorts_maker.services.production_service import script_sha256
 from shorts_maker.utils.bgm_manager import BGMManager
@@ -20,6 +20,14 @@ class AudioChoices(BaseModel):
     bgm_mood: str = Field(min_length=1, max_length=80)
     bgm_track: str = Field(max_length=255)
     bgm_volume: float = Field(ge=0, le=1, allow_inf_nan=False)
+    prepared_narration_manifest: str | None = Field(default=None, min_length=1, max_length=4096)
+    prepared_narration_sha256: str | None = Field(default=None, pattern=r'^[0-9a-f]{64}$')
+
+    @model_validator(mode='after')
+    def narration_binding(self):
+        if (self.prepared_narration_manifest is None) != (self.prepared_narration_sha256 is None):
+            raise ValueError('저장할 내레이션 선택과 해시를 함께 확인하세요.')
+        return self
 
 
 def _path(script) -> Path:
@@ -27,7 +35,11 @@ def _path(script) -> Path:
 
 
 def save_audio_choices(script, choices: dict) -> Path:
+    from shorts_maker.services.prepared_narration import narration_paths
+
     choices = AudioChoices.model_validate(choices)
+    if choices.prepared_narration_manifest:
+        narration_paths(script, choices.prepared_narration_manifest, choices.prepared_narration_sha256)
     path = _path(script)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = None

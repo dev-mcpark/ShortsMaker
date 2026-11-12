@@ -179,6 +179,69 @@ class ProductionMaterialsTests(IsolatedAsyncioTestCase):
         self.assertEqual(state.final_video_path, 'retained.mp4')
         self.assertIsNone(state.prepared_narration_manifest)
 
+    def test_explicit_audio_settings_save_restores_selected_narration_without_review_authority(self):
+        manifest, audio = self.narration()
+        state = AppState(script=self.script)
+        state.select_prepared_narration(str(manifest))
+        path = state.save_audio_choices()
+        before = path.read_bytes(), manifest.read_bytes(), audio.read_bytes()
+        restored = AppState(final_video_path='old.mp4', reviewed_script_sha256='old')
+        restored.load_saved_script(self.script)
+        self.assertEqual(restored.prepared_narration_manifest, str(manifest.resolve()))
+        self.assertEqual(restored.prepared_audio_paths(), [str(audio)])
+        self.assertIsNone(restored.final_video_path)
+        self.assertIsNone(restored.reviewed_script_sha256)
+        self.assertEqual(before, (path.read_bytes(), manifest.read_bytes(), audio.read_bytes()))
+        restored.select_prepared_narration(None)
+        restored.save_audio_choices()
+        fresh = AppState()
+        fresh.load_saved_script(self.script)
+        self.assertIsNone(fresh.prepared_narration_manifest)
+
+    def test_changed_saved_narration_stays_selected_until_explicit_recovery_without_tts(self):
+        manifest, audio = self.narration()
+        state = AppState(script=self.script)
+        state.select_prepared_narration(str(manifest))
+        saved = state.save_audio_choices();saved_bytes = saved.read_bytes()
+        manifest_bytes, audio_bytes = manifest.read_bytes(), audio.read_bytes()
+        other = script('Keep current work')
+        current = AppState(script=other, final_video_path='keep.mp4', prepared_narration_manifest='keep-selection')
+        for target, content in ((manifest, b'{broken'), (audio, b'changed audio'), (manifest, None), (audio, None),
+                                (manifest, json.dumps({**json.loads(manifest_bytes), 'voice': 'different'}).encode())):
+            manifest.write_bytes(manifest_bytes);audio.write_bytes(audio_bytes)
+            if content is None:
+                target.unlink()
+            else:
+                target.write_bytes(content)
+            with self.assertRaises((OSError, ValueError)):
+                state.save_audio_choices()
+            self.assertEqual(saved.read_bytes(), saved_bytes)
+            current.load_saved_script(self.script)
+            self.assertEqual(current.prepared_narration_manifest, str(manifest.resolve()))
+            with self.assertRaises((OSError, ValueError)):
+                current.prepared_audio_paths()
+            # The app can open the script and expose explicit repair/new-voice controls.
+            current.select_prepared_narration(None)
+            self.assertIsNone(current.prepared_audio_paths())
+
+    def test_deleted_narration_panel_cannot_clear_a_selection_or_finished_result(self):
+        manifest, _ = self.narration()
+        state = AppState(script=self.script)
+        state.select_prepared_narration(str(manifest))
+        state.final_video_path = 'kept.mp4'
+        client = Client(page('/stale-narration-choice'))
+        try:
+            with client, ui.column() as root:
+                narration_panel.render_narration_panel(state)
+            button = next(e for e in root.descendants() if getattr(e, 'text', '') == '새 음성 생성으로 전환')
+            with client:
+                root.clear()
+                next(e.handler for e in button._event_listeners.values() if e.type == 'click')(None)
+            self.assertEqual(state.prepared_narration_manifest, str(manifest))
+            self.assertEqual(state.final_video_path, 'kept.mp4')
+        finally:
+            client.delete()
+
     def test_reconnecting_same_voice_or_clearing_an_empty_selection_preserves_the_edit(self):
         manifest, audio = self.narration()
         state = AppState(script=self.script, final_video_path='retained.mp4')
@@ -214,6 +277,12 @@ class ProductionMaterialsTests(IsolatedAsyncioTestCase):
         self.assertIn(result.narration_manifest_path, list_narration_sets(self.script))
         self.assertEqual(json.loads(Path(result.report_path).read_text())['narration_manifest_path'], result.narration_manifest_path)
         self.service._generator.generate_scene_clip.assert_not_awaited()
+        state = AppState(script=self.script, prepared_narration_manifest=result.narration_manifest_path)
+        state.save_audio_choices()
+        restored = AppState()
+        restored.load_saved_script(self.script)
+        self.assertEqual(restored.prepared_audio_paths(), paths)
+        self.assertIsNotNone(restored.prepared_narration_sha256)
 
     def test_mismatched_pending_changed_and_external_audio_are_not_offered(self):
         manifest, audio = self.narration()

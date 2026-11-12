@@ -32,12 +32,15 @@ def retain_narration_set(script, audio_paths: list[str], voice: str) -> str:
     return str(manifest.resolve())
 
 
-def narration_paths(script, manifest_path: str) -> list[str]:
+def narration_paths(script, manifest_path: str, expected_sha256: str | None = None) -> list[str]:
     manifest = Path(manifest_path).resolve()
     root = settings.output_dir.resolve()
     if manifest.name != 'narration.json' or not manifest.is_relative_to(root):
         raise ValueError('outputs 안의 narration.json을 선택하세요.')
-    record = json.loads(manifest.read_text(encoding='utf-8'))
+    content = manifest.read_bytes()
+    if expected_sha256 is not None and hashlib.sha256(content).hexdigest() != expected_sha256:
+        raise ValueError('선택·저장한 뒤 내레이션 기록이 변경됐습니다. 음성을 다시 확인하고 명시적으로 연결하세요.')
+    record = json.loads(content)
     if (not isinstance(record, dict) or record.get('schema_version') != 1
             or not isinstance(record.get('scenes'), dict)):
         raise ValueError('내레이션 준비 기록이 올바르지 않습니다.')

@@ -54,6 +54,7 @@ class AppState:
     publishing_drafts: Dict[str, Dict[str, Any]] = field(default_factory=dict, repr=False)
     script_context: Optional["ScriptGenerationContext"] = None
     prepared_narration_manifest: Optional[str] = None
+    prepared_narration_sha256: Optional[str] = None
     topic_candidates: List["TopicCandidate"] = field(default_factory=list)
     scene_clips: List[str] = field(default_factory=list)
     generated_clips: List[str] = field(default_factory=list)
@@ -297,11 +298,16 @@ class AppState:
     def save_audio_choices(self):
         from shorts_maker.services.audio_choices import save_audio_choices
 
-        if self.script is None:
-            raise ValueError('설정을 저장할 각본이 없습니다.')
-        return save_audio_choices(self.script, {
-            key: getattr(self, key) for key in ('tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume')
-        })
+        if self.is_busy or self.script is None:
+            raise ValueError('작업이 끝난 뒤 설정을 저장할 각본을 확인하세요.')
+        choices = {
+            key: getattr(self, key) for key in ('tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume',
+                                               'prepared_narration_manifest', 'prepared_narration_sha256')
+        }
+        if self.prepared_narration_manifest and self.prepared_narration_sha256 is None:
+            self.prepared_audio_paths()
+            choices['prepared_narration_sha256'] = hashlib.sha256(Path(self.prepared_narration_manifest).read_bytes()).hexdigest()
+        return save_audio_choices(self.script, choices)
 
     def prepared_audio_paths(self) -> Optional[List[str]]:
         from shorts_maker.services.prepared_narration import narration_paths
@@ -310,7 +316,7 @@ class AppState:
             return None
         if self.script is None:
             raise ValueError('내레이션을 사용할 대본이 없습니다.')
-        return narration_paths(self.script, self.prepared_narration_manifest)
+        return narration_paths(self.script, self.prepared_narration_manifest, self.prepared_narration_sha256)
 
     def select_prepared_narration(self, manifest_path: Optional[str]) -> None:
         from shorts_maker.services.prepared_narration import narration_paths
@@ -318,14 +324,17 @@ class AppState:
 
         if self.is_busy or self.script is None:
             raise ValueError('작업이 끝난 뒤 현재 대본의 음성을 선택하세요.')
+        digest = None
         if manifest_path:
             paths = narration_paths(self.script, manifest_path)
             VideoEditor.validate_narration(paths, self.script)
             manifest_path = str(Path(manifest_path).resolve())
-        if (manifest_path or None) == self.prepared_narration_manifest:
+            digest = hashlib.sha256(Path(manifest_path).read_bytes()).hexdigest()
+        if (manifest_path or None) == self.prepared_narration_manifest and digest == self.prepared_narration_sha256:
             return
         self.invalidate_video_result()
         self.prepared_narration_manifest = manifest_path or None
+        self.prepared_narration_sha256 = digest
 
     def load_saved_script(self, script) -> None:
         from shorts_maker.services.audio_choices import load_audio_choices
@@ -338,7 +347,8 @@ class AppState:
         if choices is None:
             defaults = AppState()
             choices = {key: getattr(defaults, key)
-                       for key in ('tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume')}
+                       for key in ('tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume',
+                                   'prepared_narration_manifest', 'prepared_narration_sha256')}
         for key, value in choices.items():
             setattr(self, key, value)
         self.reset_pipeline()
@@ -346,7 +356,6 @@ class AppState:
         self.script = script
         self.mode = script.generation_mode if script is not None else defaults.mode
         self.script_context = None
-        self.prepared_narration_manifest = None
         self.topic_candidates = []
         self.reviewed_script_sha256 = None
         self.final_video_path = None

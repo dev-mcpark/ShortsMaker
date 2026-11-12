@@ -1,5 +1,11 @@
 # Studio UI and code review
 
+## 2026-11-12 — Retain the selected narration across reopen/restart
+
+Audio settings previously saved voice/music while silently losing an explicitly connected narration set. The same save action now persists its path/manifest digest; reopening the exact script restores it without review/results. Invalid retained media stays selected with a visible error and repair/reconnect/new-voice choices, so recovery does not require developer edits and cannot silently purchase speech. Busy saves and deleted-panel callbacks preserve current work. Legacy settings default to no prepared selection.
+
+610 offline tests and provider-blocked1440/390px UI checks cover a real QA server termination/restart, restored selection/playback, intentional fixture corruption and explicit new-mode save. The operating server remains unchanged pending unsaved-input safety; no live generation/upload or creative-quality assertion follows these checks.
+
 ## 2026-11-12 — Scene structure without advanced JSON
 
 The ordinary form now supports insert-after, earlier/later playback moves and explicit delete confirmation. The selector labels playback position separately from stable scene ID; the last scene cannot be removed. New scenes require narration/visual description before schema apply; incomplete drafts can use existing explicit work snapshots. Form edits preserve source files/media/review/episode scope until changed apply. Delete confirmation reads the latest text, fixing a stale summary found during browser QA. Deleted fields/views, old selection callbacks, changed draft/script and busy state retain the original work.

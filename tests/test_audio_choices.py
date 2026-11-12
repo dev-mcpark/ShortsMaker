@@ -159,3 +159,30 @@ class AudioChoicesTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 save_audio_choices(script, {**CHOICES, 'bgm_volume': 0.3})
         self.assertEqual(path.read_bytes(), before)
+
+    def test_legacy_four_field_record_and_no_selected_narration_remain_compatible(self):
+        script = sample_script()
+        path = save_audio_choices(script, CHOICES)
+        record = json.loads(path.read_text())
+        record['choices'] = CHOICES
+        path.write_text(json.dumps(record))
+        with patch('shorts_maker.services.audio_choices.BGMManager.get_track_path', return_value='licensed.mp3'):
+            loaded = load_audio_choices(script)
+        self.assertIsNone(loaded['prepared_narration_manifest'])
+        self.assertIsNone(loaded['prepared_narration_sha256'])
+        for bad in ({'prepared_narration_sha256': 'a' * 64},
+                    {'prepared_narration_manifest': ''}, {'prepared_narration_manifest': True},
+                    {'prepared_narration_sha256': 'invalid'}):
+            before = path.read_bytes()
+            with self.assertRaises(ValueError):
+                save_audio_choices(script, {**CHOICES, **bad})
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_busy_settings_save_cannot_overwrite_previous_record(self):
+        script = sample_script()
+        state = AppState(script=script, **CHOICES)
+        path = state.save_audio_choices();before = path.read_bytes()
+        state.pipeline_running = True
+        with self.assertRaises(ValueError):
+            state.save_audio_choices()
+        self.assertEqual(path.read_bytes(), before)

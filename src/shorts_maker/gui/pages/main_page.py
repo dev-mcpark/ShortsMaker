@@ -228,12 +228,13 @@ def render_main_page() -> None:
                 def save_audio_choices():
                     try:
                         state.save_audio_choices()
-                        ui.notify('현재 각본의 음성·음악 설정을 저장했습니다.', type='positive')
+                        ui.notify('현재 각본의 음성·음악 설정과 내레이션 선택을 저장했습니다.', type='positive')
                     except (OSError, ValueError) as error:
                         ui.notify(f'설정 저장 실패: {error}', type='negative')
 
                 ui.button('각본별 음성·음악 설정 저장', on_click=save_audio_choices).props(
-                    'flat dense icon=save').classes('w-full').bind_enabled_from(state, 'script', bool)
+                    'flat dense icon=save').classes('w-full').bind_enabled_from(
+                        state, 'is_busy', lambda busy: not busy and state.script is not None)
 
                 ui.separator().classes('bg-slate-800 my-2')
 
