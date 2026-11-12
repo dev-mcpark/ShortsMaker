@@ -550,6 +550,8 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
         start_edit_btn.disable()
 
     with scene_cards_container:
+        import_status = ui.label('선택한 영상을 확인·저장하는 중입니다. 완료 전에는 기존 클립을 사용합니다.').classes(
+            'col-span-full text-sm text-amber-200').bind_visibility_from(state, 'media_import_in_progress')
         if not settings.paid_production_enabled and not state.prepared_narration_manifest:
             ui.label('검토 모드: 클립 연결·복원·재생은 가능합니다. 기존 내레이션을 연결하면 새 음성 없이 편집할 수 있습니다.').classes(
                 'col-span-full w-full p-3 border border-amber-700/40 rounded-lg text-sm text-amber-200')
@@ -667,6 +669,9 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                     # 3. 비디오 클립 업로드
                     with ui.column().classes('w-full gap-1 mt-1'):
                         ui.label('비디오 파일 매핑').classes('text-[10px] text-slate-500 font-bold uppercase tracking-wider')
+                        error_key = f'{state.manual_script_id}:{scene_num}'
+                        ui.label().classes('text-xs text-amber-200 break-all').bind_text_from(
+                            state, 'manual_clip_errors', backward=lambda errors, key=error_key: errors.get(key, ''))
 
                         # 업로드 완료된 클립명 표시
                         if exists:
@@ -682,32 +687,70 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                         def make_upload_handler(sn=scene_num):
                             bound_script = state.script.model_dump_json()
                             bound_script_id = state.manual_script_id
+                            bound_execution = state.execution_key()
 
                             async def handle_upload(e):
+                                import asyncio
+                                job = None
+                                owns_import = False
+                                committed = False
                                 try:
-                                    if state.is_busy:
+                                    if state.is_busy or not state.manual_video_mode:
                                         safe_notify('진행 중인 제작·업로드가 끝난 뒤 클립을 추가하세요.', type='warning')
                                         return
                                     file_bytes = await e.file.read()
                                     if (state.is_busy or not state.script
+                                            or not state.manual_video_mode or state.execution_key() != bound_execution
                                             or state.script.model_dump_json() != bound_script
                                             or state.manual_script_id != bound_script_id):
                                         safe_notify('각본이나 작업 상태가 변경됐습니다. 현재 장면에서 파일을 다시 선택하세요.', type='warning')
                                         return
-                                    exporter.save_uploaded_clip(
-                                        file_bytes, bound_script_id, sn
-                                    )
+                                    state.media_import_in_progress = True
+                                    owns_import = True
+                                    state.manual_clip_errors = {key: value for key, value in state.manual_clip_errors.items()
+                                                               if key != f'{bound_script_id}:{sn}'}
+                                    job = asyncio.create_task(asyncio.to_thread(exporter.save_uploaded_clip, file_bytes, bound_script_id, sn))
+                                    cancelled = False
+                                    # Keep the editing lock until the atomic save settles, even after task cancellation.
+                                    while not job.done():
+                                        try:
+                                            await asyncio.shield(job)
+                                        except asyncio.CancelledError:
+                                            cancelled = True
+                                        except Exception:
+                                            break
+                                    committed = not job.cancelled() and job.exception() is None
+                                    if cancelled:
+                                        raise asyncio.CancelledError
+                                    job.result()
+                                    state.media_import_in_progress = False
                                     state.invalidate_video_result()
+                                    committed = False
 
                                     safe_notify(f'씬 {sn} 비디오 클립 업로드 완료!', type='positive')
 
                                     # 전체 패널 다시 그리기
-                                    render_manual_panel(state, exporter, start_edit_btn, scene_cards_container)
+                                    try:
+                                        render_manual_panel(state, exporter, start_edit_btn, scene_cards_container)
+                                    except RuntimeError:
+                                        pass  # A deleted view cannot turn a completed save into an import failure.
                                     if exporter.all_clips_ready(state.script, state.manual_script_id):
                                         safe_notify('🎉 모든 씬의 영상 매핑 완료! 상단의 [편집 및 자막 믹싱 시작]을 실행하십시오.', type='positive')
                                 except Exception as err:
+                                    state.manual_clip_errors = {**state.manual_clip_errors, f'{bound_script_id}:{sn}': str(err)}
                                     safe_notify(f'업로드 실패: {err}', type='negative')
                                     logger.error(f'씬 {sn} 수동 로드 오류: {err}')
+                                finally:
+                                    if owns_import:
+                                        state.media_import_in_progress = False
+                                        if committed:
+                                            state.invalidate_video_result()
+                                    sender = getattr(e, 'sender', None)
+                                    if sender is not None and not sender.is_deleted:
+                                        try:
+                                            sender.reset()
+                                        except RuntimeError:
+                                            pass
                             return handle_upload
 
                         ui.upload(
@@ -715,6 +758,17 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                             auto_upload=True,
                             max_file_size=500_000_000,
                         ).props('accept=".mp4,.mov,.webm" flat color=violet dense label="비디오 선택 (mp4, mov)"').classes('w-full border border-dashed border-slate-700 rounded-lg hover:border-violet-500/50 bg-slate-950/20 py-1')
+
+    if state.media_import_in_progress:
+        expected_script, expected_workspace = state.script.model_dump_json(), state.manual_script_id
+        def finish_import():
+            if (import_status.is_deleted or not state.script or state.script.model_dump_json() != expected_script
+                    or state.manual_script_id != expected_workspace or not state.manual_video_mode):
+                recovery.cancel()
+            elif not state.media_import_in_progress:
+                recovery.cancel()
+                render_manual_panel(state, exporter, start_edit_btn, scene_cards_container)
+        recovery = ui.timer(.1, finish_import)
 
 
 def render_generation_tab(state: 'AppState') -> None:

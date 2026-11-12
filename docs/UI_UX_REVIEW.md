@@ -1,5 +1,11 @@
 # Studio UI and code review
 
+### 2026-11-12 — Preserve playable manual clips when replacement is invalid
+
+A real temporary MP4 was overwritten by non-video bytes, with the failure detected only at the later production preflight. The shared exporter now opens/checks a temporary candidate before atomic replacement; failures preserve the current clip/result selection. The UI owns a nonblocking import lock through actual IO completion (including task cancellation), rejects stale/duplicate actions, and recovers a view entered during the import. Success invalidates the selected cut and refreshes the scene; deleted widgets do not reclassify a completed save as failure.
+
+Browser QA exposed the native uploader showing rejected bytes as transfer-complete. Reset that queue after processing and keep per-scene failure feedback across menu navigation; clear only that scene's old error on a new import.590 offline tests and provider-blocked desktop/mobile invalid→valid upload/playback verified the repaired path, existing final/workspace/ledger bytes, no leftover temporary clip and no overflow. Only the visible imported scene is asserted to play without error; deselected hidden final players retain the browser's empty-source error. Local opening validation is not full-video quality or owner adoption. The production Studio was not restarted.
+
 ### 2026-11-11 — Reopen retained versions without losing current text work
 
 Execution history had no access to saved full scripts or their prior revisions. A searchable run selector now includes older-than-ten archived runs; a read-only modal shows versions, source, narration and visual/motion briefs. Explicit copy-open validates the fresh run, selected version and unchanged workspace, then backs up current applied/unfinished text and target draft inputs through existing work snapshots. Late/busy/deleted/changed-record/settings or failed backups cannot replace the workspace. Existing scope stays bound; model verdicts, original/attached episodes and costs are unchanged. The selected stored version is shown rather than an old draft overlay. Incomplete summaries and damaged chains have no reconstruct/fallback path.

@@ -205,7 +205,8 @@ class RepeatNavigationTests(TestCase):
             exporter = VeoPromptExporter()
             state.manual_script_id = exporter.create_workspace(state.script)
             for scene in state.script.scenes:
-                exporter.save_uploaded_clip(b'fixture', state.manual_script_id, scene.scene_number)
+                with patch('shorts_maker.utils.veo_prompt_exporter.is_playable_video', return_value=True):
+                    exporter.save_uploaded_clip(b'fixture', state.manual_script_id, scene.scene_number)
             with self.client:
                 generation_tab.render_generation_tab(state)
             button = next(e for e in self.client.elements.values() if getattr(e, 'text', '') == '편집 및 자막 믹싱 시작')

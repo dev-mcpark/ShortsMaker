@@ -49,7 +49,7 @@ class CreationCallbackTests(unittest.IsolatedAsyncioTestCase):
     async def test_successful_manual_clip_replacement_invalidates_previous_edit(self):
         async def read():
             return b'new-clip'
-        state = AppState(script=script(), manual_script_id='workspace', final_video_path='old-final.mp4',
+        state = AppState(script=script(), manual_video_mode=True, manual_script_id='workspace', final_video_path='old-final.mp4',
                          generated_clips=['old.mp4'])
         state.confirm_script_review()
         exporter = SimpleNamespace(save_uploaded_clip=Mock(), all_clips_ready=Mock(return_value=False))
@@ -221,7 +221,7 @@ class CreationCallbackTests(unittest.IsolatedAsyncioTestCase):
             await release.wait()
             return b'clip-A'
 
-        state = AppState(script=script(), manual_script_id='script_A')
+        state = AppState(script=script(), manual_video_mode=True, manual_script_id='script_A')
         exporter = SimpleNamespace(save_uploaded_clip=Mock(), all_clips_ready=Mock(return_value=False))
         env = {'scene_num': 1, 'state': state, 'exporter': exporter, 'safe_notify': Mock(),
                'render_manual_panel': Mock(), 'start_edit_btn': None, 'scene_cards_container': None,

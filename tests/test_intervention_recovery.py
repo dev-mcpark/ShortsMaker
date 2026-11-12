@@ -26,7 +26,8 @@ class InterventionRecoveryTests(unittest.TestCase):
 
     def workspace_with_clip(self):
         workspace = self.exporter.create_workspace(self.script)
-        clip = self.exporter.save_uploaded_clip(b'local fixture', workspace, self.script.scenes[0].scene_number)
+        with patch('shorts_maker.utils.veo_prompt_exporter.is_playable_video', return_value=True):
+            clip = self.exporter.save_uploaded_clip(b'local fixture', workspace, self.script.scenes[0].scene_number)
         return workspace, clip
 
     def test_saved_copies_preserve_original_and_reopen_without_review_approval(self):
@@ -109,7 +110,8 @@ class InterventionRecoveryTests(unittest.TestCase):
 
     def test_unbound_legacy_or_empty_directories_are_not_guessed_as_recovery(self):
         self.exporter.create_workspace(self.script)
-        self.exporter.save_uploaded_clip(b'legacy', 'legacy', 1)
+        with patch('shorts_maker.utils.veo_prompt_exporter.is_playable_video', return_value=True):
+            self.exporter.save_uploaded_clip(b'legacy', 'legacy', 1)
         self.assertEqual(self.exporter.list_workspaces(self.script), {})
         with self.assertRaises(ValueError):
             self.exporter.validate_workspace(self.script, 'legacy')

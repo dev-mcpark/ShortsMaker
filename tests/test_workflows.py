@@ -743,7 +743,8 @@ class WorkflowTests(unittest.TestCase):
         exporter = VeoPromptExporter()
         with tempfile.TemporaryDirectory() as directory, patch.object(settings, "clips_dir", Path(directory)):
             self.assertIsNone(exporter.get_ready_clip_paths(script, "script"))
-            path = exporter.save_uploaded_clip(b"video", "script", 1)
+            with patch("shorts_maker.utils.veo_prompt_exporter.is_playable_video", return_value=True):
+                path = exporter.save_uploaded_clip(b"video", "script", 1)
             self.assertEqual(
                 exporter.get_ready_clip_paths(script, "script"), {1: str(path)}
             )

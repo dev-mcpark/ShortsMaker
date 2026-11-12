@@ -61,6 +61,8 @@ class AppState:
     failed_video_preview_path: Optional[str] = None
     youtube_upload_in_progress: bool = False
     scheduled_planning_in_progress: bool = False
+    media_import_in_progress: bool = False
+    manual_clip_errors: Dict[str, str] = field(default_factory=dict, repr=False)
     operating_scope: Optional[Dict[str, str]] = None
     _execution_version: int = 0
 
@@ -108,7 +110,7 @@ class AppState:
 
     @property
     def is_busy(self) -> bool:
-        return (self.pipeline_running or self.youtube_upload_in_progress or self.scheduled_planning_in_progress
+        return (self.pipeline_running or self.youtube_upload_in_progress or self.scheduled_planning_in_progress or self.media_import_in_progress
                 or bool(self._youtube_connection and self._youtube_connection.running))
 
     def get_youtube_connection(self) -> 'YouTubeConnection':

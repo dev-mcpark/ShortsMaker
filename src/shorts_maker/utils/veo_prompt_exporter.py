@@ -15,6 +15,7 @@ from typing import Dict, List, Optional
 from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.logger import get_logger
+from shorts_maker.utils.media_validation import is_playable_video
 
 logger = get_logger(__name__)
 
@@ -135,9 +136,11 @@ class VeoPromptExporter:
             저장된 파일의 Path
         """
         clip_path = self.get_clip_path(script_id, scene_number)
-        temp_path = clip_path.with_name(f'.{clip_path.name}.{uuid.uuid4().hex}.tmp')
+        temp_path = clip_path.with_name(f'.{clip_path.stem}.{uuid.uuid4().hex}.tmp.mp4')
         try:
             temp_path.write_bytes(file_content)
+            if not is_playable_video(temp_path):
+                raise ValueError('업로드한 파일을 영상으로 재생할 수 없습니다. 기존 장면 파일은 유지됩니다.')
             os.replace(temp_path, clip_path)
         finally:
             temp_path.unlink(missing_ok=True)

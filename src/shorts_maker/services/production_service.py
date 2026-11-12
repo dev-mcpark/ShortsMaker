@@ -18,7 +18,7 @@ from typing import Optional, List, Dict, Any, Callable, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 from PIL import Image
-from moviepy import VideoFileClip
+from shorts_maker.utils.media_validation import is_playable_video
 
 from shorts_maker.planner.script_planner import ScriptPlanner, ShortsScript
 from shorts_maker.planner.models import ScriptGenerationContext
@@ -384,12 +384,11 @@ class ProductionService:
 
     @staticmethod
     def _valid_clip(path: Path, mode: str) -> bool:
+        if mode == 'video':
+            return is_playable_video(path)
         try:
             if not path.is_file() or path.stat().st_size == 0:
                 return False
-            if mode == "video":
-                with VideoFileClip(str(path)) as clip:
-                    return clip.duration > 0 and clip.get_frame(0) is not None
             with Image.open(path) as image:
                 image.verify()
             return True

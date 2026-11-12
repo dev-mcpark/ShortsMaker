@@ -2240,8 +2240,8 @@ class ReviewRegressions(unittest.TestCase):
                 exporter = VeoPromptExporter()
                 path = exporter.get_clip_path("script", 1)
                 path.write_bytes(b"old video")
-                with patch("shorts_maker.utils.veo_prompt_exporter.os.replace", create=True,
-                           side_effect=OSError("disk error")):
+                with patch("shorts_maker.utils.veo_prompt_exporter.is_playable_video", return_value=True), \
+                        patch("shorts_maker.utils.veo_prompt_exporter.os.replace", side_effect=OSError("disk error")):
                     with self.assertRaises(OSError):
                         exporter.save_uploaded_clip(b"new video", "script", 1)
                 self.assertEqual(path.read_bytes(), b"old video")
