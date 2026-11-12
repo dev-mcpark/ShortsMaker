@@ -433,6 +433,35 @@ class AppState:
         self.script_editor_drafts[key] = json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False)
         return True
 
+    def change_script_scene(self, key: str, expected_text: str, action: str, scene_number: int) -> int:
+        """Change draft order only; scene IDs and applied media/reviews stay untouched."""
+        if self.is_busy or self.script is None or key != self.script_editor_key():
+            raise ValueError('작업 중이거나 대본이 바뀌었습니다. 현재 편집 화면을 다시 여세요.')
+        if expected_text != self.script_editor_text():
+            raise ValueError('다른 편집 화면에서 초안이 바뀌었습니다. 편집 화면을 새로고침하세요.')
+        data = self.script_form_data()
+        scenes = data['scenes']
+        index = next((i for i, scene in enumerate(scenes)
+                      if type(scene_number) is int and scene['scene_number'] == scene_number), None)
+        if index is None or action not in {'add', 'remove', 'earlier', 'later'}:
+            raise ValueError('변경할 장면과 작업을 확인하세요.')
+        if action == 'add':
+            scene_number = max([s['scene_number'] for s in scenes] + [s.scene_number for s in self.script.scenes]) + 1
+            scenes.insert(index + 1, {'scene_number': scene_number, 'script_text': '', 'visual_description': '',
+                                      'motion_instruction': '', 'duration_seconds': 5.0, 'visual_mode': None})
+        elif action == 'remove':
+            if len(scenes) == 1:
+                raise ValueError('대본에는 장면이 하나 이상 있어야 합니다.')
+            scenes.pop(index)
+            scene_number = scenes[min(index, len(scenes) - 1)]['scene_number']
+        else:
+            other = index + (-1 if action == 'earlier' else 1)
+            if other < 0 or other >= len(scenes):
+                return scene_number
+            scenes[index], scenes[other] = scenes[other], scenes[index]
+        self.script_editor_drafts[key] = json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False)
+        return scene_number
+
     def has_unapplied_first_frame_draft(self, scene_number: int) -> bool:
         return bool(self.first_frame_drafts.get(self.script_editor_key(), {}).get(scene_number))
 

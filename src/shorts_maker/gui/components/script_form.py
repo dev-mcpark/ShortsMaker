@@ -12,13 +12,15 @@ def render_script_form(state, on_change, on_apply, on_discard):
     def panel():
         key = state.script_editor_key()
         version = {'text': state.script_editor_text()}
-        with ui.expansion('대본·장면 편집', icon='edit_note', value=True).classes('w-full bg-slate-900 rounded-lg mb-4').props('dark'):
+        with ui.expansion('대본·장면 편집', icon='edit_note', value=True).classes('w-full bg-slate-900 rounded-lg mb-4').props('dark') as form:
             ui.label('수정은 초안으로 유지됩니다. 적용하면 아래 현재 대본이 바뀌며 각본·장면을 다시 확인해야 합니다. 원문과 대조해 수정하세요.').classes('text-xs text-slate-300')
             ui.label().bind_text_from(state, 'is_busy', lambda _: '미적용 수정 있음 · 적용하거나 되돌린 뒤 제작하세요.'
                                      if state.has_unapplied_script_draft() else '현재 적용된 대본과 같은 내용입니다.').classes('text-xs text-amber-200')
 
             def change(field, scene_number=None):
                 def update(event):
+                    if form.is_deleted or event.sender.is_deleted:
+                        return
                     try:
                         value = (event.value or None) if field == 'visual_mode' else event.value
                         if value is None and field in {'title', 'description', 'script_text', 'visual_description', 'motion_instruction'}:
@@ -31,7 +33,7 @@ def render_script_form(state, on_change, on_apply, on_discard):
                 return update
 
             def act(callback):
-                if (state.is_busy or key != state.script_editor_key()
+                if (form.is_deleted or state.is_busy or key != state.script_editor_key()
                         or version['text'] != state.script_editor_text()):
                     safe_notify('작업 중이거나 초안이 바뀌었습니다. 편집 화면을 새로고침하세요.', type='warning')
                     return
@@ -51,12 +53,16 @@ def render_script_form(state, on_change, on_apply, on_discard):
                                  on_change=change('generation_mode')).props('outlined dark').classes('w-full')
                 mode.bind_enabled_from(state, 'is_busy', ready)
                 ui.label('적용하면 우측 화면 구성도 이 기본값으로 바뀝니다. 원본 요청 길이·비용은 장면 생성 화면에서 확인하세요.').classes('text-xs text-slate-400')
-                scene_options = {scene['scene_number']: f'장면 {scene["scene_number"]}' for scene in data['scenes']}
+                ui.label('장면 추가·순서 변경은 제작량과 혼합 모드의 오프닝을 바꿀 수 있습니다. 적용 후 장면 생성 화면에서 비용을 확인하세요.').classes('text-xs text-slate-400')
+                scene_options = {scene['scene_number']: f'{i + 1}번째 · 장면 {scene["scene_number"]}'
+                                 for i, scene in enumerate(data['scenes'])}
                 if selected['scene'] not in scene_options:
                     selected['scene'] = next(iter(scene_options))
 
                 @ui.refreshable
                 def scene_fields():
+                    view = object()
+                    selected['view'] = view
                     try:
                         current = state.script_form_data()
                         scene = next(s for s in current['scenes'] if s['scene_number'] == selected['scene'])
@@ -64,6 +70,49 @@ def render_script_form(state, on_change, on_apply, on_discard):
                         ui.label('초안 구조가 바뀌었습니다. 편집 화면을 새로고침하세요.').classes('text-amber-200')
                         return
                     number = scene['scene_number']
+                    position = current['scenes'].index(scene)
+                    ui.label(f'재생 순서 {position + 1} / {len(current["scenes"])} · 장면 번호 {number}').classes('text-sm text-teal-200')
+                    ui.label('앞으로·뒤로는 재생 순서만 바꿉니다. 장면 번호는 유지되며, 적용 후 기존 재료·음성을 다시 확인하세요.').classes('text-xs text-slate-400')
+
+                    def restructure(action, expected_text=None):
+                        if form.is_deleted or selected.get('view') is not view:
+                            return
+                        try:
+                            selected['scene'] = state.change_script_scene(key, expected_text if expected_text is not None else version['text'], action, number)
+                            version['text'] = state.script_editor_text()
+                            on_change()
+                            safe_refresh(panel)
+                        except (ValueError, TypeError) as error:
+                            safe_notify(f'장면을 바꿀 수 없습니다: {error}', type='warning')
+
+                    def confirm_remove():
+                        if (form.is_deleted or selected.get('view') is not view or state.is_busy
+                                or version['text'] != state.script_editor_text() or key != state.script_editor_key()):
+                            return
+                        expected_text = version['text']
+                        current_scene = next(s for s in state.script_form_data()['scenes'] if s['scene_number'] == number)
+                        with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg bg-slate-900 text-white'):
+                            ui.label(f'장면 {number}을 초안에서 삭제할까요?').classes('text-lg font-bold')
+                            ui.label(current_scene.get('script_text', '') or '(내레이션 없음)').classes('text-sm whitespace-pre-wrap break-all')
+                            ui.label('적용 전 초안만 바뀝니다. 원본 대본 파일과 영상·음성은 삭제하지 않습니다.').classes('text-xs text-slate-300')
+                            def remove():
+                                if dialog.is_deleted or not dialog.value:
+                                    return
+                                restructure('remove', expected_text)
+                                dialog.close()
+                            with ui.row().classes('w-full flex-wrap'):
+                                ui.button('취소', on_click=dialog.close).props('flat').classes('min-h-[44px]')
+                                ui.button('선택 장면 삭제', on_click=remove).props('color=red').classes('min-h-[44px]').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+                        dialog.open()
+
+                    with ui.row().classes('w-full flex-wrap'):
+                        for label, action, possible in [('앞으로 이동', 'earlier', position > 0),
+                                                        ('뒤로 이동', 'later', position + 1 < len(current['scenes'])),
+                                                        ('이 장면 뒤에 추가', 'add', True)]:
+                            ui.button(label, on_click=lambda a=action: restructure(a)).props('outline').classes('min-h-[44px]').bind_enabled_from(
+                                state, 'is_busy', lambda busy, allowed=possible: ready(busy) and allowed)
+                        ui.button('장면 삭제', on_click=confirm_remove).props('flat color=red').classes('min-h-[44px]').bind_enabled_from(
+                            state, 'is_busy', lambda busy: ready(busy) and len(current['scenes']) > 1)
                     for label, field, rows in [('내레이션', 'script_text', 3), ('화면 설명·이미지 프롬프트', 'visual_description', 4),
                                                 ('움직임·영상 프롬프트', 'motion_instruction', 3)]:
                         ui.textarea(f'장면 {number} · {label}', value=scene.get(field, ''), on_change=change(field, number)).props(
@@ -77,7 +126,8 @@ def render_script_form(state, on_change, on_apply, on_discard):
                     override.bind_enabled_from(state, 'is_busy', lambda busy: ready(busy) and mode.value == 'hybrid')
 
                 def choose_scene(event):
-                    if state.is_busy or key != state.script_editor_key() or event.value not in scene_options:
+                    if (form.is_deleted or state.is_busy or key != state.script_editor_key()
+                            or version['text'] != state.script_editor_text() or event.value not in scene_options):
                         return
                     selected['scene'] = event.value
                     safe_refresh(scene_fields)

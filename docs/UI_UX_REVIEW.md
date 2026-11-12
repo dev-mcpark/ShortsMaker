@@ -1,5 +1,11 @@
 # Studio UI and code review
 
+## 2026-11-12 — Scene structure without advanced JSON
+
+The ordinary form now supports insert-after, earlier/later playback moves and explicit delete confirmation. The selector labels playback position separately from stable scene ID; the last scene cannot be removed. New scenes require narration/visual description before schema apply; incomplete drafts can use existing explicit work snapshots. Form edits preserve source files/media/review/episode scope until changed apply. Delete confirmation reads the latest text, fixing a stale summary found during browser QA. Deleted fields/views, old selection callbacks, changed draft/script and busy state retain the original work.
+
+605 offline tests and provider-blocked1440/390px UI checks cover normal/boundary/invalid/stale paths, snapshot recovery, menu preservation, cancel/delete/discard and explicit apply. New controls are44px; reviewed layouts have no horizontal overflow. Actual paid production and live deployment remain unverified; the operating Studio was not restarted.
+
 ### 2026-11-12 — Pick a retained source for one manual scene
 
 Previously users could upload a file or restore a whole matching workspace. Add a contextual per-scene picker with matching manual-workspace clips and current approved native raw, explicit read-only audition, then connection through the existing import callback. Exclude the active workspace and preserve source/exclusion/uncertain-request rules. Validate file identity and authoritative record/verdict again at connection; a changed/deleted/linked/oversized file or stale view cannot overwrite the target. The original remains; the copied target requires the normal review/edit workflow. Whole-library browsing and arbitrary local-file selection remain separate existing controls.

@@ -95,6 +95,70 @@ class ScriptFormStateTests(TestCase):
             self.assertEqual(self.state.script_editor_text(), before)
         self.assertFalse(self.update('title', self.script.title))
 
+    def structure(self, action, number):
+        return self.state.change_script_scene(self.state.script_editor_key(), self.state.script_editor_text(), action, number)
+
+    def test_reorder_preserves_scene_ids_metadata_and_applied_work_until_explicit_apply(self):
+        original, receipt = self.script.model_dump_json(), self.state.reviewed_script_sha256
+        self.update('script_text', '새로운 결말', 5)
+        scope = self.state.operating_scope = {'schedule_id': 'retained-scope'}
+        self.assertEqual(self.structure('earlier', 5), 5)
+        draft = self.state.script_form_data()
+        self.assertEqual([s['scene_number'] for s in draft['scenes']], [5, 2])
+        self.assertEqual(draft['scenes'][0]['script_text'], '새로운 결말')
+        self.assertEqual({k: v for k, v in draft.items() if k != 'scenes'},
+                         {k: v for k, v in self.script.model_dump().items() if k != 'scenes'})
+        self.assertEqual(self.script.model_dump_json(), original)
+        self.assertEqual(self.state.reviewed_script_sha256, receipt)
+        self.assertEqual(self.state.final_video_path, 'kept.mp4')
+        self.assertIs(self.state.operating_scope, scope)
+        text = self.state.script_editor_text()
+        self.structure('earlier', 5)  # Already at the start.
+        self.assertEqual(self.state.script_editor_text(), text)
+        self.structure('later', 5)
+        self.assertEqual([s['scene_number'] for s in self.state.script_form_data()['scenes']], [2, 5])
+
+    def test_add_remove_blank_scene_and_keep_original_scene_ids_distinct(self):
+        self.structure('remove', 5)
+        number = self.structure('add', 2)
+        self.assertEqual(number, 6)  # Do not reuse an ID from the applied source.
+        scenes = self.state.script_form_data()['scenes']
+        self.assertEqual([s['scene_number'] for s in scenes], [2, 6])
+        self.assertEqual(scenes[1]['script_text'], '')
+        self.assertEqual(scenes[1]['visual_description'], '')
+        with self.assertRaises(ValueError):
+            ShortsScript.model_validate_json(self.state.script_editor_text())
+        self.update('script_text', '출처와 대조한 새 장면', number)
+        self.update('visual_description', '그 문장을 설명하는 구체적인 배치', number)
+        self.assertEqual(ShortsScript.model_validate_json(self.state.script_editor_text()).scenes[1].scene_number, 6)
+        self.assertEqual(self.structure('remove', 6), 2)
+        before = self.state.script_editor_text()
+        with self.assertRaisesRegex(ValueError, '하나 이상'):
+            self.structure('remove', 2)
+        self.assertEqual(self.state.script_editor_text(), before)
+
+    def test_structure_rejects_stale_busy_invalid_and_broken_drafts_without_mutation(self):
+        key, text = self.state.script_editor_key(), self.state.script_editor_text()
+        self.update('title', '다른 화면에서 입력')
+        changed = self.state.script_editor_text()
+        with self.assertRaises(ValueError):
+            self.state.change_script_scene(key, text, 'remove', 2)
+        for action, number in [('invalid', 2), ('add', True), ('remove', 100)]:
+            with self.assertRaises(ValueError):
+                self.structure(action, number)
+            self.assertEqual(self.state.script_editor_text(), changed)
+        self.state.pipeline_running = True
+        with self.assertRaises(ValueError):
+            self.structure('add', 2)
+        self.state.pipeline_running = False
+        self.state.load_saved_script(script('new script'))
+        with self.assertRaises(ValueError):
+            self.state.change_script_scene(key, changed, 'add', 2)
+        self.state.remember_script_draft(self.state.script_editor_key(), '{unfinished')
+        with self.assertRaises(ValueError):
+            self.structure('add', 1)
+        self.assertEqual(self.state.script_editor_text(), '{unfinished')
+
 
 class ScriptFormUiTests(IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -214,6 +278,133 @@ class ScriptFormUiTests(IsolatedAsyncioTestCase):
         await self.flush()
         self.assertEqual(self.state.script_editor_text(), before)
         self.assertEqual(json.loads(before)['scenes'][1]['visual_description'], '다섯 번째 장면의 모형 배치')
+
+    def button(self, text):
+        return next(e for e in reversed(list(self.client.elements.values())) if getattr(e, 'text', '') == text and not e.is_deleted)
+
+    def invoke(self, button):
+        next(e.handler for e in button._event_listeners.values() if e.type == 'click')(None)
+
+    async def test_move_buttons_follow_playback_order_and_apply_invalidates_old_work(self):
+        self.state.script.scenes.append(self.state.script.scenes[0].model_copy(update={'scene_number': 5, 'script_text': '결말'}))
+        self.state.confirm_script_review()
+        root = self.render()
+        self.assertFalse(self.button('앞으로 이동').enabled)
+        with self.client:
+            self.click(root, '뒤로 이동')
+        await self.flush()
+        self.assertEqual([s['scene_number'] for s in self.state.script_form_data()['scenes']], [5, 1])
+        self.assertEqual(self.field(root, '수정할 장면').value, 1)
+        self.assertFalse(self.button('뒤로 이동').enabled)
+        self.assertEqual([s.scene_number for s in self.state.script.scenes], [1, 5])
+        self.assertTrue(self.state.is_script_reviewed())
+        with self.client:
+            self.click(root, '수정 내용 적용')
+        await self.flush()
+        self.assertEqual([s.scene_number for s in self.state.script.scenes], [5, 1])
+        self.assertFalse(self.state.is_script_reviewed())
+        self.assertIsNone(self.state.final_video_path)
+
+    async def test_add_blank_fill_apply_and_deleted_old_field_cannot_overwrite(self):
+        root = self.render()
+        old_field = self.field(root, '장면 1 · 내레이션')
+        with self.client:
+            self.click(root, '이 장면 뒤에 추가')
+        await self.flush()
+        self.assertEqual(self.field(root, '수정할 장면').value, 2)
+        self.assertTrue(old_field.is_deleted)
+        before = self.state.script_editor_text()
+        with self.client:
+            old_field.set_value('늦게 도착한 입력')
+            self.click(root, '수정 내용 적용')
+        await self.flush()
+        self.assertEqual(self.state.script_editor_text(), before)
+        self.assertEqual(len(self.state.script.scenes), 1)
+        self.assertEqual(self.state.final_video_path, 'kept.mp4')
+        with self.client:
+            self.field(root, '장면 2 · 내레이션').set_value('출처를 확인한 새로운 결말')
+            self.field(root, '장면 2 · 화면 설명·이미지 프롬프트').set_value('명확한 결말의 화면 배치')
+            self.click(root, '수정 내용 적용')
+        await self.flush()
+        self.assertEqual([s.scene_number for s in self.state.script.scenes], [1, 2])
+        self.assertEqual(self.state.script.scenes[1].script_text, '출처를 확인한 새로운 결말')
+
+    async def test_delete_confirmation_cancel_discard_and_last_scene_guard(self):
+        self.state.script.scenes.append(self.state.script.scenes[0].model_copy(update={'scene_number': 5}))
+        self.state.confirm_script_review()
+        root = self.render()
+        before = self.state.script_editor_text()
+        with self.client:
+            self.click(root, '장면 삭제')
+            self.invoke(self.button('취소'))
+        await self.flush()
+        self.assertEqual(self.state.script_editor_text(), before)
+        with self.client:
+            self.field(root, '장면 1 · 내레이션').set_value('방금 수정한 삭제 대상 문장')
+            self.click(root, '장면 삭제')
+            self.assertTrue(any(getattr(e, 'text', '') == '방금 수정한 삭제 대상 문장'
+                                for e in self.client.elements.values()))
+            self.invoke(self.button('선택 장면 삭제'))
+        await self.flush()
+        self.assertEqual([s['scene_number'] for s in self.state.script_form_data()['scenes']], [5])
+        self.assertFalse(self.button('장면 삭제').enabled)
+        self.assertEqual(len(self.state.script.scenes), 2)
+        self.assertEqual(self.state.final_video_path, 'kept.mp4')
+        with self.client:
+            self.click(root, '수정 내용 되돌리기')
+        await self.flush()
+        self.assertFalse(self.state.has_unapplied_script_draft())
+        self.assertEqual([s['scene_number'] for s in self.state.script_form_data()['scenes']], [1, 5])
+        self.assertTrue(self.state.is_script_reviewed())
+
+    async def test_old_confirmation_and_scene_buttons_cannot_change_newer_or_busy_view(self):
+        self.state.script.scenes.append(self.state.script.scenes[0].model_copy(update={'scene_number': 5}))
+        root = self.render()
+        with self.client:
+            self.click(root, '장면 삭제')
+            confirm = self.button('선택 장면 삭제')
+            self.field(root, '대본 제목').set_value('확인 창을 연 뒤 수정')
+        before = self.state.script_editor_text()
+        with self.client:
+            self.invoke(confirm)
+        await self.flush()
+        self.assertEqual(self.state.script_editor_text(), before)
+        old_button = self.button('뒤로 이동')
+        with self.client:
+            self.field(root, '수정할 장면').set_value(5)
+        await self.flush()
+        with self.client:
+            self.invoke(old_button)
+        self.assertEqual(self.state.script_editor_text(), before)
+        self.state.pipeline_running = True
+        with self.client:
+            self.invoke(self.button('이 장면 뒤에 추가'))
+        self.assertEqual(self.state.script_editor_text(), before)
+        self.state.pipeline_running = False
+        with self.client:
+            self.click(root, '장면 삭제')
+            confirm = self.button('선택 장면 삭제')
+            root.clear()
+            self.invoke(confirm)
+        self.assertEqual(self.state.script_editor_text(), before)
+
+    async def test_incomplete_structure_snapshot_reopens_in_fresh_session_without_authority(self):
+        from shorts_maker.services.work_drafts import read_work_draft
+        root = self.render()
+        with self.client:
+            self.click(root, '이 장면 뒤에 추가')
+        await self.flush()
+        path = self.state.save_work_draft()
+        record, digest = read_work_draft(path.name)
+        restored = AppState()
+        restored.restore_work_draft(path.name, digest)
+        self.assertEqual(restored.script_editor_text(), self.state.script_editor_text())
+        self.assertEqual([s['scene_number'] for s in restored.script_form_data()['scenes']], [1, 2])
+        self.assertEqual(restored.script_form_data()['scenes'][1]['script_text'], '')
+        self.assertEqual(len(restored.script.scenes), 1)
+        self.assertIsNone(restored.reviewed_script_sha256)
+        self.assertIsNone(restored.final_video_path)
+        self.assertEqual(len(record.applied_script.scenes), 1)
 
     async def test_noop_apply_preserves_receipt_and_consumed_draft_does_not_delete_other_script_draft(self):
         root = self.render()
