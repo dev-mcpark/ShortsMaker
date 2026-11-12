@@ -808,7 +808,7 @@ def render_generation_tab(state: 'AppState') -> None:
             logger.debug(f"Progress UI sync skipped: {e}")
 
     # 전체를 아우르는 반응형 컬럼 구조
-    with ui.column().classes('w-full h-auto lg:h-full gap-0 overflow-visible lg:overflow-hidden bg-slate-950'):
+    with ui.column().classes('w-full gap-0 bg-slate-950'):
 
         narration_panel = render_narration_panel(state)
 
@@ -882,11 +882,11 @@ def render_generation_tab(state: 'AppState') -> None:
                 gen_spinner.visible = False
 
         # ── 2. MAIN PRODUCTION WORKSPACE ──
-        with ui.row().classes('w-full flex-grow overflow-visible lg:overflow-hidden gap-0'):
+        with ui.row().classes('w-full gap-0'):
 
             # --- 2A. LEFT SIDE: WIDE PREVIEW MONITOR (자동 모드 시 메인, 수동 모드 시 숨김/작게) ---
             # 자동 모드와 수동 모드 모두의 통합 뷰어
-            with ui.column().classes('w-full flex-grow h-auto lg:h-full p-4 lg:p-6 overflow-visible lg:overflow-y-auto gap-5') as main_workspace_area:
+            with ui.column().classes('w-full p-4 lg:p-6 gap-5') as main_workspace_area:
 
                 if not settings.paid_production_enabled and not state.prepared_narration_manifest:
                     ui.label('검토 모드 · 기존 내레이션과 모든 장면 영상을 연결하면 새 API 호출 없이 편집할 수 있습니다.').classes(
@@ -967,7 +967,7 @@ def render_generation_tab(state: 'AppState') -> None:
                     scene_progress_container.visible = False
 
             # --- 2B. RIGHT SIDE: SCENE MANUAL GRID UPLOADER (수동 모드 시 화면 가득 활성화) ---
-            with ui.scroll_area().classes('w-full flex-grow h-auto lg:h-full bg-slate-950') as manual_uploader_area:
+            with ui.element('div').classes('w-full bg-slate-950') as manual_uploader_area:
                 with ui.column().classes('w-full p-4 lg:p-6 gap-2') as manual_preview:
                     ui.label('편집 결과 미리보기').classes('text-sm font-bold text-white')
                     manual_video_player = ui.video('').classes('w-full max-w-[220px] max-h-[360px] bg-black')

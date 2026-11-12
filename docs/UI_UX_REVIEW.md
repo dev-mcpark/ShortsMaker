@@ -1,5 +1,11 @@
 # Studio UI and code review
 
+## 2026-11-12 — Real local workflow and visible manual cards
+
+A full stored-material edit exposed a mobile manual pane with0px height and2711px absolute scroll content. Presence in the accessibility tree had not proved usability. Use natural-height generation content and the existing outer workspace scroll; manual cards no longer use a nested Quasar scroll area. Check actual native clicks, not only DOM counts. Eight narration/scene cards remain accessible on1440/390px, including a native mobile click on the last selector.
+
+616 offline tests pass. The app loaded/reviewed a saved fixture script, restored narration, selected a complete manual workspace and actually rendered7.5s1080×1920 through the normal editor/service, without provider generation. Publishing reopened/playback passed; edited publishing input survived navigation, explicit save and a fresh QA process/session restore. Temporary tone/color fixtures do not establish video-story quality. The live operating Studio is unchanged pending input safety, and no upload ran.
+
 ## 2026-11-12 — Distinguish startup identity from current source
 
 The header now names the startup commit, and Help exposes the captured PID/UTC/commit/dirty/source digest plus explicit disk-code comparison. It does not relabel a running process after Git changes or restart the app. Missing metadata/read failures remain unknown; concurrent/deleted/late comparisons are harmless. Replace the old hardcoded version footer and correct current help text about saved narration recovery/history reopen behavior.
