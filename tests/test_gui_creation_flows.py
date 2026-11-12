@@ -37,7 +37,7 @@ def callback(filename, name, environment):
 
 
 def planning_environment(state, service):
-    return {'state': state, 'source_mode': SimpleNamespace(value='RSS 자동 발견'), 'catalog_manager': object(),
+    return {'state': state, 'source_mode': SimpleNamespace(value='RSS 자동 발견'), 'catalog_manager': object(), 'catalog': {},
             'url_input': SimpleNamespace(value=''), 'category_select': SimpleNamespace(value='전체 분야'),
             'spinner': SimpleNamespace(visible=False), 'safe_notify': Mock(), 'logger': Mock(),
             'update_script_preview': Mock(), 'update_candidates_panel': Mock(),

@@ -21,6 +21,10 @@ class AppState:
 
     current_view: str = "workspace"
     workspace_sub_tab: str = "editor"
+    planning_source_mode: str = 'RSS 자동 발견'
+    planning_url: str = ''
+    planning_category: str = '전체 분야'
+    rss_preview: Dict[str, Any] = field(default_factory=dict)
 
     # API Keys (사용자 입력)
     openai_key: str = ""

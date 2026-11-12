@@ -1,5 +1,11 @@
 # Studio UI and code review
 
+## 2026-11-13 — Free source choice before paid planning
+
+Planning now exposes existing RSS discovery before model/scorer/body-analysis calls. A searchable candidate selector previews plain text/feed/date/original link; explicit choose fills direct URL without replacing applied work or starting planning. Source fields/results survive navigation. Errors/empty feeds are visible, stale lists/selections and duplicate requests are rejected; a pending read finishes before cancellation releases its slot. Catalogue damage/removed categories do not become unrestricted planning.
+
+621 offline tests and provider-blocked1440/390px actual-collector QA cover held reads/menu recovery, explicit selection, unchanged applied work/ledgers, filtered undated leads, category scope and failure/recovery. Controls are at least44px with no horizontal overflow. Live feeds/body truth and paid/model quality are separate checks. Source inputs are still session-only, and the operating Studio remains undeployed pending unsaved-input safety.
+
 ## 2026-11-12 — Real local workflow and visible manual cards
 
 A full stored-material edit exposed a mobile manual pane with0px height and2711px absolute scroll content. Presence in the accessibility tree had not proved usability. Use natural-height generation content and the existing outer workspace scroll; manual cards no longer use a nested Quasar scroll area. Check actual native clicks, not only DOM counts. Eight narration/scene cards remain accessible on1440/390px, including a native mobile click on the last selector.

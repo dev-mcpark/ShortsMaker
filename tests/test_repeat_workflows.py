@@ -13,7 +13,7 @@ from nicegui.client import Client
 from nicegui.page import page
 
 from shorts_maker.gui.components import generation_tab, planning_tab, pipeline_tab, scheduling_tab, sources_tab
-from shorts_maker.gui.components import script_form, work_drafts_panel
+from shorts_maker.gui.components import script_form, work_drafts_panel, rss_preview
 from shorts_maker.gui.components.common import source_access
 from shorts_maker.gui.state.app_state import AppState
 from shorts_maker.planner.models import ScriptGenerationContext
@@ -41,7 +41,7 @@ class SourceRecoveryTests(TestCase):
     def render(self, module, render):
         recorder = _UI()
         with patch.object(module, 'ui', recorder), patch.object(source_access, 'ui', recorder), \
-                patch.object(script_form, 'ui', recorder), patch.object(work_drafts_panel, 'ui', recorder), \
+                patch.object(script_form, 'ui', recorder), patch.object(work_drafts_panel, 'ui', recorder), patch.object(rss_preview, 'ui', recorder), \
                 patch.object(scheduling_tab, 'schedule_manager', ScheduleManager(str(self.root / 'schedules.json'))):
             render(AppState())
         return recorder

@@ -8,6 +8,7 @@ from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.source_access import load_source_catalog
 from shorts_maker.gui.components.script_form import render_script_form
 from shorts_maker.gui.components.work_drafts_panel import render_work_drafts_panel
+from shorts_maker.gui.components.rss_preview import render_rss_preview
 from shorts_maker.gui.config.ui_theme import SCENE_GRADIENTS
 from shorts_maker.planner.script_planner import ShortsScript
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
@@ -240,25 +241,43 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
             with ui.element('div').classes('w-full rounded-xl bg-slate-900/60 border border-slate-600 p-4'):
                 ui.label('소스 방식').classes('text-xs text-gray-300 uppercase tracking-wider mb-3')
 
+                def remember_source(field, event):
+                    if not event.sender.is_deleted and not state.is_busy:
+                        setattr(state, field, event.value or '')
+
                 source_mode = ui.radio(
                     ['RSS 자동 발견', '직접 URL 입력'],
-                    value='RSS 자동 발견'
-                ).props('color=pink size=32px').classes('w-full mb-3')
+                    value=state.planning_source_mode,
+                    on_change=lambda event: remember_source('planning_source_mode', event)
+                ).props('color=pink size=32px').classes('w-full mb-3').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
 
                 url_input = ui.input(
                     '기사 URL',
-                    placeholder='https://example.com/article'
+                    placeholder='https://example.com/article', value=state.planning_url,
+                    on_change=lambda event: remember_source('planning_url', event)
                 ).bind_visibility_from(
                     source_mode, 'value', value='직접 URL 입력'
-                ).props('outlined dense dark').classes('w-full mb-2')
+                ).props('outlined dense dark').classes('w-full mb-2').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
 
                 catalog_manager, catalog = load_source_catalog(SourceManager)
                 category_select = ui.select(
-                    ['전체 분야', *catalog],
-                    value='전체 분야', label='RSS 분야'
+                    list(dict.fromkeys(['전체 분야', *catalog, state.planning_category])),
+                    value=state.planning_category, label='RSS 분야',
+                    on_change=lambda event: remember_source('planning_category', event)
                 ).bind_visibility_from(
                     source_mode, 'value', value='RSS 자동 발견'
-                ).props('outlined dense dark').classes('w-full mb-2')
+                ).props('outlined dense dark').classes('w-full mb-2').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+
+                def choose_article(url):
+                    if state.is_busy or url_input.is_deleted or source_mode.is_deleted:
+                        return
+                    url_input.set_value(url)
+                    source_mode.set_value('직접 URL 입력')
+                    safe_notify('URL 입력으로 선택했습니다. 원문 확인 후 각본 생성을 별도로 실행하세요.', type='positive')
+
+                render_rss_preview(state, lambda: category_select.value,
+                                   catalog if catalog_manager is not None else None, choose_article).bind_visibility_from(
+                    source_mode, 'value', value='RSS 자동 발견')
 
                 spinner = ui.spinner(size='sm').props('color=pink').classes('self-center my-2')
                 spinner.visible = False
@@ -269,6 +288,9 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                         return
                     if source_mode.value == 'RSS 자동 발견' and catalog_manager is None:
                         safe_notify('RSS 설정을 복구한 뒤 다시 기획하세요. 저장된 대본은 계속 열 수 있습니다.', type='warning')
+                        return
+                    if source_mode.value == 'RSS 자동 발견' and category_select.value not in {'전체 분야', *catalog}:
+                        safe_notify('등록된 RSS 분야를 다시 선택하세요.', type='warning')
                         return
                     if source_mode.value == '직접 URL 입력' and not url_input.value:
                         safe_notify('URL을 입력해주세요', type='negative')
