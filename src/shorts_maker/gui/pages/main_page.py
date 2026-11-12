@@ -18,6 +18,7 @@ from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.config import settings
 from shorts_maker.services.openai_models import PRIMARY_CHAT_MODEL
 from shorts_maker.gui.components.budget_panel import render_budget_panel
+from shorts_maker.gui.runtime_info import runtime_label, render_runtime_info
 
 
 def render_main_page() -> None:
@@ -34,6 +35,7 @@ def render_main_page() -> None:
                 ui.icon('movie', size='md').classes('text-violet-400')
                 with ui.column().classes('gap-0'):
                     ui.label('ShortsMaker Studio').classes('text-lg font-bold text-white leading-none')
+                    ui.label(runtime_label()).classes('text-[10px] text-slate-500 break-all')
                     # 활성화된 스크립트 상태 노출
                     ui.label().bind_text_from(
                         state, 'script', backward=lambda script: f'현재 대본 · {script.title}' if script else '대본을 불러오거나 완성본부터 확인하세요'
@@ -88,7 +90,7 @@ def render_main_page() -> None:
                 # 하단 정보 아이콘
                 with ui.column().classes('items-center max-xl:hidden'):
                     ui.icon('info', size='xs').classes('text-slate-600')
-                    ui.label('v0.3').classes('text-[10px] text-slate-600 font-mono mt-1')
+                    ui.label('로컬 Studio').classes('text-[10px] text-slate-600 mt-1')
 
             # --- 2B. CENTER WORKSPACE (중앙 동적 워크스페이스) ---
             center_container = ui.element('div').classes(WORKSPACE_CENTER)
@@ -354,6 +356,7 @@ def render_main_page() -> None:
                     elif state.current_view == 'help':
                         with ui.column().classes('w-full overflow-auto p-5 gap-4'):
                             ui.label('ShortsMaker 사용 안내').classes('text-xl font-bold text-white')
+                            render_runtime_info()
                             ui.markdown("""
 ### 먼저 완성본부터 확인하세요
 **완성본·업로드 → 저장된 완성본 → 완성본 불러오기**에서 기존 영상을 재생할 수 있습니다. 이미 업로드한 영상은 기존 YouTube 링크로 확인하며 중복 업로드하지 않습니다.
@@ -376,13 +379,13 @@ def render_main_page() -> None:
 
 예약 대본을 작업실에서 다듬었다면 수정 내용을 적용·확인한 뒤 **확인한 수정 대본을 회차에 저장 → 이 수정 대본으로 회차 저장**을 사용하세요. 같은 출처의 검토한 수정본을 별도 사본으로 남기며, 이전 대본·비용·판정은 보존합니다. 이미 영상이 연결됐거나 실행 결과가 미확인이면 저장을 중단합니다. 저장은 API 호출·일정 재개·영상 채택이 아닙니다.
 
-이전 대본은 **실행 이력 → 회차 대본 검색 → 선택 회차 대본 이력 보기**에서 버전을 골라 확인하세요. **선택 대본을 작업실에서 검토**는 현재/대상 대본의 변경 입력을 작업 초안으로 보관한 뒤 검토용 사본을 엽니다. 현재 적용 대본도 보관하며, 저장에 실패하면 열지 않습니다. 사본 열기는 영상·음성 선택과 대본 확인을 초기화하며 회차 상태·비용·기존 판정은 유지합니다. 보관된 입력은 **저장된 작업 초안**에서 다시 열 수 있습니다.
+이전 대본은 **실행 이력 → 회차 대본 검색 → 선택 회차 대본 이력 보기**에서 버전을 골라 확인하세요. **선택 대본을 작업실에서 검토**는 현재/대상 대본의 변경 입력을 작업 초안으로 보관한 뒤 검토용 사본을 엽니다. 현재 적용 대본도 보관하며, 저장에 실패하면 열지 않습니다. 사본 열기는 영상 선택과 대본 확인을 초기화하고 대상 대본에 명시 저장된 음성 설정을 복원합니다. 저장하지 않은 음성 선택은 이어지지 않으며 회차 상태·비용·기존 판정은 유지합니다. 보관된 입력은 **저장된 작업 초안**에서 다시 열 수 있습니다.
 
 로컬 Studio에서는 대본 생성·재생성, 장면 생성, 음성·영상 편집을 직접 실행할 수 있습니다. 버튼을 누르면 API 비용이 발생할 수 있으며, 월 예산·비주얼 비용 상한과 장면 검토 조건은 계속 적용됩니다. 보유 영상을 연결해도 새 음성은 별도 API 비용이 들 수 있습니다. 비공개 업로드 후 공개 전환은 YouTube에서 직접 결정하세요.
 
 명시적으로 `PAID_PRODUCTION_ENABLED=false`를 설정한 경우에만 **검토 모드 · API 생성 중지**로 실행됩니다. 에이전트 예약 제작은 직접 사용과 별도로 기존 회차 한도를 적용합니다.
 
-**내레이션 · 기존 음성 재사용 → 이 음성 세트 연결**에서 현재 문장·파일 기록이 일치하는 음성을 재생하고 다시 편집할 수 있습니다. 새로 만든 음성도 보관되며, 음색을 바꾸려면 **새 음성 생성으로 전환**을 누르세요. 음성 선택은 서버 재시작 후 다시 연결해야 합니다.
+**내레이션 · 기존 음성 재사용 → 이 음성 세트 연결**에서 현재 문장·파일 기록이 일치하는 음성을 재생하고 다시 편집할 수 있습니다. 새로 만든 음성도 보관되며, 음색을 바꾸려면 **새 음성 생성으로 전환**을 누르세요. **각본별 음성·음악 설정 저장**을 누르면 같은 대본을 다시 열 때 음성 선택도 복원됩니다. 저장하지 않은 선택은 세션에만 남습니다. 기록·파일이 바뀌면 새 TTS로 자동 전환하지 않고 재사용을 중단하므로 복구하거나 검토 후 다시 연결하세요.
 
 화면의 임시 입력은 서버 재시작 시 사라질 수 있습니다. 대본 JSON은 **현재 작업에 적용 → 현재 대본 새 파일로 저장** 순서로 수정본을 보관하세요. 보유 영상 연결 화면의 **선택한 작업 이어가기**로 같은 대본의 클립 작업을 복원할 수 있습니다. 음성·음악은 **각본별 음성·음악 설정 저장**으로 보존하세요.
 

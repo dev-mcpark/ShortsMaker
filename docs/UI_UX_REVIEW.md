@@ -1,5 +1,11 @@
 # Studio UI and code review
 
+## 2026-11-12 — Distinguish startup identity from current source
+
+The header now names the startup commit, and Help exposes the captured PID/UTC/commit/dirty/source digest plus explicit disk-code comparison. It does not relabel a running process after Git changes or restart the app. Missing metadata/read failures remain unknown; concurrent/deleted/late comparisons are harmless. Replace the old hardcoded version footer and correct current help text about saved narration recovery/history reopen behavior.
+
+616 offline tests and provider-blocked1440/390px QA with a real temporary Git repository confirm equal/different/error/recovered results without changing the startup snapshot or fixture ledgers. Controls are44px with no horizontal overflow. The actual operating Studio is unchanged; neither startup metadata nor a matching Python-source digest proves loaded dependency/configuration, actual deployment or video quality.
+
 ## 2026-11-12 — Retain the selected narration across reopen/restart
 
 Audio settings previously saved voice/music while silently losing an explicitly connected narration set. The same save action now persists its path/manifest digest; reopening the exact script restores it without review/results. Invalid retained media stays selected with a visible error and repair/reconnect/new-voice choices, so recovery does not require developer edits and cannot silently purchase speech. Busy saves and deleted-panel callbacks preserve current work. Legacy settings default to no prepared selection.

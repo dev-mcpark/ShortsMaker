@@ -9,6 +9,7 @@ from collections import deque
 from shorts_maker.gui.pages import render_main_page
 from shorts_maker.utils.logger import setup_logging, get_logger
 from shorts_maker.utils.config import settings
+from shorts_maker.gui.runtime_info import initialize_runtime
 
 # --- Logging Setup ---
 setup_logging()
@@ -56,6 +57,7 @@ def main():
 
 def run():
     """Start the Studio server."""
+    initialize_runtime()
     # Manual Studio actions are enabled unless review-only operation was explicitly configured.
     if 'PAID_PRODUCTION_ENABLED' not in os.environ:
         settings.paid_production_enabled = True

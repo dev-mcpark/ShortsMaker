@@ -27,6 +27,13 @@ class StudioStartupTests(unittest.TestCase):
                 studio.run()
                 self.assertEqual(settings.paid_production_enabled, enabled)
 
+    def test_startup_identity_is_recorded_before_the_server_accepts_requests(self):
+        order = []
+        with patch.object(studio, 'initialize_runtime', side_effect=lambda: order.append('capture')), \
+                patch.object(studio.ui, 'run', side_effect=lambda **_: order.append('serve')):
+            studio.run()
+        self.assertEqual(order, ['capture', 'serve'])
+
 
 if __name__ == '__main__':
     unittest.main()
