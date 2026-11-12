@@ -1,5 +1,11 @@
 # Studio UI and code review
 
+### 2026-11-12 — Pick a retained source for one manual scene
+
+Previously users could upload a file or restore a whole matching workspace. Add a contextual per-scene picker with matching manual-workspace clips and current approved native raw, explicit read-only audition, then connection through the existing import callback. Exclude the active workspace and preserve source/exclusion/uncertain-request rules. Validate file identity and authoritative record/verdict again at connection; a changed/deleted/linked/oversized file or stale view cannot overwrite the target. The original remains; the copied target requires the normal review/edit workflow. Whole-library browsing and arbitrary local-file selection remain separate existing controls.
+
+597 offline tests pass. Provider-blocked desktop/mobile QA verified preview/close without mutation,44px/no-overflow controls, connect disabled before preview, original-preserving copy and playback. Scene/source/context changes and late/cancelled listing are covered by native tests; actual paid media/YouTube/production deployment were not exercised. Replace upload-only wording with scene-connection wording to match both input routes.
+
 ### 2026-11-12 — Preserve playable manual clips when replacement is invalid
 
 A real temporary MP4 was overwritten by non-video bytes, with the failure detected only at the later production preflight. The shared exporter now opens/checks a temporary candidate before atomic replacement; failures preserve the current clip/result selection. The UI owns a nonblocking import lock through actual IO completion (including task cancellation), rejects stale/duplicate actions, and recovers a view entered during the import. Success invalidates the selected cut and refreshes the scene; deleted widgets do not reclassify a completed save as failure.

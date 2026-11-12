@@ -9,13 +9,14 @@ from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.gui.components.narration_panel import render_narration_panel
 from shorts_maker.gui.components.image_picker import open_image_picker
+from shorts_maker.gui.components.existing_scene_picker import open_existing_scene_picker
 from shorts_maker.services.first_frame_candidates import retained_candidate
 from shorts_maker.services.production_service import ProductionPhase, ProductionProgress
 from shorts_maker.services.raw_review import load_raw_verdict, raw_review_status, save_raw_verdict
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
 from shorts_maker.services.visual_review import approve_first_frame, inspect_frame, review_path, verified_first_frame
 from shorts_maker.gui.components.common.progress_utils import update_scene_grid
-from shorts_maker.utils.veo_prompt_exporter import VeoPromptExporter
+from shorts_maker.utils.veo_prompt_exporter import MAX_MANUAL_CLIP_BYTES, VeoPromptExporter
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 
@@ -587,7 +588,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                 # 진행도 표시 뱃지
                 progress_badge_cls = 'bg-violet-600 text-white font-bold px-3 py-1 rounded-full text-xs' \
                     if ready_count == total else 'bg-slate-800 text-slate-400 font-bold px-3 py-1 rounded-full text-xs border border-slate-700'
-                ui.badge(f'{ready_count} / {total} 씬 업로드 완료').classes(progress_badge_cls)
+                ui.badge(f'{ready_count} / {total} 장면 연결됨').classes(progress_badge_cls)
 
             # 전체 진행 바
             with ui.element('div').classes('w-full h-2 rounded-full bg-slate-800 overflow-hidden mb-4'):
@@ -599,7 +600,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
             with ui.row().classes('w-full items-stretch gap-4'):
                 with ui.element('div').classes('flex-grow rounded-lg bg-violet-950/20 border border-violet-500/20 p-3 flex items-start gap-2'):
                     ui.icon('info', size='xs').classes('text-violet-400 mt-0.5 shrink-0')
-                    ui.label('각 씬의 프롬프트를 복사하여 Veo 3.1이나 외부 AI Studio에서 생성한 후, 씬 카드 내에 업로드해주십시오. 모든 씬 영상이 로드되면 인코딩 및 자막 믹싱을 시작할 수 있습니다.').classes('text-xs text-slate-300 leading-relaxed')
+                    ui.label('기존 장면 영상 찾기에서 저장된 작업이나 승인 원본을 재사용하거나, 장면 카드에서 보유 파일을 선택하세요. 모든 장면을 연결한 뒤 내레이션·음악·자막을 편집합니다.').classes('text-xs text-slate-300 leading-relaxed')
 
                 with ui.column().classes('justify-center gap-2 w-full sm:w-auto sm:min-w-[240px] sm:border-l border-slate-800 sm:pl-4'):
                     def copy_all_json():
@@ -670,7 +671,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                     with ui.column().classes('w-full gap-1 mt-1'):
                         ui.label('비디오 파일 매핑').classes('text-[10px] text-slate-500 font-bold uppercase tracking-wider')
                         error_key = f'{state.manual_script_id}:{scene_num}'
-                        ui.label().classes('text-xs text-amber-200 break-all').bind_text_from(
+                        import_error = ui.label().classes('text-xs text-amber-200 break-all').bind_text_from(
                             state, 'manual_clip_errors', backward=lambda errors, key=error_key: errors.get(key, ''))
 
                         # 업로드 완료된 클립명 표시
@@ -727,7 +728,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                                     state.invalidate_video_result()
                                     committed = False
 
-                                    safe_notify(f'씬 {sn} 비디오 클립 업로드 완료!', type='positive')
+                                    safe_notify(f'장면 {sn} 영상 연결 완료!', type='positive')
 
                                     # 전체 패널 다시 그리기
                                     try:
@@ -753,10 +754,22 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
                                             pass
                             return handle_upload
 
+                        upload_handler = make_upload_handler()
+                        async def pick_existing(sn=scene_num, handler=upload_handler, anchor=import_error,
+                                                expected_script=state.script.model_dump_json(),
+                                                expected_workspace=state.manual_script_id, expected_execution=state.execution_key()):
+                            def current():
+                                return (not anchor.is_deleted and not state.is_busy and state.manual_video_mode and state.script
+                                        and state.script.model_dump_json() == expected_script
+                                        and state.manual_script_id == expected_workspace and state.execution_key() == expected_execution)
+                            if current():
+                                await open_existing_scene_picker(state.script, sn, state.get_or_create_service(), expected_workspace, handler, current)
+                        ui.button('기존 장면 영상 찾기', on_click=pick_existing).props('outline icon=video_library').classes(
+                            'w-full min-h-[44px]').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
                         ui.upload(
-                            on_upload=make_upload_handler(),
+                            on_upload=upload_handler,
                             auto_upload=True,
-                            max_file_size=500_000_000,
+                            max_file_size=MAX_MANUAL_CLIP_BYTES,
                         ).props('accept=".mp4,.mov,.webm" flat color=violet dense label="비디오 선택 (mp4, mov)"').classes('w-full border border-dashed border-slate-700 rounded-lg hover:border-violet-500/50 bg-slate-950/20 py-1')
 
     if state.media_import_in_progress:

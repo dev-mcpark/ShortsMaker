@@ -18,6 +18,7 @@ from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.media_validation import is_playable_video
 
 logger = get_logger(__name__)
+MAX_MANUAL_CLIP_BYTES = 500_000_000
 
 
 class VeoPromptExporter:
@@ -135,6 +136,8 @@ class VeoPromptExporter:
         Returns:
             저장된 파일의 Path
         """
+        if len(file_content) > MAX_MANUAL_CLIP_BYTES:
+            raise ValueError('장면 클립은 500 MB 이하로 선택하세요.')
         clip_path = self.get_clip_path(script_id, scene_number)
         temp_path = clip_path.with_name(f'.{clip_path.stem}.{uuid.uuid4().hex}.tmp.mp4')
         try:
