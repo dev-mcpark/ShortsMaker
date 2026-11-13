@@ -23,6 +23,7 @@ class WorkDraft(BaseModel):
     applied_script: ShortsScript | None
     editor_text: str
     first_frames: dict[str, dict[str, str]] = Field(default_factory=dict)
+    planning_input: dict[str, str] | None = None
 
     @model_validator(mode='after')
     def verify_binding(self):
@@ -32,14 +33,21 @@ class WorkDraft(BaseModel):
         if (not self.first_frames.keys() <= numbers or any(not values.keys() <= {
                 'frame_path', 'must_show', 'must_avoid', 'reviewer_note'} for values in self.first_frames.values())):
             raise ValueError('초안의 장면 번호·검토 입력을 확인하세요.')
+        if self.planning_input is not None and (
+                set(self.planning_input) != {'mode', 'url', 'category'}
+                or self.planning_input['mode'] not in {'RSS 자동 발견', '직접 URL 입력'}):
+            raise ValueError('초안의 기획 입력 형식을 확인하세요.')
         return self
 
 
-def save_work_draft(script: ShortsScript | None, editor_text: str, first_frames: dict) -> Path:
+def save_work_draft(script: ShortsScript | None, editor_text: str, first_frames: dict,
+                    *, planning_input: dict | None = None) -> Path:
     record = WorkDraft(saved_at=datetime.now(timezone.utc), script_sha256=script_draft_key(script),
                        applied_script=script, editor_text=editor_text,
-                       first_frames={str(number): values for number, values in first_frames.items()})
-    return publish_snapshot('studio_drafts', record.model_dump_json(indent=2).encode('utf-8'))
+                       first_frames={str(number): values for number, values in first_frames.items()},
+                       planning_input=planning_input)
+    exclude = {'planning_input'} if planning_input is None else set()
+    return publish_snapshot('studio_drafts', record.model_dump_json(indent=2, exclude=exclude).encode('utf-8'))
 
 
 def read_work_draft(name: str) -> tuple[WorkDraft, str]:
@@ -57,6 +65,8 @@ def saved_work_drafts() -> tuple[dict, list]:
         try:
             record, digest = read_work_draft(path.name)
             title = record.applied_script.title if record.applied_script else '새 대본 입력 초안'
+            if record.applied_script is None and not record.editor_text.strip() and record.planning_input:
+                title = f'소재 선택 · {(record.planning_input["url"] or record.planning_input["category"])[:100]}'
             records.append((path.stat().st_mtime_ns, path.name, {
                 'label': f'{title} · {record.saved_at.astimezone():%Y-%m-%d %H:%M:%S} · {path.stem[-8:]}',
                 'sha256': digest}))

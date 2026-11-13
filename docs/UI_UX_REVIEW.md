@@ -1,5 +1,11 @@
 # Studio UI and code review
 
+## 2026-11-13 — Save source selection before a script exists
+
+The work-draft save control now includes source mode/URL/category and supports source-only work. Explicit restore updates the visible radio/URL/category/options, preserves incomplete input and clears stale candidates without fetching or creating a service. Source-only snapshots preserve current script/review/typed text/frame notes/video selection; previous meaningful source input is backed up before replacement. Pending RSS/IO failure and deleted views leave current state intact. Legacy records do not reset current source fields; strict optional metadata rejects unrelated permission fields.
+
+639 offline tests pass, including native existing-work preservation and source-only save/reopen. Provider/RSS-HTTP-blocked1440/390px browser QA saved a partial URL, terminated/restarted QA into a blank session against the same files, explicitly restored the visible URL, then verified current URL backup on City restore. Removed-category restoration followed by explicit generate stopped before service creation with zero provider/RSS calls. No horizontal overflow. Actual216 media/reports, schedule and both monthly/episode budgets stayed unchanged; no upload/adoption/cleanup ran. Only QA was restarted. This is explicit input persistence, not RSS-list persistence, URL verification, paid planning, whole production recovery or deployed-live functionality.
+
 ## 2026-11-13 — Repair a no-base draft through the ordinary form
 
 | Flow | Before | After |

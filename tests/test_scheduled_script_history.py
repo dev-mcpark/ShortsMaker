@@ -147,11 +147,11 @@ class ScheduledScriptHistoryTests(IsolatedAsyncioTestCase):
         self.assertEqual(before, self.state.__dict__)
         from shorts_maker.services.work_drafts import save_work_draft
         calls = []
-        def fail_second(*args):
+        def fail_second(*args, **kwargs):
             calls.append(True)
             if len(calls) == 2:
                 raise OSError('target backup failed')
-            return save_work_draft(*args)
+            return save_work_draft(*args, **kwargs)
         with patch('shorts_maker.services.work_drafts.save_work_draft', side_effect=fail_second):
             with self.assertRaises(OSError):
                 self.state.open_historical_script(self.scripts[0])

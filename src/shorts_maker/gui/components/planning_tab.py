@@ -280,9 +280,12 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                     source_mode.set_value('직접 URL 입력')
                     safe_notify('URL 입력으로 선택했습니다. 원문 확인 후 각본 생성을 별도로 실행하세요.', type='positive')
 
-                render_rss_preview(state, lambda: category_select.value,
-                                   catalog if catalog_manager is not None else None, choose_article).bind_visibility_from(
-                    source_mode, 'value', value='RSS 자동 발견')
+                @ui.refreshable
+                def rss_sources_preview():
+                    render_rss_preview(state, lambda: category_select.value,
+                                       catalog if catalog_manager is not None else None, choose_article).bind_visibility_from(
+                        source_mode, 'value', value='RSS 자동 발견')
+                rss_sources_preview()
 
                 spinner = ui.spinner(size='sm').props('color=pink').classes('self-center my-2')
                 spinner.visible = False
@@ -419,10 +422,16 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                 ui.label('미적용 수정은 먼저 적용하세요. 저장한 사본은 재시작 후 다시 불러올 수 있으며 원본은 보존됩니다.').classes('text-xs text-slate-400')
 
             def restore_draft_view():
+                source_mode.set_value(state.planning_source_mode)
+                url_input.set_value(state.planning_url)
+                category_select.options = list(dict.fromkeys(['전체 분야', *catalog, state.planning_category]))
+                category_select.set_value(state.planning_category)
+                category_select.update()
+                safe_refresh(rss_sources_preview)
                 restore_editor()
                 update_script_preview()
                 update_candidates_panel()
-                feedback_section.visible = False
+                feedback_section.visible = state.script_context is not None
 
             draft_panel = render_work_drafts_panel(state, restore_draft_view)
 

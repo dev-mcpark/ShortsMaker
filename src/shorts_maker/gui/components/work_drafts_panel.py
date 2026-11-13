@@ -12,13 +12,14 @@ def render_work_drafts_panel(state, on_restored):
     def panel():
         key = state.script_editor_key()
         with ui.expansion('저장된 작업 초안', icon='save_as', value=opened['value'],
-                          on_value_change=lambda event: opened.update(value=event.value)).classes('w-full'):
+                          on_value_change=lambda event: opened.update(value=event.value)).classes('w-full') as view:
             ui.label('미완성 JSON과 첫 프레임 경로·검토 메모를 사본당 2 MiB까지 보관합니다. 입력만으로 자동 저장되지는 않습니다.').classes('text-xs text-slate-300')
             ui.label('형식 문제로 중단된 모델 각본도 미적용 초안으로 보관됩니다. 목록 새로고침 후 오류 안내의 끝번호로 찾으세요.').classes('text-xs text-slate-400')
+            ui.label('소재 방식·입력 중인 URL·RSS 분야도 함께 저장합니다. 복원해도 기사 조회·기획을 자동 실행하지 않습니다.').classes('text-xs text-slate-400')
             ui.label('열기 전 현재/대상 대본의 미적용 입력도 새 초안으로 보관합니다. 복원 후에는 대본·장면 확인을 다시 진행하세요.').classes('text-xs text-slate-400')
 
             def current():
-                if state.is_busy or key != state.script_editor_key():
+                if view.is_deleted or state.is_busy or key != state.script_editor_key():
                     raise ValueError('작업 중이거나 대본이 바뀌었습니다. 현재 화면을 다시 확인하세요.')
 
             def save():
@@ -31,7 +32,8 @@ def render_work_drafts_panel(state, on_restored):
                     safe_notify(f'초안 저장 중단: {error}', type='warning')
 
             ui.button('작업 초안 새 사본 저장', on_click=save).props('outline icon=save').bind_enabled_from(
-                state, 'is_busy', lambda busy: not busy and (state.script is not None or bool(state.script_editor_text().strip())))
+                state, 'is_busy', lambda busy: not busy and (state.script is not None or bool(state.script_editor_text().strip())
+                                                            or state.has_planning_input()))
             try:
                 records, warnings = saved_work_drafts()
             except (ValueError, OSError) as error:

@@ -234,13 +234,20 @@ class AppState:
             raise ValueError('작업이 끝난 뒤 저장할 대본을 확인하세요.')
         return save_script_copy(self.script, settings.scripts_dir)
 
+    def planning_input(self) -> dict:
+        return {'mode': self.planning_source_mode, 'url': self.planning_url, 'category': self.planning_category}
+
+    def has_planning_input(self) -> bool:
+        return self.planning_input() != {'mode': 'RSS 자동 발견', 'url': '', 'category': '전체 분야'}
+
     def save_work_draft(self):
         from shorts_maker.services.work_drafts import save_work_draft
 
         if self.is_busy:
             raise ValueError('제작·업로드가 끝난 뒤 작업 초안을 저장하세요.')
         return save_work_draft(self.script, self.script_editor_text(),
-                               self.first_frame_drafts.get(self.script_editor_key(), {}))
+                               self.first_frame_drafts.get(self.script_editor_key(), {}),
+                               planning_input=self.planning_input())
 
     def open_historical_script(self, script):
         """Keep current text work before opening a review-only historical copy."""
@@ -260,11 +267,25 @@ class AppState:
         record, digest = read_work_draft(name)
         if digest != expected_sha256:
             raise ValueError('목록을 읽은 뒤 초안 파일이 바뀌었습니다. 목록을 새로고침하세요.')
-        backups = self._backup_text_work(
-            record.applied_script, save_applied=record.script_sha256 != self.script_editor_key())
-        self.load_saved_script(record.applied_script)
-        self.script_editor_drafts[record.script_sha256] = record.editor_text
-        self.first_frame_drafts[record.script_sha256] = {int(number): values for number, values in record.first_frames.items()}
+        source_changed = record.planning_input is not None and record.planning_input != self.planning_input()
+        if source_changed and self.rss_preview.get('loading'):
+            raise ValueError('RSS 후보 조회가 끝난 뒤 기획 입력을 복원하세요.')
+        source_only = (record.planning_input is not None and record.applied_script is None
+                       and not record.editor_text.strip() and not record.first_frames)
+        if source_only:
+            backups = [self.save_work_draft()] if source_changed and self.has_planning_input() else []
+        else:
+            backups = self._backup_text_work(
+                record.applied_script, save_applied=(record.script_sha256 != self.script_editor_key()
+                                                    or source_changed and self.has_planning_input()))
+            self.load_saved_script(record.applied_script)
+            self.script_editor_drafts[record.script_sha256] = record.editor_text
+            self.first_frame_drafts[record.script_sha256] = {int(number): values for number, values in record.first_frames.items()}
+        if source_changed:
+            self.planning_source_mode = record.planning_input['mode']
+            self.planning_url = record.planning_input['url']
+            self.planning_category = record.planning_input['category']
+            self.rss_preview = {}
         return backups
 
     def _backup_text_work(self, target_script, *, save_applied=False):
@@ -272,7 +293,7 @@ class AppState:
         current_key, target_key = self.script_editor_key(), script_draft_key(target_script)
         backups = []
         applied_text = self.script.model_dump_json(indent=2) if self.script else ''
-        if ((save_applied and (self.script is not None or self.script_editor_text()))
+        if ((save_applied and (self.script is not None or self.script_editor_text() or self.has_planning_input()))
                 or self.script_editor_text() != applied_text or self.first_frame_drafts.get(current_key)):
             backups.append(self.save_work_draft())
         target_text = target_script.model_dump_json(indent=2) if target_script else ''

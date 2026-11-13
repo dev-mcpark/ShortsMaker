@@ -70,6 +70,76 @@ class WorkDraftTests(TestCase):
         self.assertIsNone(self.state.final_video_path)
         self.assertEqual(self.state.script_editor_text(), '{새 대본을 쓰는 중')
 
+    def test_source_only_inputs_survive_fresh_state_without_restoring_authority(self):
+        self.state = AppState(planning_source_mode='직접 URL 입력', planning_url='https://example.com/partial?',
+                              planning_category='Removed category')
+        path = self.state.save_work_draft()
+        _, digest = work_drafts.read_work_draft(path.name)
+        fresh = AppState()
+        fresh.restore_work_draft(path.name, digest)
+        self.assertEqual(fresh.planning_source_mode, '직접 URL 입력')
+        self.assertEqual(fresh.planning_url, 'https://example.com/partial?')
+        self.assertEqual(fresh.planning_category, 'Removed category')
+        self.assertIsNone(fresh.script)
+        self.assertIsNone(fresh.reviewed_script_sha256)
+        self.assertIsNone(fresh.operating_scope)
+        self.assertIsNone(fresh.production_service)
+
+    def test_replacing_source_inputs_backs_up_source_only_work_and_blocks_pending_reads(self):
+        target = AppState(planning_source_mode='RSS 자동 발견', planning_category='Saved category')
+        path = target.save_work_draft(); _, digest = work_drafts.read_work_draft(path.name)
+        current = AppState(planning_source_mode='직접 URL 입력', planning_url='unfinished current URL')
+        current.rss_preview = {'loading': True, 'category': 'Previous category'}
+        with self.assertRaises(ValueError):
+            current.restore_work_draft(path.name, digest)
+        self.assertEqual(current.planning_url, 'unfinished current URL')
+        current.rss_preview = {'items': ['stale candidate']}
+        with patch.object(work_drafts, 'save_work_draft', side_effect=OSError('No space')):
+            with self.assertRaises(OSError):
+                current.restore_work_draft(path.name, digest)
+        self.assertEqual(current.planning_url, 'unfinished current URL')
+        backups = current.restore_work_draft(path.name, digest)
+        self.assertEqual(len(backups), 1)
+        backup, _ = work_drafts.read_work_draft(backups[0].name)
+        self.assertEqual(backup.planning_input['url'], 'unfinished current URL')
+        self.assertEqual(current.planning_category, 'Saved category')
+        self.assertEqual(current.rss_preview, {})
+
+    def test_source_only_restore_keeps_the_existing_script_review_text_frames_and_video(self):
+        source = AppState(planning_source_mode='직접 URL 입력', planning_url='next article')
+        source.remember_script_draft(source.script_editor_key(), ' \n')
+        path = source.save_work_draft(); _, digest = work_drafts.read_work_draft(path.name)
+        self.state.planning_url = 'current source input'
+        key, receipt = self.state.script_editor_key(), self.state.reviewed_script_sha256
+        self.state.remember_script_draft(key, '{unfinished current script')
+        self.state.first_frame_drafts[key] = {1: {'reviewer_note': 'keep current notes'}}
+        current = self.state.script
+        backups = self.state.restore_work_draft(path.name, digest)
+        self.assertEqual(len(backups), 1)
+        self.assertIs(self.state.script, current)
+        self.assertEqual(self.state.reviewed_script_sha256, receipt)
+        self.assertEqual(self.state.final_video_path, 'kept.mp4')
+        self.assertEqual(self.state.script_editor_text(), '{unfinished current script')
+        self.assertEqual(self.state.first_frame_drafts[key][1]['reviewer_note'], 'keep current notes')
+        self.assertEqual(self.state.planning_url, 'next article')
+
+    def test_legacy_snapshot_keeps_current_source_inputs_and_invalid_extension_is_rejected(self):
+        legacy = work_drafts.save_work_draft(None, '{legacy input', {})
+        self.assertNotIn('planning_input', json.loads(legacy.read_text()))
+        _, digest = work_drafts.read_work_draft(legacy.name)
+        self.state.planning_url = 'current incomplete URL'
+        self.state.restore_work_draft(legacy.name, digest)
+        self.assertEqual(self.state.planning_url, 'current incomplete URL')
+        record = json.loads(legacy.read_text())
+        for value in ({'mode': 'unknown', 'url': '', 'category': ''},
+                      {'mode': 'RSS 자동 발견', 'url': '', 'category': '', 'api_key': 'DO_NOT_ECHO'},
+                      {'mode': 'RSS 자동 발견', 'url': False, 'category': ''}):
+            legacy.write_text(json.dumps({**record, 'planning_input': value}))
+            with self.assertRaises(ValueError) as stopped:
+                work_drafts.read_work_draft(legacy.name)
+            self.assertNotIn('DO_NOT_ECHO', str(stopped.exception))
+            self.assertTrue(legacy.exists())
+
     def test_recovery_without_applied_script_backs_up_the_previous_applied_work(self):
         original = self.state.script.model_dump_json()
         path = work_drafts.save_work_draft(None, '{"mood": null}', {})
@@ -252,6 +322,62 @@ class WorkDraftUiTests(IsolatedAsyncioTestCase):
         self.assertEqual(self.field(root, '각본 JSON').value, '{아직 작성 중')
         self.assertIsNone(self.state.script)
         self.assertIsNone(self.state.reviewed_script_sha256)
+
+    async def test_source_only_save_and_fresh_view_restore_update_the_visible_form_without_requests(self):
+        from nicegui import binding
+        root = self.render()
+        with self.client:
+            radio = next(e for e in root.descendants() if isinstance(e, ui.radio))
+            radio.set_value('직접 URL 입력')
+            self.field(root, '기사 URL').set_value('https://example.com/not-finished?')
+        await self.flush(); binding._refresh_step()
+        save = next(e for e in root.descendants() if getattr(e, 'text', '') == '작업 초안 새 사본 저장')
+        self.assertFalse(save._props.get('disabled', False))
+        with self.client:
+            self.click(root, '작업 초안 새 사본 저장')
+        records, _ = work_drafts.saved_work_drafts()
+        self.assertEqual(len(records), 1)
+        self.state = AppState()
+        with self.client, root, patch.object(planning_tab, 'load_source_catalog', return_value=(object(), {})):
+            root.clear(); planning_tab.render_planning_tab(self.state)
+        with self.client:
+            self.field(root, '저장된 작업 초안 검색').set_value(next(iter(records)))
+            self.click(root, '선택한 작업 초안 열기')
+        await self.flush(); binding._refresh_step()
+        radio = next(e for e in root.descendants() if isinstance(e, ui.radio))
+        self.assertEqual(radio.value, '직접 URL 입력')
+        self.assertEqual(self.field(root, '기사 URL').value, 'https://example.com/not-finished?')
+        self.assertIsNone(self.state.script)
+        self.assertIsNone(self.state.production_service)
+        self.assertEqual(self.state.rss_preview, {})
+
+    async def test_deleted_source_only_view_cannot_save_over_the_current_source_selection(self):
+        self.state = AppState(planning_source_mode='직접 URL 입력', planning_url='old URL input')
+        root = self.render()
+        button = next(e for e in root.descendants() if getattr(e, 'text', '') == '작업 초안 새 사본 저장')
+        handler = next(e.handler for e in button._event_listeners.values() if e.type == 'click')
+        with self.client:
+            root.clear()
+            self.state.planning_url = 'new URL input'
+            handler(None)
+        self.assertEqual(work_drafts.saved_work_drafts(), ({}, []))
+        self.assertEqual(self.state.planning_url, 'new URL input')
+
+    async def test_source_restore_in_existing_workspace_keeps_applied_review_and_video_selection(self):
+        source = AppState(planning_source_mode='직접 URL 입력', planning_url='https://example.com/next')
+        saved = source.save_work_draft()
+        self.state = AppState(script=script(), final_video_path='keep.mp4')
+        self.state.confirm_script_review()
+        original, receipt = self.state.script, self.state.reviewed_script_sha256
+        root = self.render()
+        with self.client:
+            self.field(root, '저장된 작업 초안 검색').set_value(saved.name)
+            self.click(root, '선택한 작업 초안 열기')
+        await self.flush()
+        self.assertIs(self.state.script, original)
+        self.assertEqual(self.state.reviewed_script_sha256, receipt)
+        self.assertEqual(self.state.final_video_path, 'keep.mp4')
+        self.assertEqual(self.field(root, '기사 URL').value, 'https://example.com/next')
 
     async def test_first_frame_inputs_save_explicitly_without_approval(self):
         self.state = AppState(script=script(), mode='video')
