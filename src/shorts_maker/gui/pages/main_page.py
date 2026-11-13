@@ -18,6 +18,7 @@ from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.config import settings
 from shorts_maker.services.openai_models import PRIMARY_CHAT_MODEL
 from shorts_maker.gui.components.budget_panel import render_budget_panel
+from shorts_maker.gui.components.music_preview import render_music_preview
 from shorts_maker.gui.runtime_info import runtime_label, render_runtime_info
 
 
@@ -220,6 +221,8 @@ def render_main_page() -> None:
                 bgm_track_select.bind_enabled_from(state, 'is_busy', backward=lambda busy: not busy)
                 ui.label('직접 고른 곡을 우선 사용합니다. 저장하면 대본을 다시 열 때 복원됩니다.') \
                     .classes('text-[10px] text-slate-400 mb-3')
+
+                render_music_preview(state)
 
                 ui.label('배경음악 음량').classes('text-[10px] text-slate-400 font-semibold mb-1')
                 bgm_slider = ui.slider(min=0, max=1, step=0.05, value=state.bgm_volume).props('color=violet aria-label="BGM 음량"')
