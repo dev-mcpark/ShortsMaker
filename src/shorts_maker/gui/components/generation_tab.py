@@ -174,9 +174,11 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
                         snapshot.update(path=None, sha256=None)
                         safe_notify(f'첫 프레임 미리보기 실패: {error}', type='negative')
 
-                async def pick_image(frame_input=path_input, bound_preview=preview, expected_mode=state.mode):
+                async def pick_image(frame_input=path_input, bound_preview=preview, expected_mode=state.mode,
+                                     expected_execution=state.execution_key()):
                     def current():
                         return (not frame_input.is_deleted and not state.is_busy and not state.manual_video_mode and state.mode == expected_mode
+                                and state.execution_key() == expected_execution
                                 and state.script is not None and state.script.model_dump_json() == rendered_script)
 
                     def select(path):
@@ -186,7 +188,7 @@ def render_first_frame_reviews(state: 'AppState', on_review_change=None) -> None
 
                     await open_image_picker(select, current)
 
-                ui.button('보관함에서 이미지 찾기', on_click=pick_image).props('outline icon=folder_open').bind_enabled_from(
+                ui.button('이미지 선택·가져오기', on_click=pick_image).props('outline icon=folder_open').classes('min-h-[44px]').bind_enabled_from(
                     state, 'is_busy', lambda busy: not busy)
                 ui.label('후보 경로와 검토 입력은 메뉴 이동 시 유지됩니다. 재시작 전에 검토 입력 초안 저장으로 보관할 수 있습니다. 승인은 검토를 마친 뒤에만 진행하세요.').classes('text-xs text-slate-400')
 

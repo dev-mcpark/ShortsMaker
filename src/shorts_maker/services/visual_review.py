@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from uuid import uuid4
 
 from PIL import Image
 
@@ -12,6 +13,7 @@ from shorts_maker.generator.video_generator import VIDEO_PROMPT_VERSION
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.source_manager import SourceManager
 
+MAX_FRAME_BYTES = 20_000_000
 
 def _sha256(path: Path) -> str:
     with path.open('rb') as stream:
@@ -25,7 +27,7 @@ def review_path(script, scene) -> Path:
 
 def inspect_frame(frame_path: str) -> str:
     path = Path(frame_path).resolve()
-    if not path.is_file() or path.stat().st_size > 20_000_000:
+    if not path.is_file() or path.stat().st_size > MAX_FRAME_BYTES:
         raise ValueError('첫 프레임은 20 MB 이하의 PNG/JPEG 파일이어야 합니다.')
     with Image.open(path) as image:
         if (image.format not in {'PNG', 'JPEG'} or image.width < 360 or image.height < 640
@@ -33,6 +35,39 @@ def inspect_frame(frame_path: str) -> str:
             raise ValueError('첫 프레임은 세로 9:16 PNG/JPEG 이미지여야 합니다.')
         image.verify()
     return _sha256(path)
+
+
+def import_frame(content: bytes) -> Path:
+    """Retain a validated local image without replacing a frame or its approval."""
+    if not content or len(content) > MAX_FRAME_BYTES:
+        raise ValueError('첫 프레임은 20 MB 이하의 PNG/JPEG 파일이어야 합니다.')
+    root = settings.output_dir / 'evaluation' / 'imported_frames'
+    if (root.is_symlink() or root.parent.is_symlink()
+            or not root.resolve().is_relative_to(settings.output_dir.resolve())):
+        raise ValueError('이미지 보관 폴더의 경로를 확인하세요.')
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile('wb', dir=root, prefix='.frame_', delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            inspect_frame(str(temporary))
+            with Image.open(temporary) as image:
+                image.load()
+                suffix = '.png' if image.format == 'PNG' else '.jpg'
+        except OSError as error:
+            raise ValueError('이미지를 읽을 수 없습니다. 손상되지 않은 PNG/JPEG를 선택하세요.') from error
+        path = root / f'frame_{uuid4().hex}{suffix}'
+        os.link(temporary, path)
+        return path
+    except Image.DecompressionBombError as error:
+        raise ValueError('이미지 픽셀 크기가 너무 큽니다. 크기를 줄여 다시 선택하세요.') from error
+    finally:
+        if temporary:
+            temporary.unlink(missing_ok=True)
 
 
 def _binding(script, scene, frame_path: str, frame_sha256: str) -> dict:

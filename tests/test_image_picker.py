@@ -56,6 +56,25 @@ class ImagePickerTests(IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         binding._refresh_step()
 
+    async def test_imported_image_is_only_a_scene_draft_and_keeps_prior_result(self):
+        from types import SimpleNamespace
+        from shorts_maker.services.visual_review import review_path
+        receipt = self.state.reviewed_script_sha256
+        with self.client:
+            generation_tab.render_first_frame_reviews(self.state)
+            with patch.object(image_picker, 'AssetLibrary', return_value=self.library):
+                await self.click_and_wait('이미지 선택·가져오기')
+            uploader = next(e for e in self.client.elements.values() if e.__class__.__name__ == 'Upload')
+            await uploader._upload_handlers[0](SimpleNamespace(
+                file=SimpleNamespace(read=AsyncMock(return_value=self.frame.read_bytes())), sender=uploader))
+        selected = self.control('첫 프레임 PNG/JPEG 경로').value
+        self.assertNotEqual(selected, str(self.frame))
+        self.assertTrue(Path(selected).is_file())
+        self.assertTrue(self.state.has_unapplied_first_frame_drafts())
+        self.assertEqual(self.state.final_video_path, 'kept.mp4')
+        self.assertEqual(self.state.reviewed_script_sha256, receipt)
+        self.assertFalse(review_path(self.state.script, self.state.script.scenes[0]).exists())
+
     async def click_and_wait(self, label, task_name='pick_image'):
         before = asyncio.all_tasks()
         self.click(label)
@@ -72,7 +91,7 @@ class ImagePickerTests(IsolatedAsyncioTestCase):
             self.control('피해야 할 묘사 (한 줄에 하나)').set_value('실제 장소로 오인')
             self.control('검토 의견').set_value('현재 장면 후보')
             with patch.object(image_picker, 'AssetLibrary', return_value=self.library):
-                await self.click_and_wait('보관함에서 이미지 찾기')
+                await self.click_and_wait('이미지 선택·가져오기')
             self.control('이미지 파일 검색').set_value('outputs/first_frame.png')
             self.click('선택 이미지 미리보기')
         self.assertEqual(self.control('첫 프레임 PNG/JPEG 경로').value, str(self.frame))
@@ -128,7 +147,7 @@ class ImagePickerTests(IsolatedAsyncioTestCase):
             invalid = settings.output_dir / 'landscape.png'
             Image.new('RGB', (960, 540)).save(invalid)
             with patch.object(image_picker, 'AssetLibrary', return_value=self.library):
-                await self.click_and_wait('보관함에서 이미지 찾기')
+                await self.click_and_wait('이미지 선택·가져오기')
             self.control('이미지 파일 검색').set_value('outputs/landscape.png')
             self.click('선택 이미지 미리보기')
             self.assertEqual(self.control('첫 프레임 PNG/JPEG 경로').value, str(self.frame))
