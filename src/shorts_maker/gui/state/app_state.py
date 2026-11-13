@@ -77,6 +77,7 @@ class AppState:
 
     # Error State
     last_error: Optional[str] = None
+    audio_recovery: Optional[Dict[str, Any]] = field(default=None, repr=False)
 
     # History
     pipeline_history: List[Dict] = field(default_factory=list)
@@ -369,13 +370,22 @@ class AppState:
         self.prepared_narration_sha256 = digest
 
     def load_saved_script(self, script) -> None:
-        from shorts_maker.services.audio_choices import load_audio_choices
+        from shorts_maker.services.audio_choices import load_audio_choices, audio_choice_fingerprint
 
         if self.is_busy:
             raise ValueError('제작 또는 업로드가 진행 중에는 각본을 바꿀 수 없습니다.')
         if script is not None and script.generation_mode not in {'image', 'hybrid', 'video'}:
             raise ValueError('각본의 제작 모드를 확인하세요.')
-        choices = load_audio_choices(script) if script is not None else None
+        try:
+            choices = load_audio_choices(script) if script is not None else None
+        except ValueError:
+            self.audio_recovery = None
+            try:
+                self.audio_recovery = {'script': script.model_dump(mode='json'),
+                                       'record_sha256': audio_choice_fingerprint(script)}
+            except (OSError, ValueError):
+                pass  # An unreadable original cannot be safely backed up or reset.
+            raise
         if choices is None:
             defaults = AppState()
             choices = {key: getattr(defaults, key)
@@ -395,6 +405,20 @@ class AppState:
         self.scene_clips = []
         self.generated_clips = []
         self._production_service = None
+        self.audio_recovery = None
+
+    def recover_audio_choices(self, expected: dict):
+        from shorts_maker.planner.models import ShortsScript
+        from shorts_maker.services.audio_choices import audio_choice_fingerprint, reset_audio_choices
+        if self.is_busy or self.audio_recovery != expected:
+            raise ValueError('작업이나 복구 대상이 바뀌었습니다. 대본을 다시 확인하세요.')
+        script = ShortsScript.model_validate(expected['script'])
+        if audio_choice_fingerprint(script) != expected['record_sha256']:
+            raise ValueError('음성 설정이 바뀌었습니다. 대본을 다시 불러와 확인하세요.')
+        self._backup_text_work(script, save_applied=True)
+        backup = reset_audio_choices(script, expected['record_sha256'])
+        self.load_saved_script(script)
+        return backup
 
     @property
     def preview_video_path(self) -> Optional[str]:
