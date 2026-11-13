@@ -82,7 +82,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
 
     def apply_script(script, context=None):
         audio = {key: getattr(state, key) for key in ('tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume')}
-        state.load_saved_script(script)
+        state.load_saved_script(script, backup_current=True)
         for key, value in audio.items():
             setattr(state, key, value)
         state.script_context = context
@@ -362,6 +362,8 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                 with ui.row().classes('items-center gap-2 mb-3'):
                     ui.icon('folder_open', size='xs').classes('text-amber-400')
                     ui.label('저장된 각본').classes('text-xs font-bold text-amber-300 uppercase tracking-wider')
+                ui.label('다른 대본을 열거나 바뀐 내용을 적용하기 전, 현재 대본과 미적용 입력을 작업 초안으로 보관합니다. '
+                         '저장된 작업 초안에서 다시 열 수 있습니다. 타이핑 자동저장은 아닙니다.').classes('text-xs text-slate-400 mb-2')
 
                 @ui.refreshable
                 def saved_scripts():
@@ -385,7 +387,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                                         with (script_dir / script_select.value).open('r', encoding='utf-8') as f:
                                             data = json.load(f)
                                         loaded_script = ShortsScript.model_validate(data)
-                                        state.load_saved_script(loaded_script)
+                                        state.load_saved_script(loaded_script, backup_current=True)
                                         update_script_preview()
                                         update_candidates_panel()
                                         feedback_section.visible = False

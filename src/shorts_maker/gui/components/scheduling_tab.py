@@ -390,7 +390,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                         else:
                                                             if state.operating_scope:
                                                                 raise ValueError('먼저 제작 작업실에서 회차 연결을 해제하세요.')
-                                                            state.load_saved_script(script)
+                                                            state.load_saved_script(script, backup_current=True)
                                                     except (TypeError, ValueError) as error:
                                                         safe_notify(f'저장된 각본 확인 실패: {error}', type='negative')
                                                         return

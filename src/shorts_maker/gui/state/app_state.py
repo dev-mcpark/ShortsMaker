@@ -220,7 +220,7 @@ class AppState:
                              episode_id=current.get('last_episode_id'))
         current, _ = scope_status(scope)
         script = ShortsScript.model_validate(current['last_script'])
-        self.load_saved_script(script)
+        self.load_saved_script(script, backup_current=True)
         self.operating_scope = scope.model_dump()
         self._execution_version += 1
 
@@ -369,8 +369,9 @@ class AppState:
         self.prepared_narration_manifest = manifest_path or None
         self.prepared_narration_sha256 = digest
 
-    def load_saved_script(self, script) -> None:
+    def load_saved_script(self, script, *, backup_current: bool = False) -> None:
         from shorts_maker.services.audio_choices import load_audio_choices, audio_choice_fingerprint
+        from shorts_maker.services.work_drafts import script_draft_key
 
         if self.is_busy:
             raise ValueError('제작 또는 업로드가 진행 중에는 각본을 바꿀 수 없습니다.')
@@ -386,6 +387,9 @@ class AppState:
             except (OSError, ValueError):
                 pass  # An unreadable original cannot be safely backed up or reset.
             raise
+        if (backup_current and script_draft_key(script) != self.script_editor_key()
+                and (self.script is not None or self.script_editor_text())):
+            self._backup_text_work(script, save_applied=True)
         if choices is None:
             defaults = AppState()
             choices = {key: getattr(defaults, key)

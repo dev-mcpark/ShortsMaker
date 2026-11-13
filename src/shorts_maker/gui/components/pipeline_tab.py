@@ -256,7 +256,7 @@ def render_pipeline_tab(
                     await asyncio.gather(monitor_task, return_exceptions=True)
                     state.pipeline_running = False
                     if result.script is not None:
-                        state.load_saved_script(result.script)
+                        state.load_saved_script(result.script, backup_current=True)
                         state.script_context = result.script_context
                         state.topic_candidates = result.script_context.candidates if result.script_context else []
                     if result.ready_for_upload:
