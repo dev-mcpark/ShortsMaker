@@ -7,7 +7,9 @@ import json
 import math
 import os
 import shutil
+import sqlite3
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 from shorts_maker.editor.video_editor import VideoEditor
@@ -19,6 +21,26 @@ from shorts_maker.utils.paid_gate import require_paid_production_enabled
 
 
 VOICES = ("alloy", "echo", "fable", "nova", "onyx", "shimmer")
+
+
+@contextmanager
+def _narration_lock(output_dir: Path):
+    lock = output_dir / '.narration.lock.sqlite3'
+    if lock.is_symlink():
+        raise ValueError('Narration lock must not be a symbolic link')
+    descriptor = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    os.close(descriptor)
+    db = sqlite3.connect(lock, timeout=0, isolation_level=None)
+    try:
+        try:
+            db.execute('BEGIN EXCLUSIVE')
+        except sqlite3.OperationalError as error:
+            if error.sqlite_errorcode not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+                raise
+            raise ValueError('NARRATION_IN_PROGRESS: another process is preparing this set') from error
+        yield
+    finally:
+        db.close()
 
 
 def _hash(data: bytes) -> str:
@@ -51,15 +73,21 @@ def _manifest(script_path: Path, output_dir: Path, voice: str, rate: float) -> d
         "usd_per_million_characters": rate,
     }
     path = output_dir / "narration.json"
+    if path.is_symlink():
+        raise ValueError('Narration manifest must not be a symbolic link')
     if not path.exists():
         return {**expected, "reserved_usd_total": 0.0, "scenes": {}}
-    data = json.loads(path.read_text(encoding="utf-8"))
+    with path.open('rb') as stream:
+        content = stream.read(2 * 1024 * 1024 + 1)
+    if len(content) > 2 * 1024 * 1024:
+        raise ValueError('Narration manifest is too large')
+    data = json.loads(content.decode('utf-8'))
     if not isinstance(data, dict) or any(data.get(key) != value for key, value in expected.items()):
         raise ValueError("Existing narration set has a different script, model, voice, or price")
     if not isinstance(data.get("scenes"), dict):
         raise ValueError("Invalid narration manifest")
     reserve = data.get("reserved_usd_total")
-    if not isinstance(reserve, (int, float)) or not math.isfinite(reserve) or reserve < 0:
+    if isinstance(reserve, bool) or not isinstance(reserve, (int, float)) or not math.isfinite(reserve) or reserve < 0:
         raise ValueError("Invalid cumulative narration reserve")
     return data
 
@@ -68,15 +96,27 @@ def _scene_state(scene, manifest: dict, output_dir: Path) -> str:
     key = str(scene.scene_number)
     entry = manifest["scenes"].get(key)
     destination = output_dir / f"scene_{key}.mp3"
+    if destination.is_symlink():
+        raise ValueError(f'Narration scene {key} must not be a symbolic link')
     text_sha256 = _hash(scene.script_text.encode("utf-8"))
     if entry is None:
         if destination.exists():
             raise ValueError(f"Untracked narration file already exists: {destination}")
         return "missing"
+    if not isinstance(entry, dict):
+        raise ValueError(f'Invalid narration entry for scene {key}')
     if entry.get("text_sha256") != text_sha256:
         raise ValueError(f"Narration text changed for scene {key}")
     if entry.get("status") == "pending":
-        return "recoverable" if destination.is_file() else "missing"
+        if not destination.is_file():
+            raise ValueError(f'NARRATION_REQUEST_UNVERIFIED: scene {key} has a pending request; '
+                             'reconcile the existing provider result before any new submission')
+        try:
+            VideoEditor.validate_narration([str(destination)])
+        except (OSError, ValueError) as error:
+            raise ValueError(f'NARRATION_REQUEST_UNVERIFIED: scene {key} has an invalid saved output; '
+                             'preserve it and reconcile the existing request') from error
+        return "recoverable"
     if entry.get("status") != "complete" or not destination.is_file():
         raise ValueError(f"Incomplete or missing narration for scene {key}")
     if _hash(destination.read_bytes()) != entry.get("file_sha256"):
@@ -96,7 +136,8 @@ async def prepare(script_path: Path, output_dir: Path, voice: str, max_cost_usd:
     output_dir = output_dir.resolve()
     if not output_dir.is_relative_to(settings.output_dir.resolve()):
         raise ValueError("Private narration output must stay under the ignored outputs directory")
-    script = ShortsScript.model_validate_json(script_path.read_text(encoding="utf-8"))
+    script_content = script_path.read_bytes()
+    script = ShortsScript.model_validate_json(script_content)
     if len({scene.scene_number for scene in script.scenes}) != len(script.scenes):
         raise ValueError("Scene numbers must be unique")
     manifest = _manifest(script_path, output_dir, voice, usd_per_million_characters)
@@ -125,46 +166,50 @@ async def prepare(script_path: Path, output_dir: Path, voice: str, max_cost_usd:
             VideoEditor.TTS_MODEL, [scene.script_text for scene in missing],
             VideoEditor.TTS_MAX_ATTEMPTS,
         )
-    if any(state != "complete" for state in states):
         require_paid_production_enabled()
         if not settings.openai_api_key:
             raise ValueError("OPENAI_API_KEY is required to generate narration")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    editor = VideoEditor(bgm_volume=0.0)
-    try:
-        for scene, state in zip(script.scenes, states):
-            key = str(scene.scene_number)
-            destination = output_dir / f"scene_{key}.mp3"
-            if state == "complete":
-                continue
-            text_sha256 = _hash(scene.script_text.encode("utf-8"))
-            if state == "missing":
-                manifest["scenes"][key] = {"text_sha256": text_sha256, "status": "pending"}
-                manifest["reserved_usd_total"] += scene_reserve(scene)
+    output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with _narration_lock(output_dir):
+        if (_hash(script_path.read_bytes()) != _hash(script_content)
+                or _manifest(script_path, output_dir, voice, usd_per_million_characters) != manifest
+                or [_scene_state(scene, manifest, output_dir) for scene in script.scenes] != states):
+            raise ValueError('Narration input or state changed; inspect the existing set again')
+        editor = VideoEditor(bgm_volume=0.0)
+        try:
+            for scene, state in zip(script.scenes, states):
+                key = str(scene.scene_number)
+                destination = output_dir / f"scene_{key}.mp3"
+                if state == "complete":
+                    continue
+                text_sha256 = _hash(scene.script_text.encode("utf-8"))
+                if state == "missing":
+                    manifest["scenes"][key] = {"text_sha256": text_sha256, "status": "pending"}
+                    manifest["reserved_usd_total"] += scene_reserve(scene)
+                    _save_manifest(output_dir / "narration.json", manifest)
+                    generated = await editor._generate_tts(
+                        scene.script_text, scene.scene_number, voice, source_url=script.source_url,
+                    )
+                    partial = output_dir / f"scene_{key}.part.mp3"
+                    try:
+                        shutil.copyfile(generated, partial)
+                        VideoEditor.validate_narration([str(partial)])
+                        os.replace(partial, destination)
+                    finally:
+                        partial.unlink(missing_ok=True)
+                        editor.cleanup_temp_files()
+                else:
+                    VideoEditor.validate_narration([str(destination)])
+                manifest["scenes"][key] = {
+                    "text_sha256": text_sha256, "status": "complete",
+                    "file_sha256": _hash(destination.read_bytes()),
+                }
                 _save_manifest(output_dir / "narration.json", manifest)
-                generated = await editor._generate_tts(
-                    scene.script_text, scene.scene_number, voice, source_url=script.source_url,
-                )
-                partial = output_dir / f"scene_{key}.part.mp3"
-                try:
-                    shutil.copyfile(generated, partial)
-                    VideoEditor.validate_narration([str(partial)])
-                    os.replace(partial, destination)
-                finally:
-                    partial.unlink(missing_ok=True)
-                    editor.cleanup_temp_files()
-            else:
-                VideoEditor.validate_narration([str(destination)])
-            manifest["scenes"][key] = {
-                "text_sha256": text_sha256, "status": "complete",
-                "file_sha256": _hash(destination.read_bytes()),
-            }
-            _save_manifest(output_dir / "narration.json", manifest)
-        audio_paths = [str(output_dir / f"scene_{scene.scene_number}.mp3") for scene in script.scenes]
-        VideoEditor.validate_narration(audio_paths)
-        return {**result, "audio_paths": audio_paths}
-    finally:
-        editor.cleanup_temp_files()
+            audio_paths = [str(output_dir / f"scene_{scene.scene_number}.mp3") for scene in script.scenes]
+            VideoEditor.validate_narration(audio_paths)
+            return {**result, "audio_paths": audio_paths}
+        finally:
+            editor.cleanup_temp_files()
 
 
 def main() -> None:
