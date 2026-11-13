@@ -154,6 +154,29 @@ class CreationCallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((state.tts_voice, state.bgm_track, state.bgm_volume), ('nova', 'chosen.mp3', .18))
         self.assertFalse(state.pipeline_running)
 
+    async def test_failed_planning_keeps_reason_and_previous_work(self):
+        reason = 'BGM_SELECTION_REQUIRED: 선택 가능한 음악 분위기가 없습니다.'
+        for raises in (False, True):
+            with self.subTest(raises=raises):
+                async def generate(**kwargs):
+                    if raises:
+                        raise ValueError(reason)
+                    return None, None
+                service = SimpleNamespace(generate_script=generate,
+                    progress=SimpleNamespace(error=reason), PAID_WORK_DISABLED='off')
+                state = AppState(script=script(), final_video_path='keep.mp4', last_error='Old error')
+                state.confirm_script_review()
+                original, receipt = state.script, state.reviewed_script_sha256
+                state.get_or_create_service = lambda: service
+                env = planning_environment(state, service)
+                await callback('planning_tab.py', 'generate_script', env)()
+                self.assertEqual(state.last_error, reason)
+                self.assertIn(reason, env['safe_notify'].call_args.args[0])
+                self.assertIs(state.script, original)
+                self.assertEqual(state.reviewed_script_sha256, receipt)
+                self.assertEqual(state.final_video_path, 'keep.mp4')
+                self.assertFalse(state.is_busy)
+
     async def test_json_apply_is_blocked_during_production_or_upload(self):
         for busy_field in ('pipeline_running', 'youtube_upload_in_progress'):
             with self.subTest(busy_field=busy_field):

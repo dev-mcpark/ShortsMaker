@@ -1,5 +1,11 @@
 # Studio UI and code review
 
+## 2026-11-13 — Keep the actual paid-planning failure visible
+
+An owner-authorized isolated app run reached real Terra article analysis and writing (HTTP200 twice), then stopped because the writer followed the explicit unsuitable-music instruction with `mood:null`. The existing gate correctly rejected it; no validator request or retry followed. The app hid the actionable cause behind a generic failure toast. Planning now keeps the actual service/exception reason in session `last_error`, displays it with an accessible alert and a repeat-request cost notice, and clears the old error when a fresh request starts. Existing script/review/final selection survive failure.623 offline tests pass; the new callback regression failed twice before the fix. Free replay of the recorded failure verified cause/notice visibility after desktop menu round-trip and at390px without overflow, retaining the prior reviewed script and submitting no provider request.
+
+This was a stopped paid check, not a successful full planning cycle: model source/scene validation was not reached, and the unapproved response repeats route-diagram shots and invents a second card reader placement. The candidate/agent findings are private under `outputs/evaluation/studio_paid_planning_20261113/`. Ordinary app recovery of a schema-invalid paid writer response remains a product gap; the diagnostic harness's saved raw response is not app-wide recovery support. The operating Studio was not restarted and this UI change is not yet deployed.
+
 ## 2026-11-13 — Free source choice before paid planning
 
 Planning now exposes existing RSS discovery before model/scorer/body-analysis calls. A searchable candidate selector previews plain text/feed/date/original link; explicit choose fills direct URL without replacing applied work or starting planning. Source fields/results survive navigation. Errors/empty feeds are visible, stale lists/selections and duplicate requests are rejected; a pending read finishes before cancellation releases its slot. Catalogue damage/removed categories do not become unrestricted planning.

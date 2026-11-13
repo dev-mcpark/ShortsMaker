@@ -18,6 +18,7 @@ _OPENAI_EPISODE_CAP_MICRO_USD = 300_000
 _OPENAI_INITIAL_EXTENSION_MICRO_USD = 350_000
 _OPENAI_TEXT_EXTENSION_MICRO_USD = 450_000
 _OPENAI_APPROVED_EXTENSION_MAX_MICRO_USD = 500_000
+_OPENAI_PLANNING_VALIDATION_MAX_MICRO_USD = 650_000
 _GOOGLE_EPISODE_CAP_KRW = 3000
 _GOOGLE_INITIAL_EXTENSION_KRW = 3300
 _GOOGLE_APPROVED_EXTENSION_MAX_KRW = 6300
@@ -123,6 +124,15 @@ def load_episode(episode_id: str, schedule: dict) -> dict:
                 or not isinstance(approval.get('owner_approval'), str)
                 or not approval['owner_approval'].strip()):
             raise ValueError('새 영상 비교에는 기존 승인과 두 공급자의 추가 승인 기록이 필요합니다.')
+    if 'planning_validation_extension' in record:
+        approval = record.get('planning_validation_extension')
+        if (not isinstance(approval, dict)
+                or approval.get('previous_cap_micro_usd') != _OPENAI_APPROVED_EXTENSION_MAX_MICRO_USD
+                or approval.get('approved_cap_micro_usd') != _OPENAI_PLANNING_VALIDATION_MAX_MICRO_USD
+                or record['openai_cap_micro_usd'] != _OPENAI_APPROVED_EXTENSION_MAX_MICRO_USD
+                or not isinstance(approval.get('owner_approval'), str)
+                or not approval['owner_approval'].strip()):
+            raise ValueError('추가 기획 검증에는 이전 상한과 새 사용자 승인 기록이 필요합니다.')
     for provider in ('google', 'openai'):
         ids = record['baseline'].get(provider)
         if (not isinstance(ids, list) or not all(isinstance(key, str) for key in ids)
@@ -147,7 +157,10 @@ def episode_environment(record: dict) -> tuple[dict[str, str], dict]:
         # Other app requests are conservatively included; never guess an untracked allocation.
         spent[provider] = sum(value for key, value in rows.items() if key not in baseline)
     remaining_google = max(0, record['google_cap_krw'] - spent['google'])
-    remaining_openai = max(0, record['openai_cap_micro_usd'] - spent['openai'])
+    # Keep the legacy cap readable by the still-running older Studio; it remains more restrictive.
+    openai_cap = record.get('planning_validation_extension', {}).get(
+        'approved_cap_micro_usd', record['openai_cap_micro_usd'])
+    remaining_openai = max(0, openai_cap - spent['openai'])
     google_ceiling = min(10000, google['budget_krw'],
                          google['opening_krw'] + google['local_reserved_krw'] + remaining_google)
     openai_used = (Decimal(str(openai['opening_usd']))

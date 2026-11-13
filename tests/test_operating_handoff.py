@@ -436,6 +436,45 @@ class OperatingHandoffTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_episode(record['id'], schedule)
 
+    def test_paid_planning_extension_requires_new_and_all_previous_approvals(self):
+        record = self.queued_episode()
+        previous = {
+            **record, 'google_cap_krw': 6300, 'openai_cap_micro_usd': 500000,
+            'google_cap_extension': {'previous_cap_krw': 3000, 'approved_cap_krw': 3300,
+                                     'owner_approval': 'Earlier media'},
+            'openai_cap_extension': {'previous_cap_micro_usd': 300000,
+                'approved_cap_micro_usd': 350000, 'owner_approval': 'Earlier validation'},
+            'openai_cap_extension_followup': {'previous_cap_micro_usd': 350000,
+                'approved_cap_micro_usd': 450000, 'owner_approval': 'Earlier text'},
+            'video_comparison_extension': {'previous_google_cap_krw': 3300,
+                'approved_google_cap_krw': 6300, 'previous_openai_cap_micro_usd': 450000,
+                'approved_openai_cap_micro_usd': 500000, 'owner_approval': 'Earlier comparison'},
+        }
+        approval = {'previous_cap_micro_usd': 500000, 'approved_cap_micro_usd': 650000,
+                    'owner_approval': 'New $0.15 planning validation'}
+        extended = {**previous, 'planning_validation_extension': approval}
+        path = episode_path(record['id'])
+        schedule = self.manager.get_schedule(self.schedule['id'])
+        path.write_text(json.dumps(extended))
+        loaded = load_episode(record['id'], schedule)
+        self.assertEqual(loaded['baseline'], record['baseline'])
+        self.assertEqual(loaded['openai_cap_micro_usd'], previous['openai_cap_micro_usd'])
+        self.assertEqual(loaded['video_comparison_extension'], previous['video_comparison_extension'])
+        _, status = episode_environment(loaded)
+        self.assertEqual(status['openai_remaining_usd'], .65)
+        self.assertEqual(begin_episode(record['schedule_id'], 2)['openai_cap_micro_usd'], 300000)
+        for changes in ({'planning_validation_extension': None},
+                {'planning_validation_extension': {**approval, 'owner_approval': ''}},
+                {'planning_validation_extension': {**approval, 'previous_cap_micro_usd': 450000}},
+                {'planning_validation_extension': {**approval, 'approved_cap_micro_usd': 660000}},
+                {'openai_cap_micro_usd': 650001}, {'openai_cap_micro_usd': 640000},
+                {'video_comparison_extension': None}, {'openai_cap_extension_followup': None},
+                {'openai_cap_extension': None}, {'google_cap_extension': None}):
+            with self.subTest(changes=changes):
+                path.write_text(json.dumps({**extended, **changes}))
+                with self.assertRaises(ValueError):
+                    load_episode(record['id'], schedule)
+
     def test_google_extension_keeps_old_reserves_and_monthly_ceiling(self):
         record = self.queued_episode()
         google_budget.reserve_google_output('video', 'veo-3.1-lite-generate-001', 8)

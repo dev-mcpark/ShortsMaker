@@ -300,6 +300,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                     except RuntimeError:
                         return
                     try:
+                        state.last_error = None
                         logger.info(f"Starting Plan: Mode={source_mode.value}")
                         service = state.get_or_create_service()
                         state.pipeline_running = True
@@ -319,12 +320,11 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                             except RuntimeError:
                                 pass
                         else:
-                            message = (service.PAID_WORK_DISABLED
-                                       if service.progress.error == service.PAID_WORK_DISABLED
-                                       else '각본 생성 실패')
-                            safe_notify(message, type='negative')
+                            state.last_error = service.progress.error or '각본 생성 결과를 확인하지 못했습니다.'
+                            safe_notify(state.last_error, type='negative')
                     except Exception as e:
-                        safe_notify(f'오류: {str(e)}', type='negative')
+                        state.last_error = str(e)
+                        safe_notify(f'오류: {state.last_error}', type='negative')
                         logger.error(f"Plan Error: {e}")
                     finally:
                         state.pipeline_running = False
@@ -341,6 +341,13 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                     and (source_mode.value != 'RSS 자동 발견' or catalog_manager is not None))
                 if not settings.paid_production_enabled:
                     ui.label('검토 모드: 새 각본 생성은 중지되어 있습니다. 아래에서 저장된 각본을 불러오세요.').classes('text-xs text-amber-200 mt-2')
+                with ui.column().classes('w-full gap-1 rounded border border-amber-700 p-3').bind_visibility_from(
+                        state, 'last_error', backward=bool):
+                    ui.label('기획이 중단되었습니다').classes('text-sm text-amber-200')
+                    ui.label().bind_text_from(state, 'last_error', backward=lambda error: error or '').classes(
+                        'text-xs text-amber-100 break-all').props('role=alert')
+                    ui.label('원인을 확인한 뒤 진행하세요. 다시 생성하면 새 API 비용이 발생할 수 있습니다.').classes(
+                        'text-xs text-slate-400')
 
             # 저장된 각본 불러오기
             with ui.element('div').classes('w-full rounded-xl bg-slate-900/60 border border-slate-600 p-4'):
