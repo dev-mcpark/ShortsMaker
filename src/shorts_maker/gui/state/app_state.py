@@ -168,13 +168,13 @@ class AppState:
     def new_production_service(self, parallel_clips: bool = False) -> "ProductionService":
         """Create one configured service for a new production run."""
         from shorts_maker.services.production_service import ProductionService
-        from shorts_maker.utils.config import settings
+        from shorts_maker.gui.state.session_manager import SessionManager
 
         if self.operating_scope:
             from shorts_maker.services.scoped_production import ScopedProductionService
             factory = lambda **options: ScopedProductionService(self.operating_scope, self.reviewed_script_sha256, **options)
         else:
-            settings.update_api_keys(openai_key=self.openai_key, gcp_project=self.gcp_project)
+            SessionManager.apply_api_settings(self)
             factory = ProductionService
         self._production_service = factory(
             mode=self.mode,
@@ -183,6 +183,12 @@ class AppState:
             editor_options=self._editor_options(),
         )
         return self._production_service
+
+    def apply_api_settings(self) -> None:
+        from shorts_maker.gui.state.session_manager import SessionManager
+        if self.is_busy:
+            raise ValueError('진행 중인 작업이 끝난 뒤 연결 설정을 적용하세요.')
+        SessionManager.apply_api_settings(self)
 
     def execution_key(self) -> tuple:
         return self._execution_version, json.dumps(self.operating_scope, sort_keys=True)

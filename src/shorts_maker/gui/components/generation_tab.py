@@ -1022,8 +1022,9 @@ def render_generation_tab(state: 'AppState') -> None:
             try:
                 state.require_execution_context(expected_execution)
                 prepared_audio = state.prepared_audio_paths()
+                service = state.new_production_service()
             except (OSError, ValueError, TypeError, RuntimeError) as error:
-                safe_notify(f'연결한 내레이션을 다시 확인하세요: {error}', type='negative')
+                safe_notify(f'제작 준비를 다시 확인하세요: {error}', type='negative')
                 return
             production_running = True
 
@@ -1046,8 +1047,6 @@ def render_generation_tab(state: 'AppState') -> None:
                 state.final_video_path = None
                 state.failed_video_preview_path = None
                 state.generated_clips = []
-
-                service = state.new_production_service()
 
                 def on_progress(progress: ProductionProgress):
                     state.sync_from_progress(progress)

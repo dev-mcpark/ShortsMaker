@@ -242,7 +242,7 @@ def render_main_page() -> None:
 
                 with ui.expansion('고급 · API 연결', icon='settings').classes('w-full'):
                     # API Keys Config (Inline for fast edit)
-                    ui.label('현재 실행 중인 Studio에만 적용됩니다. 재시작 후에도 유지할 설정은 비공개 환경 파일에서 관리합니다.').classes('text-xs text-slate-400')
+                    ui.label('연결 설정은 현재 Studio의 모든 창이 공유합니다. 다른 창이 작업 중이면 연결 변경을 기다려 주세요. 재시작 후 유지할 설정은 비공개 환경 파일에서 관리합니다.').classes('text-xs text-slate-400')
 
                     openai_input = ui.input('OpenAI Key', value=state.openai_key, password=True, password_toggle_button=True).props('outlined dense dark').classes('w-full mb-2')
                     openai_input.bind_value(state, 'openai_key')
@@ -253,17 +253,18 @@ def render_main_page() -> None:
                     gcp_input.bind_enabled_from(state, 'is_busy', backward=lambda busy: not busy)
 
                     def save_sidebar_settings():
+                        if openai_input.is_deleted or gcp_input.is_deleted:
+                            return
                         if state.is_busy:
                             ui.notify('진행 중인 작업이 끝난 뒤 연결 설정을 적용하세요.', type='warning')
                             return
                         try:
-                            settings.update_api_keys(openai_key=state.openai_key, gcp_project=state.gcp_project)
-                            state.production_service = None
+                            state.apply_api_settings()
                             ui.notify('현재 Studio에 연결 설정을 적용했습니다.', type='positive')
                         except (OSError, ValueError) as error:
                             ui.notify(f'연결 설정 적용 실패: {error}', type='negative')
 
-                    ui.button('연결 설정 적용', on_click=save_sidebar_settings).props('color=violet size=sm icon=save unelevated').classes('w-full py-1 text-xs')
+                    ui.button('연결 설정 적용', on_click=save_sidebar_settings).props('color=violet size=sm icon=save unelevated').classes('w-full min-h-[44px] py-1 text-xs')
 
             # --- DYNAMIC RENDERING LOGIC (중앙 뷰 스위처) ---
             def select_view(view_name: str):

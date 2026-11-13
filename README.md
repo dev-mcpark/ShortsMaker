@@ -1,5 +1,8 @@
 # ShortsMaker 🎬
 
+**여러 Studio 창의 API 연결:** 제작 설정의 **고급 · API 연결**은 실행 중인 Studio 전체가 공유합니다. 다른 창에서 제작·업로드·인증 등의 작업이 진행 중이면 다른 연결로 변경할 수 없습니다. 작업이 끝난 뒤 적용하세요. 같은 연결을 쓰는 동시 작업은 가능합니다. 연결 변경은 디스크에 저장되지 않으며, 각 창에 남은 다른 연결 입력으로 제작을 시작해도 같은 확인이 적용됩니다.
+
+
 Development map and agent handoff: [docs/README.md](docs/README.md), [docs/STATUS.md](docs/STATUS.md), and [docs/DECISIONS.md](docs/DECISIONS.md). Codex and Claude Code share [AGENTS.md](AGENTS.md) as the project instruction entry.
 
 A local Studio app for source-grounded Korean Shorts using **Google Veo 3.1** and **Gemini image generation**.
