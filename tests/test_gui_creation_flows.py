@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from PIL import Image
 
@@ -176,6 +176,23 @@ class CreationCallbackTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(state.reviewed_script_sha256, receipt)
                 self.assertEqual(state.final_video_path, 'keep.mp4')
                 self.assertFalse(state.is_busy)
+
+    async def test_failed_regeneration_preserves_recovery_reason_and_current_work(self):
+        reason = 'BGM_SELECTION_REQUIRED: 저장된 작업 초안에서 사본을 검토하세요.'
+        context = SimpleNamespace(attempt_count=0, max_attempts=3)
+        service = SimpleNamespace(regenerate_script=AsyncMock(return_value=None),
+                                  progress=SimpleNamespace(error=reason), PAID_WORK_DISABLED='off')
+        state = AppState(script=script(), script_context=context, final_video_path='keep.mp4')
+        state.confirm_script_review()
+        state.get_or_create_service = lambda: service
+        env = planning_environment(state, service)
+        env['feedback_input'] = SimpleNamespace(value='Improve the hook')
+        await callback('planning_tab.py', 'regenerate_with_feedback', env)()
+        self.assertEqual(state.last_error, reason)
+        self.assertIs(state.script_context, context)
+        self.assertEqual(state.final_video_path, 'keep.mp4')
+        self.assertTrue(state.is_script_reviewed())
+        self.assertFalse(state.is_busy)
 
     async def test_json_apply_is_blocked_during_production_or_upload(self):
         for busy_field in ('pipeline_running', 'youtube_upload_in_progress'):

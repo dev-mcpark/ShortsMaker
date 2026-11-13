@@ -14,6 +14,7 @@ def render_work_drafts_panel(state, on_restored):
         with ui.expansion('저장된 작업 초안', icon='save_as', value=opened['value'],
                           on_value_change=lambda event: opened.update(value=event.value)).classes('w-full'):
             ui.label('미완성 JSON과 첫 프레임 경로·검토 메모를 사본당 2 MiB까지 보관합니다. 입력만으로 자동 저장되지는 않습니다.').classes('text-xs text-slate-300')
+            ui.label('형식 문제로 중단된 모델 각본도 미적용 초안으로 보관됩니다. 목록 새로고침 후 오류 안내의 끝번호로 찾으세요.').classes('text-xs text-slate-400')
             ui.label('열기 전 현재/대상 대본의 미적용 입력도 새 초안으로 보관합니다. 복원 후에는 대본·장면 확인을 다시 진행하세요.').classes('text-xs text-slate-400')
 
             def current():

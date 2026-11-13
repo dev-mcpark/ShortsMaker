@@ -506,6 +506,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                     except RuntimeError:
                         return
                     try:
+                        state.last_error = None
                         context = state.script_context
                         service = state.get_or_create_service()
                         state.pipeline_running = True
@@ -525,12 +526,12 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                             except RuntimeError:
                                 pass
                         else:
-                            message = (service.PAID_WORK_DISABLED
-                                       if service.progress.error == service.PAID_WORK_DISABLED
-                                       else getattr(service.progress, 'message', '') or '재생성 실패')
-                            safe_notify(message, type='negative')
+                            state.last_error = (service.progress.error
+                                                or getattr(service.progress, 'message', '') or '재생성 실패')
+                            safe_notify(state.last_error, type='negative')
                     except Exception as e:
-                        safe_notify(f'재생성 오류: {e}', type='negative')
+                        state.last_error = str(e)
+                        safe_notify(f'재생성 오류: {state.last_error}', type='negative')
                         logger.error(f"Regen error: {e}")
                     finally:
                         state.pipeline_running = False

@@ -1787,6 +1787,9 @@ class ReviewRegressions(unittest.TestCase):
         self.assertIn(scene.motion_instruction, fallback)
 
     def test_planner_visual_brief_requires_source_matched_setting(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.enterContext(patch.object(settings, 'output_dir', Path(directory.name)))
         planner = object.__new__(ScriptPlanner)
         planner.logger = Mock()
         planner.allowed_moods = ["calm"]

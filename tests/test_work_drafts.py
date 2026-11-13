@@ -70,6 +70,24 @@ class WorkDraftTests(TestCase):
         self.assertIsNone(self.state.final_video_path)
         self.assertEqual(self.state.script_editor_text(), '{새 대본을 쓰는 중')
 
+    def test_recovery_without_applied_script_backs_up_the_previous_applied_work(self):
+        original = self.state.script.model_dump_json()
+        path = work_drafts.save_work_draft(None, '{"mood": null}', {})
+        _, digest = work_drafts.read_work_draft(path.name)
+        with patch.object(work_drafts, 'save_work_draft', side_effect=OSError('Disk full')):
+            with self.assertRaises(OSError):
+                self.state.restore_work_draft(path.name, digest)
+        self.assertEqual(self.state.script.model_dump_json(), original)
+        self.assertEqual(self.state.final_video_path, 'kept.mp4')
+        backups = self.state.restore_work_draft(path.name, digest)
+        self.assertEqual(len(backups), 1)
+        previous, _ = work_drafts.read_work_draft(backups[0].name)
+        self.assertEqual(previous.applied_script.model_dump_json(), original)
+        self.assertEqual(previous.editor_text, previous.applied_script.model_dump_json(indent=2))
+        self.assertIsNone(self.state.script)
+        self.assertIsNone(self.state.reviewed_script_sha256)
+        self.assertEqual(self.state.script_editor_text(), '{"mood": null}')
+
     def test_restore_backs_up_current_and_target_unapplied_work_before_replacing_it(self):
         target = AppState(script=script('target'))
         target.remember_script_draft(target.script_editor_key(), 'saved target text')

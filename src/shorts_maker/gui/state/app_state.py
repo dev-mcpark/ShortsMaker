@@ -260,7 +260,8 @@ class AppState:
         record, digest = read_work_draft(name)
         if digest != expected_sha256:
             raise ValueError('목록을 읽은 뒤 초안 파일이 바뀌었습니다. 목록을 새로고침하세요.')
-        backups = self._backup_text_work(record.applied_script)
+        backups = self._backup_text_work(
+            record.applied_script, save_applied=record.script_sha256 != self.script_editor_key())
         self.load_saved_script(record.applied_script)
         self.script_editor_drafts[record.script_sha256] = record.editor_text
         self.first_frame_drafts[record.script_sha256] = {int(number): values for number, values in record.first_frames.items()}

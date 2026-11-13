@@ -823,17 +823,32 @@ class ScriptPlanner:
             **PRIMARY_CHAT_REQUEST_OPTIONS,
         )
         choice = response.choices[0]
-        if getattr(choice, "finish_reason", None) == "length":
-            raise ValueError("Script response reached its output-token limit")
-        data = json.loads(choice.message.content)
-        if data.get('mood') not in self.allowed_moods:
-            raise ValueError("BGM_SELECTION_REQUIRED: 생성된 각본의 분위기가 지원 목록에 없습니다. BGM 선택을 검토하세요.")
-        # Ensure generation_mode is consistent
-        data['generation_mode'] = self.generation_mode
-        # Inject source info from the item to ensure accuracy
-        data['source_name'] = item.get('source', 'Unknown Source')
-        data['source_url'] = item.get('url', '')
-        script = ShortsScript(**data)
-        if not self.MIN_SCENES <= len(script.scenes) <= self.MAX_SCENES:
-            raise ValueError("SCRIPT_SCENE_COUNT_UNVERIFIED: 자동 대본 장면 수가 허용 범위를 벗어났습니다.")
-        return script
+        recovery_text = choice.message.content
+        try:
+            if getattr(choice, "finish_reason", None) == "length":
+                raise ValueError("Script response reached its output-token limit")
+            data = json.loads(recovery_text)
+            if not isinstance(data, dict):
+                raise ValueError('각본 응답은 JSON 객체여야 합니다.')
+            # Bind known source fields even when the remaining draft cannot be applied.
+            data.update(generation_mode=self.generation_mode,
+                        source_name=item.get('source', 'Unknown Source'), source_url=item.get('url', ''))
+            recovery_text = json.dumps(data, ensure_ascii=False, indent=2)
+            if data.get('mood') not in self.allowed_moods:
+                raise ValueError("BGM_SELECTION_REQUIRED: 생성된 각본의 분위기가 지원 목록에 없습니다. BGM 선택을 검토하세요.")
+            script = ShortsScript(**data)
+            if not self.MIN_SCENES <= len(script.scenes) <= self.MAX_SCENES:
+                raise ValueError("SCRIPT_SCENE_COUNT_UNVERIFIED: 자동 대본 장면 수가 허용 범위를 벗어났습니다.")
+            return script
+        except (ValueError, TypeError) as error:
+            if not isinstance(recovery_text, str) or not recovery_text.strip():
+                raise
+            from shorts_maker.services.work_drafts import save_work_draft
+            try:
+                path = save_work_draft(None, recovery_text, {})
+            except (ValueError, OSError) as storage_error:
+                raise ValueError(f'{error} · 초안 보관 실패: {storage_error}. 추가 생성 요청은 보내지 않았습니다.') from error
+            raise ValueError(
+                f'{error} · 미적용 응답을 보관했습니다. 저장된 작업 초안에서 목록을 새로고침한 뒤 '
+                f'끝번호 {path.stem[-8:]} 사본을 열어 검토하세요. 자동 적용·검증 통과는 아닙니다.'
+            ) from error
