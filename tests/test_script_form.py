@@ -32,6 +32,29 @@ class ScriptFormStateTests(TestCase):
     def update(self, field, value, number=None):
         return self.state.update_script_form_field(self.state.script_editor_key(), self.state.script_editor_text(), field, value, number)
 
+    def test_unapplied_recovery_can_edit_mood_content_and_structure_without_authority(self):
+        data = self.script.model_dump()
+        data['mood'] = None
+        self.state = AppState()
+        scope = {'episode_id': 'unchanged scope'}
+        self.state.operating_scope = scope
+        self.state.remember_script_draft(self.state.script_editor_key(), json.dumps(data))
+        self.update('mood', 'calm')
+        self.update('script_text', '복구한 내레이션', 5)
+        key = self.state.script_editor_key()
+        number = self.state.change_script_scene(key, self.state.script_editor_text(), 'add', 2)
+        self.assertGreater(number, 5)
+        self.assertEqual(self.state.script_form_data()['mood'], 'calm')
+        self.assertEqual(self.state.script_form_data()['source_url'], self.script.source_url)
+        self.assertIsNone(self.state.script)
+        self.assertIsNone(self.state.reviewed_script_sha256)
+        self.assertIsNone(self.state.final_video_path)
+        self.assertIs(self.state.operating_scope, scope)
+        before = self.state.script_editor_text()
+        with self.assertRaises(ValueError):
+            self.update('mood', 'unrecognized-new-mood')
+        self.assertEqual(self.state.script_editor_text(), before)
+
     def test_plain_fields_merge_by_scene_number_and_preserve_applied_source_and_approval(self):
         original = self.script.model_dump_json()
         receipt = self.state.reviewed_script_sha256
@@ -194,6 +217,43 @@ class ScriptFormUiTests(IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         binding._refresh_step()
+
+    async def test_recovered_null_mood_can_be_repaired_in_plain_form_without_auto_apply(self):
+        data = script().model_dump()
+        data['mood'] = None
+        self.state = AppState()
+        self.state.remember_script_draft(self.state.script_editor_key(), json.dumps(data))
+        root = self.render()
+        mood = self.field(root, '대본 음악 분위기')
+        source_link = next(e for e in root.descendants() if getattr(e, 'text', '') == '초안 출처 원문 열기')
+        self.assertEqual(source_link._props['href'], data['source_url'])
+        self.assertEqual(source_link._props['rel'], 'noopener noreferrer')
+        self.assertIsNone(mood.value)
+        self.assertIsNone(json.loads(self.state.script_editor_text())['mood'])
+        with self.client:
+            mood.set_value('calm')
+            self.field(root, '장면 1 · 내레이션').set_value('일반 폼에서 고친 문장')
+        await self.flush()
+        self.assertIsNone(self.state.script)
+        self.assertIsNone(self.state.reviewed_script_sha256)
+        with self.client:
+            self.click(root, '수정 내용 적용')
+        await self.flush()
+        self.assertEqual(self.state.script.mood, 'calm')
+        self.assertEqual(self.state.script.scenes[0].script_text, '일반 폼에서 고친 문장')
+        self.assertEqual(self.state.script.source_url, data['source_url'])
+        self.assertFalse(self.state.is_script_reviewed())
+        self.assertIsNone(self.state.final_video_path)
+
+    async def test_malformed_recovery_stays_in_editor_and_does_not_guess_a_form(self):
+        self.state = AppState()
+        self.state.remember_script_draft(self.state.script_editor_key(), '{broken response')
+        root = self.render()
+        text = '\n'.join(getattr(e, 'text', '') for e in root.descendants())
+        self.assertIn('일반 편집을 열 수 없습니다', text)
+        self.assertEqual(self.field(root, '각본 JSON').value, '{broken response')
+        self.assertIsNone(self.state.script)
+        self.assertFalse(self.state.is_script_reviewed())
 
     async def test_typing_shares_json_without_replacing_focused_form_and_apply_uses_existing_gates(self):
         root = self.render()

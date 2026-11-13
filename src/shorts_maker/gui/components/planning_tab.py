@@ -102,11 +102,16 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
             form_panel = None
             previewed_script['json'] = None
             with script_preview_container:
-                with ui.element('div').classes('w-full h-full flex items-center justify-center py-20'):
-                    with ui.column().classes('items-center gap-4'):
-                        ui.icon('auto_stories', size='xl').classes('text-slate-700')
-                        ui.label('각본이 아직 기획되지 않았습니다').classes('text-lg font-bold text-slate-300')
-                        ui.label('RSS 분야 또는 기사 URL을 선택해 각본을 기획하세요.').classes('text-xs text-slate-400')
+                if state.script_editor_text().strip():
+                    form_panel = render_script_form(state, sync_json_from_form,
+                                                    lambda: save_script(), lambda: discard_draft())
+                    ui.label('미적용 초안입니다. 내용을 수정·적용한 뒤 출처와 각본을 다시 확인하세요.').classes('text-xs text-amber-200')
+                else:
+                    with ui.element('div').classes('w-full h-full flex items-center justify-center py-20'):
+                        with ui.column().classes('items-center gap-4'):
+                            ui.icon('auto_stories', size='xl').classes('text-slate-700')
+                            ui.label('각본이 아직 기획되지 않았습니다').classes('text-lg font-bold text-slate-300')
+                            ui.label('RSS 분야 또는 기사 URL을 선택해 각본을 기획하세요.').classes('text-xs text-slate-400')
             return
 
         script = state.script
@@ -573,7 +578,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                     state, 'is_busy', lambda busy: not busy and state.script is not None)
 
         # === Right Panel: 주제 후보 + 각본 미리보기 ===
-        with ui.column().classes('w-full lg:w-auto lg:flex-grow min-w-0 min-h-[400px] lg:h-full overflow-hidden flex flex-col flex-nowrap'):
+        with ui.column().classes('w-full lg:w-auto lg:flex-grow min-w-0 min-h-[400px] lg:min-h-0 h-auto lg:h-full overflow-visible lg:overflow-hidden flex flex-col flex-nowrap'):
 
             # 주제 후보 패널 (접힘 가능)
             candidates_container = None
@@ -618,8 +623,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
 
                 ui.button(icon='refresh', on_click=update_script_preview).props('flat round color=gray dense size=sm aria-label="각본 미리보기 새로고침"')
 
-            # 미리보기 스크롤 영역 — flex-grow로 남은 높이 모두 차지
-            with ui.scroll_area().classes('w-full flex-grow'):
+            with ui.element('div').classes('w-full lg:flex-grow lg:min-h-0 lg:overflow-y-auto'):
                 with ui.element('div').classes('p-6'):
                     script_preview_container = ui.column().classes('w-full gap-0')
 

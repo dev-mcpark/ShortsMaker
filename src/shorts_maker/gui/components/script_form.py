@@ -3,6 +3,8 @@
 from nicegui import ui
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
+from shorts_maker.planner.script_planner import ScriptPlanner
+from shorts_maker.utils.source_manager import SourceManager
 
 
 def render_script_form(state, on_change, on_apply, on_discard):
@@ -45,8 +47,22 @@ def render_script_form(state, on_change, on_apply, on_discard):
                 ui.label(f'일반 편집을 열 수 없습니다: {error}').classes('text-xs text-amber-200 break-all')
             else:
                 ready = lambda busy: not busy and key == state.script_editor_key()
+                source = data.get('source_url')
+                if isinstance(source, str) and SourceManager.is_allowed_url(source):
+                    ui.link('초안 출처 원문 열기', source, new_tab=True).props('rel="noopener noreferrer"').classes('text-teal-300 break-all')
+                else:
+                    ui.label('초안의 출처 URL을 확인하세요. 일반 폼은 출처를 자동으로 만들거나 바꾸지 않습니다.').classes('text-xs text-amber-200')
                 ui.input('대본 제목', value=data.get('title', ''), on_change=change('title')).props('outlined dark').classes('w-full').bind_enabled_from(state, 'is_busy', ready)
                 ui.textarea('대본 설명', value=data.get('description', ''), on_change=change('description')).props('outlined dark rows=2').classes('w-full').bind_enabled_from(state, 'is_busy', ready)
+                labels = {'calm': '차분하고 부드럽게', 'suspense': '긴장감', 'sci-fi': '기술·호기심',
+                          'corporate': '정보 전달', 'emotional': '감성적', 'energetic': '경쾌하게', 'luxury': '우아하게'}
+                moods = {mood: labels.get(mood, mood) for mood in ScriptPlanner.SUPPORTED_MOODS}
+                ui.select(moods, label='대본 음악 분위기',
+                          value=data.get('mood') if data.get('mood') in moods else None,
+                          on_change=change('mood')).props('outlined dark').classes('w-full min-h-[44px]').bind_enabled_from(state, 'is_busy', ready)
+                if data.get('mood') not in moods:
+                    ui.label('초안의 음악 분위기가 미선택이거나 목록 밖의 값입니다. 자동으로 바꾸지 않으므로 내용을 검토한 뒤 선택하세요.').classes('text-xs text-amber-200')
+                ui.label('대본의 연출 방향만 정합니다. 실제 곡은 음성·음악 설정에서 따로 고르며, 사용 허가된 곡이 없으면 제작이 중단됩니다.').classes('text-xs text-slate-400')
                 modes = {'hybrid': '혼합 · 오프닝 영상 + 이미지', 'image': '이미지 중심', 'video': '장면별 Veo 영상'}
                 mode = ui.select(modes, label='대본에 저장할 기본 화면 구성',
                                  value=data.get('generation_mode') if data.get('generation_mode') in modes else None,

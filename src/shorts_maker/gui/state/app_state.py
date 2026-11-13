@@ -413,18 +413,24 @@ class AppState:
         if len(set(numbers)) != len(numbers) or any(not isinstance(data.get(field, ''), str)
                                                     for field in ('title', 'description', 'generation_mode')):
             raise ValueError('고급 JSON의 제목·설명·중복 장면 번호를 확인하세요.')
+        if not isinstance(data.get('mood'), (str, type(None))):
+            raise ValueError('고급 JSON의 음악 분위기는 문자열 또는 미선택이어야 합니다.')
         return data
 
     def update_script_form_field(self, key: str, expected_text: str, field: str, value,
                                  scene_number: Optional[int] = None) -> bool:
-        if self.is_busy or self.script is None or key != self.script_editor_key():
+        if self.is_busy or key != self.script_editor_key():
             raise ValueError('작업 중이거나 대본이 바뀌었습니다. 현재 편집 화면을 다시 여세요.')
         if expected_text != self.script_editor_text():
             raise ValueError('다른 편집 화면에서 초안이 바뀌었습니다. 편집 화면을 새로고침하세요.')
         data = self.script_form_data()
         if scene_number is None:
-            if field not in {'title', 'description', 'generation_mode'} or not isinstance(value, str):
+            if field not in {'title', 'description', 'generation_mode', 'mood'} or not isinstance(value, str):
                 raise ValueError('수정할 대본 항목을 확인하세요.')
+            if field == 'mood':
+                from shorts_maker.planner.script_planner import ScriptPlanner
+                if value not in ScriptPlanner.SUPPORTED_MOODS:
+                    raise ValueError('대본 음악 분위기를 목록에서 선택하세요.')
             if field == 'generation_mode' and value not in {'hybrid', 'image', 'video'}:
                 raise ValueError('대본의 기본 화면 구성을 선택하세요.')
             target = data
@@ -449,7 +455,7 @@ class AppState:
 
     def change_script_scene(self, key: str, expected_text: str, action: str, scene_number: int) -> int:
         """Change draft order only; scene IDs and applied media/reviews stay untouched."""
-        if self.is_busy or self.script is None or key != self.script_editor_key():
+        if self.is_busy or key != self.script_editor_key():
             raise ValueError('작업 중이거나 대본이 바뀌었습니다. 현재 편집 화면을 다시 여세요.')
         if expected_text != self.script_editor_text():
             raise ValueError('다른 편집 화면에서 초안이 바뀌었습니다. 편집 화면을 새로고침하세요.')
@@ -460,7 +466,8 @@ class AppState:
         if index is None or action not in {'add', 'remove', 'earlier', 'later'}:
             raise ValueError('변경할 장면과 작업을 확인하세요.')
         if action == 'add':
-            scene_number = max([s['scene_number'] for s in scenes] + [s.scene_number for s in self.script.scenes]) + 1
+            scene_number = max([s['scene_number'] for s in scenes]
+                               + ([s.scene_number for s in self.script.scenes] if self.script else [])) + 1
             scenes.insert(index + 1, {'scene_number': scene_number, 'script_text': '', 'visual_description': '',
                                       'motion_instruction': '', 'duration_seconds': 5.0, 'visual_mode': None})
         elif action == 'remove':

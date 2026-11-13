@@ -1,5 +1,14 @@
 # Studio UI and code review
 
+## 2026-11-13 — Repair a no-base draft through the ordinary form
+
+| Flow | Before | After |
+| --- | --- | --- |
+| Null-mood recovery | No applied script meant no ordinary form; JSON syntax required | Explicit mood/scene fields edit the shared draft before normal schema apply; source link stays visible |
+| Mobile preview |270px inner QScroll held6694px of content | Natural outer page flow; desktop keeps an overflow-auto preview |
+
+632 offline tests pass; new regressions first reproduced the no-base state and renderer failures. Native provider-blocked1440/390px QA verified null rejection, explicit mood and narration changes, menu persistence, source-link safety, unreviewed apply and no actual BGM-setting/provider change. Inspected mobile screenshot; no horizontal overflow. Desktop preview remained667px tall with4832px scroll content, and the applied mobile preview grew naturally to about5942px. Malformed JSON has an explicit advanced-editor fallback. Protected216 media/report hashes, schedule and both monthly/episode budgets remained unchanged. No paid call, upload or owner acceptance ran, and operating hosts were not restarted. New form/layout code is not live yet; metadata repair does not pass the model validator or establish video quality.
+
 ## 2026-11-13 — Reopen a failed writer draft without buying it again
 
 The received-but-schema-invalid writer response previously disappeared from ordinary Studio recovery. Preserve nonempty rejected writer text as an unapplied existing WorkDraft: known source/mode fields are assigned for parsed objects, while malformed/truncated text remains editable text. Keep the failure, mood/scene/schema gates and all review/cost authority. Error guidance identifies a snapshot suffix for the existing refresh/search/open controls; both initial and feedback planning retain it across navigation. Storage failure never claims a saved copy or triggers another request.
