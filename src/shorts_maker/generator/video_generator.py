@@ -1,7 +1,6 @@
 import os
 import time
 import asyncio
-import hashlib
 import json
 import math
 import uuid
@@ -16,6 +15,7 @@ from PIL import Image
 
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
+from shorts_maker.utils.media_validation import MAX_FRAME_BYTES, inspect_frame_bytes
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
@@ -304,17 +304,10 @@ class VideoGenerator:
         image_sha256 = None
         if first_frame_path is not None:
             frame_path = Path(first_frame_path)
-            if frame_path.stat().st_size > 20_000_000:
-                raise ValueError("Veo 첫 프레임 이미지는 20 MB 이하여야 합니다.")
-            image_bytes = frame_path.read_bytes()
-            with Image.open(BytesIO(image_bytes)) as image:
-                width, height = image.size
-                mime_type = Image.MIME.get(image.format)
-                image.verify()
-            if mime_type not in {"image/png", "image/jpeg"} or abs(width / height - 9 / 16) > 0.02:
-                raise ValueError("Veo 첫 프레임은 세로 9:16 PNG 또는 JPEG여야 합니다.")
+            with frame_path.open('rb') as stream:
+                image_bytes = stream.read(MAX_FRAME_BYTES + 1)
+            image_sha256, mime_type = inspect_frame_bytes(image_bytes)
             first_frame = types.Image(image_bytes=image_bytes, mime_type=mime_type)
-            image_sha256 = hashlib.sha256(image_bytes).hexdigest()
             if (expected_first_frame_sha256 is not None
                     and image_sha256 != expected_first_frame_sha256):
                 raise ValueError("승인된 Veo 첫 프레임이 변경됐습니다.")
