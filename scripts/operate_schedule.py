@@ -106,7 +106,7 @@ def main():
     sub.add_parser('status')
     sub.add_parser('serve')
     sub.add_parser('install-host')
-    for action in ('plan', '_plan', 'run', 'attach'):
+    for action in ('plan', '_plan', 'run', 'attach', 'resume-after-review'):
         command = sub.add_parser(action)
         command.add_argument('schedule_id')
         if action == 'plan':
@@ -115,8 +115,11 @@ def main():
             command.add_argument('--studio-request')
             command.add_argument('--request-sha256')
             command.add_argument('command', nargs=argparse.REMAINDER)
-        elif action == 'attach':
+        elif action in {'attach', 'resume-after-review'}:
             command.add_argument('video_path')
+            if action == 'resume-after-review':
+                command.add_argument('--expected-schedule-sha256', required=True)
+                command.add_argument('--note', required=True)
     args = parser.parse_args()
     manager = ScheduleManager(args.schedules, queue_only=True)
     if args.action == 'install-host':
@@ -183,6 +186,10 @@ def main():
             raise ValueError('회차 작업 경로와 해시를 함께 지정하세요.')
         raise SystemExit(run_scoped(manager, args.schedule_id, command,
                                    studio_request=args.studio_request, request_sha256=args.request_sha256))
+    elif args.action == 'resume-after-review':
+        current = manager.resume_after_video_review(args.schedule_id, args.video_path,
+            expected_schedule_sha256=args.expected_schedule_sha256, note=args.note)
+        print(json.dumps(operator_status(current), ensure_ascii=False))
     elif args.action == 'attach':
         active_episode(manager, args.schedule_id)
         result = manager.record_private_review_copy(args.schedule_id, args.video_path)

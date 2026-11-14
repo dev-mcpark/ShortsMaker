@@ -117,6 +117,7 @@ def render_operator_panel(state, manager, schedule, on_attached):
         phase = {'operator_pending': '제작 인계 대기',
                  'script_review_pending': '완성본 검토 대기' if data.get('last_youtube_id') else '각본·장면 검토 대기',
                  'run_in_progress': '실행 중 또는 결과 확인 필요', 'planning_failed': '기획 중단',
+                 'private_review_deferred': '미채택 검토본 보존 · 다음 회차 예약 가능',
                  'private_review_accepted': '완성본 채택 완료', 'script_rejected': '각본 제외'}.get(
                      data['last_result'], '운영 상태 확인 필요' if data['last_result'] else '아직 실행 전')
         ui.label(f'회차 {data["run_count"] or 0} · {phase}').classes('text-sm text-slate-200')

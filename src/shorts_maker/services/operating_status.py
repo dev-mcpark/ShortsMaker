@@ -16,6 +16,8 @@ def operator_status(schedule: dict) -> dict:
         'id', 'name', 'enabled', 'first_run_at', 'frequency', 'last_result',
         'queued_at', 'scheduled_for', 'skipped_slots', 'run_count', 'last_episode_id',
         'last_video_path', 'last_youtube_id')}
+    if schedule.get('review_continuation'):
+        result['review_continuation'] = schedule['review_continuation']
     if schedule.get('last_episode_id'):
         try:
             path = episode_path(schedule['last_episode_id'])

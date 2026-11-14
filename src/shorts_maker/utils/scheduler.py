@@ -36,7 +36,7 @@ _RUN_FIELDS = (
     'last_run', 'run_count', 'last_result', 'last_script', 'last_planned_url',
     'last_rendered_url', 'last_video_path', 'last_video_sha256', 'last_youtube_id', 'accepted_at',
     'queued_at', 'last_episode_id',
-    'scheduled_for', 'late_by_seconds', 'skipped_slots', 'script_revisions', 'last_script_path',
+    'scheduled_for', 'late_by_seconds', 'skipped_slots', 'script_revisions', 'last_script_path', 'review_continuation',
 )
 
 
@@ -354,7 +354,7 @@ class ScheduleManager:
         original_count = len(schedules)
         for schedule in schedules:
             if (schedule['id'] == schedule_id and schedule.get('last_result') in {
-                    'operator_pending', 'run_in_progress', 'script_review_pending'}):
+                    'operator_pending', 'run_in_progress', 'script_review_pending', 'private_review_deferred'}):
                 raise ValueError('미해결 제작 회차는 삭제할 수 없습니다. 결과·검토를 먼저 정리하세요.')
         schedules = [s for s in schedules if s['id'] != schedule_id]
 
@@ -406,7 +406,7 @@ class ScheduleManager:
 
     def accept_pending_video(self, schedule_id: str, video_path: str) -> Dict[str, Any]:
         """Resume RSS discovery only after a reviewed private upload is bound to its saved source."""
-        schedule, video, video_sha256, video_id = self._verified_pending_video(schedule_id, video_path)
+        schedule, video, video_sha256, video_id = self._verified_pending_video(schedule_id, video_path, allow_deferred=True)
         updated = self.update_schedule(schedule_id, {
             'last_result': 'private_review_accepted',
             'last_video_path': str(video),
@@ -418,6 +418,49 @@ class ScheduleManager:
         if updated is None:
             raise ValueError('일정이 사라져 완료 기록을 저장하지 못했습니다.')
         return updated
+
+    def resume_after_video_review(self, schedule_id: str, video_path: str, *,
+                                  expected_schedule_sha256: str, note: str) -> Dict[str, Any]:
+        """Continue the same RSS cadence without adopting or replacing its review copy."""
+        from shorts_maker.services.operating_status import schedule_sha256
+        from shorts_maker.services.operating_budget import episode_path, load_episode
+
+        if not isinstance(note, str) or not note.strip() or len(note) > 500:
+            raise ValueError('다음 회차를 예약하는 검토 메모를 500자 이내로 입력하세요.')
+        db = None
+        try:
+            db = sqlite3.connect(self.filename.with_name(f'{self.filename.name}.lock.sqlite3'), timeout=0, isolation_level=None)
+            db.execute('BEGIN EXCLUSIVE')
+            current = self.get_schedule(schedule_id)
+            if not current or schedule_sha256(current) != expected_schedule_sha256:
+                raise ValueError('일정이 변경됐습니다. 현재 완성본과 예약을 다시 확인하세요.')
+            if (current.get('direct_url') or current.get('frequency') not in _INTERVAL_WEEKS
+                    or not current.get('last_youtube_id') or not current.get('scheduled_for')):
+                raise ValueError('확인된 검토본과 기준 회차가 있는 반복 RSS 일정만 재개할 수 있습니다.')
+            if current.get('last_episode_id'):
+                pending = episode_path(current['last_episode_id']).with_suffix('.operation.pending.json')
+                if pending.exists() or pending.is_symlink():
+                    raise ValueError('미확인 회차 실행 결과를 먼저 대조하세요.')
+                if current.get('review_operator') == 'agent':
+                    load_episode(current['last_episode_id'], current)
+            _, video, digest, video_id = self._verified_pending_video(schedule_id, video_path)
+            if schedule_sha256(self.get_schedule(schedule_id)) != expected_schedule_sha256:
+                raise ValueError('검토 중 일정이 변경됐습니다. 현재 예약을 다시 확인하세요.')
+            updated = self.update_schedule(schedule_id, {
+                'enabled': True, 'last_result': 'private_review_deferred',
+                'review_continuation': {'continued_at': datetime.now().astimezone().isoformat(),
+                    'note': note.strip(), 'without_acceptance': True,
+                    'previous_result': current['last_result'], 'video_path': str(video),
+                    'video_sha256': digest, 'youtube_id': video_id},
+            })
+            if updated is None:
+                raise ValueError('일정이 사라져 다음 회차 예약을 저장하지 못했습니다.')
+            return updated
+        except sqlite3.Error as error:
+            raise ValueError('다른 회차 작업이 진행 중입니다. 완료 후 다시 확인하세요.') from error
+        finally:
+            if db:
+                db.close()
 
     def revise_pending_script(self, schedule_id: str, script_data: dict, *,
                               expected_schedule_sha256: str, reviewed_script_sha256: str) -> Dict[str, Any]:
@@ -510,13 +553,14 @@ class ScheduleManager:
             raise ValueError('일정이 사라져 업로드 기록을 연결하지 못했습니다.')
         return updated
 
-    def _verified_pending_video(self, schedule_id: str, video_path: str) -> tuple:
+    def _verified_pending_video(self, schedule_id: str, video_path: str, *, allow_deferred: bool = False) -> tuple:
         from shorts_maker.services.production_service import script_sha256
         from shorts_maker.utils.config import settings
 
         schedule = self.get_schedule(schedule_id)
-        if (schedule is None or schedule.get('last_result') != 'script_review_pending'
-                or schedule.get('enabled')):
+        if schedule is None or not (
+                (schedule.get('last_result') == 'script_review_pending' and not schedule.get('enabled'))
+                or (allow_deferred and schedule.get('last_result') == 'private_review_deferred')):
             raise ValueError("검토 대기 중인 각본 일정이 없습니다.")
         if schedule.get('last_episode_id'):
             from shorts_maker.services.operating_budget import episode_path

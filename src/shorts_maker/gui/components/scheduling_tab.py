@@ -11,6 +11,7 @@ from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.gui.components.common.source_access import load_source_catalog
 from shorts_maker.gui.components.operator_panel import render_operator_panel
+from shorts_maker.gui.components.review_continuation import render_review_continuation
 from shorts_maker.gui.components.scheduled_script_history import render_script_history_browser
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.utils.scheduler import ScheduleManager
@@ -406,6 +407,9 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 ui.label('모델 지원 종료 · 대체 모델 검증 후 제작 재개').classes('text-xs text-amber-300')
                                             elif enabled and schedule.get('last_result') == 'source_unavailable':
                                                 ui.label('RSS 피드 읽기 실패 · 다음 예약에 다시 확인').classes('text-xs text-amber-300')
+                                            elif schedule.get('last_result') == 'private_review_deferred':
+                                                ui.label('완성본 미채택 보존 · 다음 기준 회차 예약' if enabled else
+                                                         '완성본 미채택 보존 · 일정 일시정지').classes('text-xs text-amber-300')
                                             elif schedule.get('last_result') == 'private_review_accepted':
                                                 message = ('비공개 영상 검토 완료 · 직접 URL 일정 종료'
                                                            if schedule.get('direct_url') else
@@ -422,7 +426,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 ui.label('최근 영상 파일을 찾을 수 없습니다. 출력 폴더를 확인하세요.').classes('text-xs text-amber-300')
                                             youtube_url = _reviewable_youtube_url(schedule.get('last_youtube_id'))
                                             if youtube_url and (
-                                                schedule.get('last_result') in {'private_review_accepted', 'script_review_pending'}
+                                                schedule.get('last_result') in {'private_review_accepted', 'private_review_deferred', 'script_review_pending'}
                                                 or (schedule.get('auto_upload') and schedule.get('last_result') == 'success')
                                             ):
                                                 ui.link('YouTube 비공개 검토본 보기', youtube_url, new_tab=True).classes(
@@ -523,10 +527,15 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 if schedule.get('last_youtube_id') and review_path:
                                                     ui.button('비공개 영상 검토 완료', on_click=accept_pending_video).props(
                                                         'flat dense color=teal')
+                                                    if not schedule.get('direct_url') and schedule.get('frequency') in {'Every 2 Weeks', 'Every 4 Weeks'}:
+                                                        render_review_continuation(state, schedule_manager, schedule,
+                                                            lambda: (safe_refresh(schedule_list), safe_refresh(history_list)))
                                                 if not schedule.get('last_youtube_id'):
                                                     ui.button('각본 제외', on_click=reject_pending_script).props(
                                                         'flat dense color=amber')
                                             else:
+                                                if schedule.get('last_result') == 'private_review_deferred' and review_path:
+                                                    ui.button('미채택 검토본 채택', on_click=accept_pending_video).props('flat color=teal').classes('min-h-[44px]')
                                                 ui.button(
                                                     icon=toggle_icon,
                                                     on_click=toggle_schedule
@@ -564,7 +573,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                             for schedule in run_schedules[:10]:
                                 last_result = schedule.get('last_result', 'unknown')
                                 is_success = last_result in {'success', 'private_review_accepted'}
-                                is_pending = last_result in {'operator_pending', 'script_review_pending', 'run_in_progress'}
+                                is_pending = last_result in {'operator_pending', 'script_review_pending', 'private_review_deferred', 'run_in_progress'}
                                 run_count = schedule.get('run_count', 0)
 
                                 color = 'green' if is_success else 'amber' if is_pending else 'red'
