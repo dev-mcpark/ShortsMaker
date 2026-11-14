@@ -136,6 +136,13 @@ def reserve_openai_speech(model: str, text: str, *, source_url: str | None = Non
     return _reserve(model, Decimal(len(text)) * _SPEECH_PRICES[model] / 1_000_000, source_url)
 
 
+def speech_price(model: str) -> float:
+    """Return the same per-million character price used by request reservations."""
+    if model not in _SPEECH_PRICES:
+        raise OpenAIBudgetExceeded('확인되지 않은 음성 모델입니다.')
+    return float(_SPEECH_PRICES[model])
+
+
 def check_openai_speech_budget(model: str, texts: list[str], attempts: int) -> None:
     """Check the whole narration's possible requests without reserving them."""
     require_model_active(model)

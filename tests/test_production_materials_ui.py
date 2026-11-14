@@ -327,7 +327,7 @@ class ProductionMaterialsTests(IsolatedAsyncioTestCase):
             elements = list(container.descendants())
             self.assertTrue(any(e.tag == 'audio' or type(e).__name__ == 'Audio' for e in elements))
             expansion = next(e for e in elements if type(e).__name__ == 'Expansion'
-                             and e.text == '내레이션 · 기존 음성 재사용')
+                             and e.text == '내레이션 · 준비·재생·재사용')
             self.assertTrue(expansion.value)
             self.assertTrue(any(getattr(e, 'text', '') == '첫 프레임 후보 생성' for e in elements))
         finally:

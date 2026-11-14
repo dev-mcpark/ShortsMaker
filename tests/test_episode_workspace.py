@@ -121,24 +121,24 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
                 await self.state.new_production_service().generate_first_frame(self.script, 0, request_budget_usd=.034)
             start.assert_not_awaited()
 
-    async def test_worker_uses_existing_four_services_and_typed_local_inputs(self):
+    async def test_worker_uses_existing_services_and_typed_local_inputs(self):
         self.scoped_env()
         clips = {0: str(self.root / 'clip.mp4')}
         for operation, method, result in [('frame', 'generate_first_frame', 'frame.png'),
-                ('raw', 'generate_review_clip', 'raw.mp4'), ('edit', 'produce_video', ProductionResult(True)),
+                ('raw', 'generate_review_clip', 'raw.mp4'), ('narration', 'prepare_narration', 'narration.json'), ('edit', 'produce_video', ProductionResult(True)),
                 ('upload', 'upload_to_youtube', ProductionResult(True, youtube_id='private_test'))]:
             video = settings.output_dir / 'test.mp4'
             video.write_bytes(b'fixture')
             video.with_suffix('.production.json').write_text(json.dumps({'script_sha256': script_sha256(self.script.model_dump(mode='json'))}))
             request, path, digest = self.request(operation, manual_clip_paths=clips,
-                prepared_audio_paths=['scene.mp3'], video_path=str(video), metadata={'title': '한글'})
+                prepared_audio_paths=['scene.mp3'], narration_budget_usd=.002, video_path=str(video), metadata={'title': '한글'})
             parsed = action.read_request(path, digest)
             self.assertEqual(parsed.manual_clip_paths, clips)
             mock = AsyncMock(return_value=result)
             with patch.object(ProductionService, method, mock):
                 response = await action.execute_action(parsed, path, digest)
             mock.assert_awaited_once()
-            self.assertEqual(response['kind'], 'path' if operation in {'frame', 'raw'} else 'production')
+            self.assertEqual(response['kind'], 'path' if operation in {'frame', 'raw', 'narration'} else 'production')
             if operation == 'edit':
                 self.assertTrue(mock.await_args.kwargs['retain_narration'])
                 self.assertEqual(mock.await_args.kwargs['prepared_audio_paths'], ['scene.mp3'])
@@ -283,7 +283,7 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
         self.assertFalse(self.pending.exists())
 
     async def test_real_cli_child_transports_scoped_action_with_offline_provider_only(self):
-        _, path, digest = self.request('frame')
+        _, path, digest = self.request(getattr(self, '_transport_operation', 'frame'), narration_budget_usd=.002)
         hooks = self.root / 'hooks';hooks.mkdir()
         (hooks / 'sitecustomize.py').write_text('''import os
 from pathlib import Path
@@ -307,6 +307,13 @@ async def frame(self,script,scene_index,**kwargs):
  output=settings.output_dir/'offline-transport.png';output.write_bytes(b'mocked image, not paid media')
  return str(output)
 ProductionService.generate_first_frame=frame
+async def narration(self,script,**kwargs):
+ assert kwargs['request_budget_usd']==.002
+ assert os.environ['SHORTSMAKER_EPISODE_ID']
+ assert settings.openai_monthly_budget_usd<=.3
+ output=settings.output_dir/'offline-narration.json';output.write_text('mocked receipt, not paid speech')
+ return str(output)
+ProductionService.prepare_narration=narration
 ''')
         command = [sys.executable, str(Path('scripts/operate_schedule.py').resolve()), '--schedules',
             str(self.manager.filename), 'run', '--studio-request', str(path), '--request-sha256', digest,
@@ -321,6 +328,22 @@ ProductionService.generate_first_frame=frame
         self.assertTrue(Path(receipt['value']).is_file())
         self.assertFalse(self.pending.exists())
         self.assertEqual(before, (google_budget._database_path().read_bytes(), openai_budget._database_path().read_bytes()))
+
+    async def test_real_cli_child_transports_narration_action_with_existing_episode_caps(self):
+        self._transport_operation = 'narration'
+        await self.test_real_cli_child_transports_scoped_action_with_offline_provider_only()
+
+    async def test_scoped_narration_dispatch_uses_distinct_zero_cap_and_requires_typed_path_receipt(self):
+        self.state.confirm_script_review()
+        service = self.state.new_production_service()
+        with patch.object(service, '_dispatch', new_callable=AsyncMock, return_value='narration.json') as dispatch:
+            self.assertEqual(await service.prepare_narration(self.script, request_budget_usd=0), 'narration.json')
+            dispatch.assert_awaited_once_with('narration', self.script, narration_budget_usd=0)
+        request, path, digest = self.request('narration', narration_budget_usd=0)
+        action.write_message(path.with_suffix('.result.json'), dict(status='returned', request_sha256=digest,
+                                                                  kind='production', value=asdict(ProductionResult(True))))
+        with self.assertRaisesRegex(ValueError, '단계'):
+            action.validate_receipt(path, digest)
 
     async def test_explicit_scope_detach_dialog_preserves_inputs_and_stale_events(self):
         self.enterContext(patch.object(core, 'loop', asyncio.get_running_loop()))

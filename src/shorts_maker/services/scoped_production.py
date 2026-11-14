@@ -119,6 +119,9 @@ class ScopedProductionService(ProductionService):
         except (OSError, ValueError, TypeError, KeyError):
             pass
 
+    async def prepare_narration(self, script, *, request_budget_usd):
+        return await self._dispatch('narration', script, narration_budget_usd=request_budget_usd)
+
     async def generate_first_frame(self, script, scene_index, *, request_budget_usd):
         return await self._dispatch('frame', script, scene_index=scene_index, request_budget_usd=request_budget_usd)
 

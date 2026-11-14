@@ -109,6 +109,8 @@ class AppState:
     chroma_key_threshold: float = 0.3
 
     # 수동 생성 모드
+    narration_preparation_message: str = ''
+    narration_preparing: bool = False
     manual_video_mode: bool = False
     manual_script_id: str = ""
 
@@ -368,6 +370,7 @@ class AppState:
         self.invalidate_video_result()
         self.prepared_narration_manifest = manifest_path or None
         self.prepared_narration_sha256 = digest
+        self.narration_preparation_message = ''
 
     def load_saved_script(self, script, *, backup_current: bool = False) -> None:
         from shorts_maker.services.audio_choices import load_audio_choices, audio_choice_fingerprint
@@ -570,6 +573,7 @@ class AppState:
         self.pipeline_phase = None
         self.pipeline_progress = 0.0
         self.pipeline_message = ""
+        self.narration_preparation_message = ""
         self.scene_progresses = []
         self.total_scenes = 0
         self.completed_scenes = 0

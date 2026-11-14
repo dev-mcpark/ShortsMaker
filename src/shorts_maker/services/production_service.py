@@ -256,6 +256,17 @@ class ProductionService:
         self.logger.info(f"[{phase.value}] {percent:.0f}% - {message}")
         self._notify_progress()
 
+    async def prepare_narration(self, script: ShortsScript, *, request_budget_usd: float) -> str:
+        """Prepare retained speech independently of visuals, music and editing."""
+        from shorts_maker.services.narration_preparation import prepare_script_narration
+
+        self._update_progress(ProductionPhase.GENERATING, 0, '내레이션 준비 중 · 현재 요청이 끝난 뒤 중지할 수 있습니다.')
+        manifest = await prepare_script_narration(
+            script, self.editor_options.get('tts_voice', 'alloy'), request_budget_usd,
+            cancelled=self.is_cancelled)
+        self._update_progress(ProductionPhase.GENERATING, 100, '내레이션 보관 완료 · 연결 후 들어보세요.')
+        return manifest
+
     def _init_scene_progresses(self, num_scenes: int):
         """씬별 진행 상황 초기화"""
         self._progress.total_scenes = num_scenes

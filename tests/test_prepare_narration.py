@@ -12,7 +12,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from scripts.prepare_narration import prepare, _narration_lock
+from shorts_maker.services.narration_preparation import prepare, _narration_lock
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.services import openai_budget
@@ -83,7 +83,7 @@ class PrepareNarrationTests(unittest.TestCase):
                 (output/'scene_2.mp3').write_bytes(b'reconciled existing audio')
                 with patch.object(settings,'paid_production_enabled',False), patch.object(settings,'openai_api_key',''), \
                         patch.object(VideoEditor,'_generate_tts') as tts, \
-                        patch('scripts.prepare_narration.check_openai_speech_budget') as budget:
+                        patch('shorts_maker.services.narration_preparation.check_openai_speech_budget') as budget:
                     result=asyncio.run(prepare(script,output,'nova',.02,15))
                     tts.assert_not_called();budget.assert_not_called()
                 self.assertEqual(calls,[1,2])
@@ -142,7 +142,7 @@ class PrepareNarrationTests(unittest.TestCase):
                     asyncio.run(prepare(script, output, 'nova', .02, 15, plan_only=True))
                 self.assertFalse(output.exists())
                 # Only the cache-routing contract is mocked, not media quality.
-                with patch('scripts.prepare_narration._scene_state', return_value='complete'):
+                with patch('shorts_maker.services.narration_preparation._scene_state', return_value='complete'):
                     plan = asyncio.run(prepare(script, output, 'nova', .02, 15, plan_only=True))
                 self.assertEqual(plan['missing_scenes'], [])
                 self.assertEqual(plan['additional_request_reserve_usd'], 0)
@@ -152,7 +152,7 @@ class PrepareNarrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);output=root/'narration';output.mkdir()
             child=subprocess.Popen([sys.executable,'-c',
-                'import sys; from pathlib import Path; from scripts.prepare_narration import _narration_lock\n'
+                'import sys; from pathlib import Path; from shorts_maker.services.narration_preparation import _narration_lock\n'
                 'with _narration_lock(Path(sys.argv[1])):\n print("locked",flush=True);sys.stdin.read()\n',
                 str(output)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,
                 env={**os.environ,'OUTPUT_DIR':str(root/'child-output')})
@@ -180,7 +180,7 @@ class PrepareNarrationTests(unittest.TestCase):
                 (output/'narration.json').write_text('{}')
             with patch.object(settings,'output_dir',root),patch.object(settings,'paid_production_enabled',True), \
                     patch.object(settings,'openai_api_key','test'),patch.object(VideoEditor,'_generate_tts') as tts, \
-                    patch('scripts.prepare_narration.check_openai_speech_budget',side_effect=changed):
+                    patch('shorts_maker.services.narration_preparation.check_openai_speech_budget',side_effect=changed):
                 with self.assertRaises(ValueError):asyncio.run(prepare(script,output,'nova',.02,15))
                 tts.assert_not_called()
             self.assertEqual((output/'narration.json').read_text(),'{}')
@@ -198,7 +198,7 @@ class PrepareNarrationTests(unittest.TestCase):
             for change in ({}, {'scenes':{'2':[]}}, {'reserved_usd_total':False}):
                 path.write_text(json.dumps({**base,**change}));before=path.read_bytes()
                 with patch.object(settings,'output_dir',root),patch.object(VideoEditor,'_generate_tts') as tts, \
-                        patch('scripts.prepare_narration.check_openai_speech_budget') as budget:
+                        patch('shorts_maker.services.narration_preparation.check_openai_speech_budget') as budget:
                     with self.assertRaises(ValueError):asyncio.run(prepare(script,output,'nova',.02,15))
                     tts.assert_not_called();budget.assert_not_called()
                 self.assertEqual(path.read_bytes(),before)

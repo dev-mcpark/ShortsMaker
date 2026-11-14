@@ -34,7 +34,7 @@ class EpisodeScope(BaseModel):
 class StudioAction(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     scope: EpisodeScope
-    operation: Literal['frame', 'raw', 'edit', 'upload']
+    operation: Literal['frame', 'raw', 'narration', 'edit', 'upload']
     schedule_sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
     script_sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
     review_receipt: str = Field(pattern=r'^[0-9a-f]{64}$')
@@ -42,6 +42,7 @@ class StudioAction(BaseModel):
     image_model: str
     scene_index: int | None = Field(default=None, ge=0)
     request_budget_usd: FiniteFloat | None = Field(default=None, gt=0)
+    narration_budget_usd: FiniteFloat | None = Field(default=None, ge=0)
     expected_frame_sha256: str | None = Field(default=None, pattern=r'^[0-9a-f]{64}$')
     manual_clip_paths: dict[int, str] | None = None
     prepared_audio_paths: list[str] | None = None
@@ -115,7 +116,7 @@ def validate_receipt(path: str | Path, request_sha256: str) -> dict:
         raise ValueError('회차 결과 내용이 올바르지 않습니다.')
     if type(data.get('cancelled', False)) is not bool:
         raise ValueError('회차 중지 결과를 확인하세요.')
-    if data['kind'] != 'error' and data['kind'] != ('path' if action.operation in {'frame', 'raw'} else 'production'):
+    if data['kind'] != 'error' and data['kind'] != ('path' if action.operation in {'frame', 'raw', 'narration'} else 'production'):
         raise ValueError('요청한 단계와 회차 결과가 다릅니다.')
     return data
 
@@ -187,6 +188,10 @@ async def execute_action(request: StudioAction, path: Path, digest: str):
             result = await service.generate_review_clip(script, request.scene_index,
                 request_budget_usd=request.request_budget_usd, expected_frame_sha256=request.expected_frame_sha256,
                 manual_clip_paths=request.manual_clip_paths)
+        elif request.operation == 'narration':
+            if request.narration_budget_usd is None:
+                raise ValueError('내레이션의 요청 상한이 필요합니다.')
+            result = await service.prepare_narration(script, request_budget_usd=request.narration_budget_usd)
         elif request.operation == 'edit':
             result = await service.produce_video(script, manual_clip_paths=request.manual_clip_paths,
                 prepared_audio_paths=request.prepared_audio_paths, retain_narration=True, finish_phase=request.finish_phase)

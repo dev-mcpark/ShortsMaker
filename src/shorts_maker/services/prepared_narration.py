@@ -70,7 +70,9 @@ def list_narration_sets(script) -> dict[str, str]:
         try:
             narration_paths(script, str(path))
             record = json.loads(path.read_text(encoding='utf-8'))
-            options[str(path.resolve())] = f'{record.get("voice", "음성")} · {path.parent.relative_to(settings.output_dir)}'
+            label = (f'음성 준비 {path.parent.name[:8]}' if path.parent.parent.name == 'narration_preparation'
+                     else str(path.parent.relative_to(settings.output_dir)))
+            options[str(path.resolve())] = f'{record.get("voice", "음성")} · {label}'
         except (OSError, ValueError, TypeError):
             continue
     return options

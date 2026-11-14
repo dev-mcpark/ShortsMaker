@@ -4,6 +4,7 @@ from nicegui import ui
 
 from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
+from shorts_maker.gui.components.narration_prepare import render_narration_prepare
 from shorts_maker.services.prepared_narration import list_narration_sets
 
 
@@ -15,10 +16,11 @@ def render_narration_panel(state):
 
     @ui.refreshable
     def panel():
-        with ui.expansion('내레이션 · 기존 음성 재사용', icon='graphic_eq',
+        with ui.expansion('내레이션 · 준비·재생·재사용', icon='graphic_eq',
                           value=bool(state.prepared_narration_manifest)).classes('w-full bg-slate-900').props('dark') as view:
             ui.label('현재 내레이션과 모든 장면의 기록·파일 해시가 일치하는 세트만 표시합니다. 연결 전에 소리·길이도 검사합니다.').classes('text-xs text-slate-300')
             ui.label('연결·새 음성 전환 후 우측의 각본별 음성·음악 설정 저장을 누르면 같은 대본을 다시 열 때 선택이 복원됩니다.').classes('text-xs text-slate-300')
+            render_narration_prepare(state, panel)
             options = {'': '선택하세요', **list_narration_sets(state.script)}
             choice = ui.select(options, value=state.prepared_narration_manifest if state.prepared_narration_manifest in options else '',
                                label='준비된 내레이션 세트').props('dark outlined').classes('w-full')
@@ -40,11 +42,11 @@ def render_narration_panel(state):
                     safe_notify(f'음성 연결 실패: {error}', type='negative')
 
             with ui.row():
-                ui.button('이 음성 세트 연결', on_click=lambda: select()).bind_enabled_from(
+                ui.button('이 음성 세트 연결', on_click=lambda: select()).classes('min-h-[44px]').bind_enabled_from(
                     state, 'is_busy', lambda busy: not busy and bool(choice.value))
-                ui.button('새 음성 생성으로 전환', on_click=lambda: select(False)).props('flat').bind_enabled_from(
+                ui.button('새 음성 생성으로 전환', on_click=lambda: select(False)).props('flat').classes('min-h-[44px]').bind_enabled_from(
                     state, 'is_busy', lambda busy: not busy and bool(state.prepared_narration_manifest))
-                ui.button('음성 목록 새로고침', on_click=lambda: safe_refresh(panel)).props('flat').bind_enabled_from(
+                ui.button('음성 목록 새로고침', on_click=lambda: safe_refresh(panel)).props('flat').classes('min-h-[44px]').bind_enabled_from(
                     state, 'is_busy', lambda busy: not busy)
             if state.prepared_narration_manifest:
                 try:
@@ -58,5 +60,13 @@ def render_narration_panel(state):
                     ui.label('새 음성으로 자동 전환하지 않습니다. 파일을 복구하거나, 목록에서 다시 연결하거나, 새 음성 생성으로 전환을 직접 선택하세요.').classes('text-xs text-amber-300')
             else:
                 ui.label('현재 선택: 새 음성 생성 · 편집 시 API 비용이 발생합니다. 목록에 없는 음성은 연결하지 않습니다.').classes('text-xs text-amber-200')
+            if state.narration_preparing:
+                def settled():
+                    if view.is_deleted:
+                        timer.cancel()
+                    elif not state.narration_preparing:
+                        timer.cancel()
+                        safe_refresh(panel)
+                timer = ui.timer(.25, settled)
     panel()
     return panel
