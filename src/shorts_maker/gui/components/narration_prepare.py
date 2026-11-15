@@ -15,6 +15,7 @@ def render_narration_prepare(state, refresh):
     planning = False
     with ui.column().classes('w-full gap-2') as view:
         ui.label('영상·BGM 없이 음성만 준비하고 들어볼 수 있습니다. 완료한 장면은 보존하고, 결과가 불확실한 요청은 다시 보내지 않습니다.').classes('text-xs text-slate-300')
+        ui.label('제목·화면 연출·장면 순서를 바꿔도 출처와 장면 번호별 문장·음색이 같으면 중단한 음성 작업을 이어갑니다.').classes('text-xs text-slate-300')
         ui.label().bind_text_from(state, 'narration_preparation_message').classes('text-xs text-amber-200 break-all').props('role=status')
 
         def context():

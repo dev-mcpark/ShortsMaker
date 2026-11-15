@@ -84,6 +84,131 @@ class NarrationPreparationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.tts.await_count, 2)
         self.assertEqual(manifest.parent.joinpath('scene_1.mp3').read_bytes(), first)
 
+    async def partial_voice(self):
+        service = ProductionService(editor_options={'tts_voice': 'nova'})
+        async def first_only(*args, **kwargs):
+            service.cancel()
+            return str(self.audio)
+        self.tts.side_effect = first_only
+        quote = preparation.plan_narration(self.script, 'nova')
+        with self.assertRaisesRegex(ValueError, '중지'):
+            await service.prepare_narration(self.script, request_budget_usd=quote['additional_request_reserve_usd'])
+        self.tts.side_effect = None
+        return Path(quote['manifest_path'])
+
+    def visual_revision(self):
+        revised = self.script.model_copy(deep=True)
+        revised.title = 'Changed visual plan'
+        revised.scenes[0].visual_description = 'A wider, clearer view of the same bus'
+        revised.scenes[0].motion_instruction = 'A small sideways camera move'
+        revised.scenes.reverse()
+        return revised
+
+    async def test_visual_revision_reuses_partial_voice_profile_and_preserves_original_source(self):
+        manifest = await self.partial_voice()
+        source = manifest.with_name('script.json');source_bytes = source.read_bytes()
+        first = manifest.with_name('scene_1.mp3');first_bytes = first.read_bytes()
+        previous_hold = json.loads(manifest.read_text())['reserved_usd_total']
+        revised = self.visual_revision()
+        quote = preparation.plan_narration(revised, 'nova')
+        self.assertEqual(quote['missing_scenes'], [2])
+        self.assertEqual(quote['manifest_path'], str(manifest))
+        self.assertEqual(quote['prior_request_reserve_usd'], previous_hold)
+        result = await ProductionService(editor_options={'tts_voice':'nova'}).prepare_narration(
+            revised, request_budget_usd=quote['additional_request_reserve_usd'])
+        self.assertEqual(result, str(manifest))
+        self.assertEqual(self.tts.await_count, 2)
+        self.assertEqual(first.read_bytes(), first_bytes)
+        self.assertEqual(source.read_bytes(), source_bytes)
+        self.assertEqual([Path(p).name for p in narration_paths(revised, result)], ['scene_2.mp3', 'scene_1.mp3'])
+        self.assertEqual(len(list((self.root/'evaluation/narration_preparation').glob('*/script.json'))), 1)
+        self.assertAlmostEqual(json.loads(manifest.read_text())['reserved_usd_total'],
+                               previous_hold + quote['additional_request_reserve_usd'])
+
+    async def test_visual_revision_cannot_bypass_compatible_unknown_request_even_with_other_complete_set(self):
+        self.tts.side_effect = RuntimeError('unknown provider result')
+        with self.assertRaises(RuntimeError):
+            await ProductionService(editor_options={'tts_voice':'nova'}).prepare_narration(self.script, request_budget_usd=.02)
+        revised = self.visual_revision()
+        content, directory = preparation._profile(revised, 'nova')
+        directory.mkdir(parents=True);directory.joinpath('script.json').write_bytes(content)
+        retain_narration_set(revised, [str(self.audio)]*2, 'nova')
+        before = {p:p.read_bytes() for p in self.root.rglob('*.json')}
+        with self.assertRaisesRegex(ValueError, 'UNVERIFIED'):
+            preparation.plan_narration(revised, 'nova')
+        with self.assertRaisesRegex(ValueError, 'UNVERIFIED'):
+            await ProductionService(editor_options={'tts_voice':'nova'}).prepare_narration(revised, request_budget_usd=.02)
+        self.tts.assert_awaited_once()
+        self.assertEqual(before, {p:p.read_bytes() for p in self.root.rglob('*.json')})
+
+    async def test_partial_continuation_requires_same_voice_scene_text_and_source(self):
+        await self.partial_voice()
+        revised = self.visual_revision()
+        changed_text = revised.model_copy(deep=True);changed_text.scenes[0].script_text = '다른 설명'
+        changed_source = revised.model_copy(update={'source_url':'https://example.com/other'})
+        for candidate, voice in ((changed_text,'nova'),(changed_source,'nova'),(revised,'alloy')):
+            with self.subTest(voice=voice,title=candidate.title):
+                quote = preparation.plan_narration(candidate, voice)
+                self.assertEqual(set(quote['missing_scenes']), {1,2})
+        self.tts.assert_awaited_once()
+
+    async def test_same_speech_identity_is_locked_across_visual_revisions_and_processes(self):
+        import sys
+        manifest = await self.partial_voice()
+        root = manifest.parent.parent
+        locks = list(root.glob('.claims/*/.narration.lock.sqlite3'))
+        self.assertEqual(len(locks), 1)
+        code = ('import sqlite3,sys;db=sqlite3.connect(sys.argv[1],timeout=0,isolation_level=None);'
+                'db.execute("BEGIN EXCLUSIVE");print("locked",flush=True);sys.stdin.readline();db.close()')
+        child = await asyncio.create_subprocess_exec(sys.executable,'-c',code,str(locks[0]),
+            stdin=asyncio.subprocess.PIPE,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+        try:
+            self.assertEqual(await asyncio.wait_for(child.stdout.readline(),5), b'locked\n')
+            with self.assertRaisesRegex(ValueError, 'NARRATION_IN_PROGRESS'):
+                await ProductionService(editor_options={'tts_voice':'nova'}).prepare_narration(
+                    self.visual_revision(), request_budget_usd=.02)
+            self.tts.assert_awaited_once()
+            # Another narration identity can proceed; this is not a global production lock.
+            other = self.script.model_copy(deep=True);other.scenes[0].script_text = 'A different narration'
+            await ProductionService(editor_options={'tts_voice':'nova'}).prepare_narration(other,request_budget_usd=.02)
+            self.assertEqual(self.tts.await_count, 3)
+        finally:
+            if child.returncode is None:
+                child.stdin.write(b'release\n');await child.stdin.drain()
+                await asyncio.wait_for(child.wait(),5)
+        quote = preparation.plan_narration(self.visual_revision(),'nova')
+        await ProductionService(editor_options={'tts_voice':'nova'}).prepare_narration(
+            self.visual_revision(),request_budget_usd=quote['additional_request_reserve_usd'])
+        self.assertEqual(self.tts.await_count, 4)
+        self.assertEqual(json.loads(manifest.read_text())['scenes']['2']['status'], 'complete')
+
+    async def test_candidate_source_is_bounded_and_linked_or_changed_matching_records_are_not_reused(self):
+        manifest = await self.partial_voice()
+        source = manifest.with_name('script.json');content = source.read_bytes()
+        source.write_bytes(b' ' * (2 * 1024 * 1024 + 1))
+        self.assertIsNone(preparation._compatible_content(self.visual_revision(),'nova',source.parent))
+        source.unlink();outside = self.root/'outside.json';outside.write_bytes(content)
+        source.symlink_to(outside)
+        self.assertIsNone(preparation._compatible_content(self.visual_revision(),'nova',source.parent))
+        source.unlink();source.write_bytes(content)
+        manifest.write_text('{invalid')
+        with self.assertRaises(ValueError):
+            preparation.plan_narration(self.visual_revision(),'nova')
+        self.tts.assert_awaited_once()
+        self.assertEqual(source.read_bytes(), content)
+        self.assertEqual(manifest.read_text(), '{invalid')
+        claims = manifest.parent.parent/'.claims'
+        kept = claims.with_name('kept-claims');claims.rename(kept)
+        outside_dir = self.root/'outside-claims';outside_dir.mkdir();claims.symlink_to(outside_dir)
+        try:
+            with self.assertRaisesRegex(ValueError, '잠금 경로'):
+                await ProductionService(editor_options={'tts_voice':'nova'}).prepare_narration(
+                    self.visual_revision(),request_budget_usd=.02)
+            self.assertEqual(list(outside_dir.iterdir()), [])
+            self.tts.assert_awaited_once()
+        finally:
+            claims.unlink();kept.rename(claims)
+
     async def test_unknown_provider_failure_cannot_be_replayed_and_zero_quote_never_buys(self):
         self.tts.side_effect = RuntimeError('unknown request result')
         service = ProductionService(editor_options={'tts_voice':'nova'})

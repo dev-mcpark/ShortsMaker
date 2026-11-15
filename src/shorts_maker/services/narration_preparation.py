@@ -238,14 +238,54 @@ def _profile(script: ShortsScript, voice: str) -> tuple[bytes, Path]:
     return content, directory
 
 
+def _speech_identity(script: ShortsScript) -> tuple:
+    return (script.source_name, script.source_url, script.supporting_source_urls,
+            sorted((s.scene_number, s.script_text) for s in script.scenes))
+
+
+def _compatible_content(script: ShortsScript, voice: str, directory: Path) -> bytes | None:
+    source = directory / 'script.json'
+    if directory.is_symlink() or source.is_symlink() or not source.is_file():
+        return None
+    try:
+        with source.open('rb') as stream:
+            content = stream.read(2 * 1024 * 1024 + 1)
+        if len(content) > 2 * 1024 * 1024:
+            return None
+        original = ShortsScript.model_validate_json(content)
+        _, expected = _profile(original, voice)
+        if (expected.resolve() != directory.resolve()
+                or _speech_identity(original) != _speech_identity(script)):
+            return None
+        return content
+    except (OSError, ValueError):
+        return None
+
+
 def plan_narration(script: ShortsScript, voice: str) -> dict:
     """Read-only quote; reuse matching complete speech before buying a new set."""
     from shorts_maker.services.openai_budget import speech_price
     from shorts_maker.services.prepared_narration import list_narration_sets, narration_paths
 
     content, directory = _profile(script, voice)
-    _, manifest, _, _, _, quote = inspect(content, directory, voice, 1_000_000, speech_price(VideoEditor.TTS_MODEL))
-    manifest_path = directory / 'narration.json'
+    rate = speech_price(VideoEditor.TTS_MODEL)
+    _, manifest, _, _, _, quote = inspect(content, directory, voice, 1_000_000, rate)
+    root = directory.parent
+    canonical = directory
+    if root.is_symlink():
+        raise ValueError('내레이션 보관 경로를 확인하세요.')
+    for source in sorted(root.glob('*/script.json')):
+        if source.parent == canonical:
+            continue
+        previous = _compatible_content(script, voice, source.parent)
+        if previous is None:
+            continue
+        # Inspect every compatible journal before any complete-set shortcut or new request.
+        _, candidate, _, _, _, candidate_quote = inspect(previous, source.parent, voice, 1_000_000, rate)
+        if len(candidate_quote['missing_scenes']) < len(quote['missing_scenes']):
+            manifest, quote = candidate, candidate_quote
+            directory = source.parent
+    manifest_path = directory.resolve() / 'narration.json'
     # A pending profile must pass inspection even if another complete set exists.
     for path in list_narration_sets(script):
         record = json.loads(Path(path).read_text(encoding='utf-8'))
@@ -264,27 +304,42 @@ async def prepare_script_narration(script: ShortsScript, voice: str, request_bud
 
     if isinstance(request_budget_usd, bool) or not math.isfinite(request_budget_usd) or request_budget_usd < 0:
         raise ValueError('내레이션 요청 상한을 확인하세요.')
-    quote = await asyncio.to_thread(plan_narration, script, voice)
-    if quote['additional_request_reserve_usd'] > request_budget_usd:
-        raise ValueError('내레이션 요청 예약액이 확인한 상한을 초과합니다. 다시 확인하세요.')
-    if cancelled():
-        raise ValueError('내레이션 준비를 중지했습니다. 저장된 음성은 보존합니다.')
-    if quote.get('reusable'):
-        return quote['manifest_path']
-    content, directory = _profile(script, voice)
-    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    source = directory / 'script.json'
-    with _narration_lock(directory):
-        if source.is_symlink() or (source.exists() and source.read_bytes() != content):
-            raise ValueError('내레이션에 결합된 대본 파일을 확인하세요.')
-        if not source.exists():
-            # The profile mutex protects this immutable source from other preparers.
-            with source.open('xb') as stream:
-                os.chmod(source, 0o600)
-                stream.write(content)
-                stream.flush()
-                os.fsync(stream.fileno())
-    await prepare(source, directory, voice,
-                  round(quote.get('prior_request_reserve_usd', 0) + request_budget_usd, 6),
-                  speech_price(VideoEditor.TTS_MODEL), cancelled=cancelled)
-    return str((directory / 'narration.json').resolve())
+    _, canonical = _profile(script, voice)
+    root = canonical.parent
+    identity = _hash(json.dumps((VideoEditor.TTS_MODEL, voice, _speech_identity(script)),
+                                ensure_ascii=False, sort_keys=True).encode('utf-8'))
+    claim = root / '.claims' / identity
+    if (root.is_symlink() or claim.parent.is_symlink() or claim.is_symlink()
+            or not claim.resolve().is_relative_to(settings.output_dir.resolve())):
+        raise ValueError('내레이션 실행 잠금 경로를 확인하세요.')
+    claim.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with _narration_lock(claim):
+        quote = await asyncio.to_thread(plan_narration, script, voice)
+        if quote['additional_request_reserve_usd'] > request_budget_usd:
+            raise ValueError('내레이션 요청 예약액이 확인한 상한을 초과합니다. 다시 확인하세요.')
+        if cancelled():
+            raise ValueError('내레이션 준비를 중지했습니다. 저장된 음성은 보존합니다.')
+        if quote.get('reusable'):
+            return quote['manifest_path']
+        content, canonical = _profile(script, voice)
+        directory = Path(quote['output_dir'])
+        if directory.resolve() != canonical.resolve():
+            content = _compatible_content(script, voice, directory)
+            if content is None:
+                raise ValueError('보관된 음성의 대본이 바뀌었습니다. 기존 기록을 다시 확인하세요.')
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        source = directory / 'script.json'
+        with _narration_lock(directory):
+            if source.is_symlink() or (source.exists() and source.read_bytes() != content):
+                raise ValueError('내레이션에 결합된 대본 파일을 확인하세요.')
+            if not source.exists():
+                # The profile mutex protects this immutable source from other preparers.
+                with source.open('xb') as stream:
+                    os.chmod(source, 0o600)
+                    stream.write(content)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+        await prepare(source, directory, voice,
+                      round(quote.get('prior_request_reserve_usd', 0) + request_budget_usd, 6),
+                      speech_price(VideoEditor.TTS_MODEL), cancelled=cancelled)
+        return str((directory / 'narration.json').resolve())
