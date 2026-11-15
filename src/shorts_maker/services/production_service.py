@@ -821,6 +821,8 @@ class ProductionService:
             if isinstance(script, ShortsScript):
                 self._update_progress(ProductionPhase.GENERATING, 0, "내레이션 길이 확인 중...")
                 editor = self._get_editor()
+                if hasattr(editor, "preflight_text_overlays"):
+                    await asyncio.to_thread(editor.preflight_text_overlays, script)
                 if hasattr(editor, "preflight_music"):
                     editor.preflight_music(script)
                 if prepared_audio_paths is None:

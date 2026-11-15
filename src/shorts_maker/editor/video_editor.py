@@ -161,6 +161,7 @@ class VideoEditor:
         from shorts_maker.services.prepared_narration import narration_paths
 
         self.prepared_narration_manifest = None
+        self.preflight_text_overlays(script)
         self.preflight_music(script)
         voice = self._get_voice_for_mood(getattr(script, 'mood', 'cinematic'))
         quote = await asyncio.to_thread(plan_narration, script, voice)
@@ -509,6 +510,11 @@ class VideoEditor:
             end = duration if index == len(chunks) - 1 else spoken_duration * elapsed / total
             segments.append((chunk, start, end - start))
         return segments
+
+    def preflight_text_overlays(self, script) -> None:
+        """Use the real renderer to reject invalid labels before buying narration."""
+        for scene in script.scenes:
+            self._cleanup_clips(self._create_text_overlay_clips(scene.scene_number, scene.duration_seconds))
 
     def _create_text_overlay_clips(self, scene_number: int, duration: float) -> List:
         clips = []

@@ -19,6 +19,7 @@ from shorts_maker.utils.config import settings
 from shorts_maker.services.openai_models import PRIMARY_CHAT_MODEL
 from shorts_maker.gui.components.budget_panel import render_budget_panel
 from shorts_maker.gui.components.music_preview import render_music_preview
+from shorts_maker.gui.components.screen_notice import render_screen_notice
 from shorts_maker.gui.components.audio_recovery import render_audio_recovery
 from shorts_maker.gui.runtime_info import runtime_label, render_runtime_info
 
@@ -245,6 +246,7 @@ def render_main_page() -> None:
                 ui.separator().classes('bg-slate-800 my-2')
 
                 render_audio_recovery(state, lambda: render_active_view())
+                render_screen_notice(state)
 
                 with ui.expansion('고급 · API 연결', icon='settings').classes('w-full'):
                     # API Keys Config (Inline for fast edit)

@@ -94,6 +94,7 @@ class AppState:
     subtitle_color: str = "#F6F8FA"
     subtitle_size: int = 54
     subtitle_y_position: int = 1350
+    screen_notice: str = ""
 
     # Character Overlay Options
     character_overlay_enabled: bool = False
@@ -158,7 +159,7 @@ class AppState:
         return self._production_service
 
     def _editor_options(self) -> Dict[str, Any]:
-        return {
+        options = {
             "tts_voice": self.tts_voice,
             "bgm_mood": self.bgm_mood,
             "bgm_track": self.bgm_track or None,
@@ -167,6 +168,13 @@ class AppState:
             "subtitle_size": self.subtitle_size,
             "subtitle_y_position": self.subtitle_y_position,
         }
+        if not isinstance(self.screen_notice, str) or len(self.screen_notice) > 20 or '\n' in self.screen_notice or '\r' in self.screen_notice:
+            raise ValueError('화면 안내 문구는 줄바꿈 없이 20자 이내로 입력하세요.')
+        if self.screen_notice.strip() and self.script:
+            options['text_overlays'] = {str(scene.scene_number): [
+                {'text': self.screen_notice.strip(), 'start': 0, 'x': 60, 'y': 70}
+            ] for scene in self.script.scenes}
+        return options
 
     def new_production_service(self, parallel_clips: bool = False) -> "ProductionService":
         """Create one configured service for a new production run."""

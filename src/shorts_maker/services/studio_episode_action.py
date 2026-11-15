@@ -160,7 +160,7 @@ async def execute_action(request: StudioAction, path: Path, digest: str):
         raise ValueError('현재 대본과 검토 확인이 일치하지 않습니다.')
     if request.operation in {'frame', 'raw'} and (request.scene_index is None or request.scene_index >= len(script.scenes)):
         raise ValueError('현재 대본의 장면 번호를 선택하세요.')
-    allowed_editor = {'tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume', 'subtitle_color', 'subtitle_size', 'subtitle_y_position'}
+    allowed_editor = {'tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume', 'subtitle_color', 'subtitle_size', 'subtitle_y_position', 'text_overlays'}
     if request.editor_options.keys() - allowed_editor or request.overlay_options.keys() - CharacterOverlayConfig().to_dict().keys():
         raise ValueError('지원하는 편집 설정만 사용할 수 있습니다.')
     service = ProductionService(mode=request.mode, max_veo_attempts=1, parallel_clips=False,

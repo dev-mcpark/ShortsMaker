@@ -144,6 +144,16 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
                 self.assertTrue(mock.await_args.kwargs['retain_narration'])
                 self.assertEqual(mock.await_args.kwargs['prepared_audio_paths'], ['scene.mp3'])
 
+    async def test_worker_forwards_the_same_notice_to_the_existing_editor_path(self):
+        self.scoped_env()
+        self.state.screen_notice = '설명용 개념 모형'
+        options = self.state._editor_options()
+        request, path, digest = self.request('edit', editor_options=options)
+        with patch.object(action, 'ProductionService', wraps=ProductionService) as factory, \
+                patch.object(ProductionService, 'produce_video', AsyncMock(return_value=ProductionResult(True))):
+            await action.execute_action(request, path, digest)
+        self.assertEqual(factory.call_args.kwargs['editor_options']['text_overlays'], options['text_overlays'])
+
     async def test_worker_rejects_wrong_profile_caps_hash_and_unreviewed_before_paid_work(self):
         self.scoped_env()
         request, path, digest = self.request()
