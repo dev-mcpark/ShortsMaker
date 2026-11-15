@@ -465,7 +465,7 @@ class AppState:
             numbers.append(scene['scene_number'])
             duration = scene.get('duration_seconds', 5.0)
             if duration is not None and (type(duration) not in {int, float} or not math.isfinite(duration)):
-                raise ValueError('고급 JSON의 장면 예상 길이는 숫자여야 합니다.')
+                raise ValueError('고급 JSON의 장면 예상 길이는 유한한 숫자여야 합니다.')
             if not isinstance(scene.get('visual_mode'), (str, type(None))):
                 raise ValueError('고급 JSON의 장면 화면 구성을 확인하세요.')
         if len(set(numbers)) != len(numbers) or any(not isinstance(data.get(field, ''), str)

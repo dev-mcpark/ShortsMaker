@@ -30,7 +30,7 @@ class VideoScene(BaseModel):
     visual_description: str
     motion_instruction: str = ""  # Optional: Veo 모드에서만 사용 (image 모드에서는 빈 문자열)
     script_text: str
-    duration_seconds: float = Field(default=5.0, gt=0)
+    duration_seconds: float = Field(default=5.0, gt=0, allow_inf_nan=False)
     visual_mode: Optional[Literal["image", "video"]] = None  # hybrid 모드에서만 적용
 
     @field_validator("visual_description", "script_text")
