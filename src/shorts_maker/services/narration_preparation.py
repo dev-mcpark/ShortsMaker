@@ -16,6 +16,7 @@ from typing import Callable
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.services.openai_budget import check_openai_speech_budget
 from shorts_maker.services.openai_models import require_model_active
+from shorts_maker.services.prepared_narration import speech_identity
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
@@ -238,11 +239,6 @@ def _profile(script: ShortsScript, voice: str) -> tuple[bytes, Path]:
     return content, directory
 
 
-def _speech_identity(script: ShortsScript) -> tuple:
-    return (script.source_name, script.source_url, script.supporting_source_urls,
-            sorted((s.scene_number, s.script_text) for s in script.scenes))
-
-
 def _compatible_content(script: ShortsScript, voice: str, directory: Path) -> bytes | None:
     source = directory / 'script.json'
     if directory.is_symlink() or source.is_symlink() or not source.is_file():
@@ -255,7 +251,7 @@ def _compatible_content(script: ShortsScript, voice: str, directory: Path) -> by
         original = ShortsScript.model_validate_json(content)
         _, expected = _profile(original, voice)
         if (expected.resolve() != directory.resolve()
-                or _speech_identity(original) != _speech_identity(script)):
+                or speech_identity(original) != speech_identity(script)):
             return None
         return content
     except (OSError, ValueError):
@@ -306,7 +302,7 @@ async def prepare_script_narration(script: ShortsScript, voice: str, request_bud
         raise ValueError('내레이션 요청 상한을 확인하세요.')
     _, canonical = _profile(script, voice)
     root = canonical.parent
-    identity = _hash(json.dumps((VideoEditor.TTS_MODEL, voice, _speech_identity(script)),
+    identity = _hash(json.dumps((VideoEditor.TTS_MODEL, voice, speech_identity(script)),
                                 ensure_ascii=False, sort_keys=True).encode('utf-8'))
     claim = root / '.claims' / identity
     if (root.is_symlink() or claim.parent.is_symlink() or claim.is_symlink()

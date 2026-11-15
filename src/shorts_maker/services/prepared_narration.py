@@ -9,6 +9,11 @@ from pathlib import Path
 from shorts_maker.utils.config import settings
 
 
+def speech_identity(script) -> tuple:
+    return (script.source_name, script.source_url, script.supporting_source_urls,
+            sorted((s.scene_number, s.script_text) for s in script.scenes))
+
+
 def retain_narration_set(script, audio_paths: list[str], voice: str) -> str:
     from shorts_maker.editor.video_editor import VideoEditor
 

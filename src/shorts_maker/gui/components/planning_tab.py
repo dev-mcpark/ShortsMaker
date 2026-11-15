@@ -12,6 +12,7 @@ from shorts_maker.gui.components.rss_preview import render_rss_preview
 from shorts_maker.gui.config.ui_theme import SCENE_GRADIENTS
 from shorts_maker.planner.script_planner import ShortsScript
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
+from shorts_maker.services.prepared_narration import speech_identity
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.source_manager import SourceManager
@@ -462,7 +463,12 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                                 safe_refresh(form_panel)
                             safe_notify('현재 대본과 같은 내용입니다. 기존 검토·완성본을 유지합니다.', type='info')
                             return
+                        narration = None
+                        if state.script and speech_identity(state.script) == speech_identity(edited_script):
+                            narration = state.prepared_narration_manifest, state.prepared_narration_sha256
                         apply_script(edited_script)
+                        if narration and narration[0]:
+                            state.prepared_narration_manifest, state.prepared_narration_sha256 = narration
                         state.script_editor_drafts.pop(consumed_key, None)
                         restore_editor()
                         update_script_preview()
