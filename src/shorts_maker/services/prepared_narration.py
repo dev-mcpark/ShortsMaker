@@ -49,17 +49,20 @@ def narration_paths(script, manifest_path: str, expected_sha256: str | None = No
     if (not isinstance(record, dict) or record.get('schema_version') != 1
             or not isinstance(record.get('scenes'), dict)):
         raise ValueError('내레이션 준비 기록이 올바르지 않습니다.')
-    paths = []
     for scene in script.scenes:
         entry = record['scenes'].get(str(scene.scene_number))
+        if (not isinstance(entry, dict) or entry.get('status') != 'complete'
+                or entry.get('text_sha256') != hashlib.sha256(scene.script_text.encode()).hexdigest()):
+            raise ValueError(f'장면 {scene.scene_number} 음성이 현재 내레이션 또는 기록과 다릅니다.')
+    paths = []
+    for scene in script.scenes:
+        entry = record['scenes'][str(scene.scene_number)]
         audio = (manifest.parent / f'scene_{scene.scene_number}.mp3').resolve()
         if not audio.is_relative_to(root) or not audio.is_file():
             raise ValueError(f'장면 {scene.scene_number} 음성 파일을 확인하세요.')
         with audio.open('rb') as stream:
             digest = hashlib.file_digest(stream, 'sha256').hexdigest()
-        if (not isinstance(entry, dict) or entry.get('status') != 'complete'
-                or entry.get('text_sha256') != hashlib.sha256(scene.script_text.encode()).hexdigest()
-                or entry.get('file_sha256') != digest):
+        if entry.get('file_sha256') != digest:
             raise ValueError(f'장면 {scene.scene_number} 음성이 현재 내레이션 또는 기록과 다릅니다.')
         paths.append(str(audio))
     if not paths:

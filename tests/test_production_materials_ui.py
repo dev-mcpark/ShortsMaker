@@ -156,6 +156,50 @@ class ProductionMaterialsTests(IsolatedAsyncioTestCase):
         manifest.write_text(json.dumps(record))
         return manifest, audio
 
+    def test_unrelated_narration_discovery_rejects_metadata_before_audio_hashing(self):
+        manifest, audio = self.narration()
+        changed = self.script.model_copy(deep=True)
+        changed.scenes[0].script_text = 'A different narration.'
+        before = manifest.read_bytes(), audio.read_bytes()
+        with patch('shorts_maker.services.prepared_narration.hashlib.file_digest',
+                   side_effect=AssertionError('unrelated audio must not be read')):
+            self.assertEqual(list_narration_sets(changed), {})
+            with self.assertRaises(ValueError):
+                narration_paths(changed, str(manifest))
+        self.assertEqual((manifest.read_bytes(), audio.read_bytes()), before)
+        two_scenes = self.script.model_copy(deep=True)
+        two_scenes.scenes.append(two_scenes.scenes[0].model_copy(update={
+            'scene_number':2,'script_text':'A different final line.'}))
+        record = json.loads(manifest.read_text())
+        record['scenes']['2'] = {**record['scenes']['1'],
+            'text_sha256':hashlib.sha256(b'Original final line.').hexdigest()}
+        manifest.write_text(json.dumps(record))
+        with patch('shorts_maker.services.prepared_narration.hashlib.file_digest',
+                   side_effect=AssertionError('even an earlier matching scene must not be read')):
+            self.assertEqual(list_narration_sets(two_scenes), {})
+
+    def test_incomplete_narration_entry_is_rejected_without_audio_hashing(self):
+        manifest, audio = self.narration()
+        record = json.loads(manifest.read_text())
+        record['scenes']['1']['status'] = 'pending'
+        manifest.write_text(json.dumps(record))
+        with patch('shorts_maker.services.prepared_narration.hashlib.file_digest',
+                   side_effect=AssertionError('pending audio must not be read')):
+            self.assertEqual(list_narration_sets(self.script), {})
+        self.assertEqual(json.loads(manifest.read_text())['scenes']['1']['status'], 'pending')
+
+    def test_matching_narration_still_requires_current_audio_bytes_and_saved_manifest_hash(self):
+        manifest, audio = self.narration()
+        expected = hashlib.sha256(manifest.read_bytes()).hexdigest()
+        self.assertEqual(narration_paths(self.script,str(manifest),expected), [str(audio)])
+        audio.write_bytes(audio.read_bytes()+b'changed')
+        self.assertEqual(list_narration_sets(self.script), {})
+        with self.assertRaises(ValueError):
+            narration_paths(self.script,str(manifest),expected)
+        manifest.write_text(manifest.read_text()+' ')
+        with self.assertRaisesRegex(ValueError, '변경'):
+            narration_paths(self.script,str(manifest),expected)
+
     def test_audio_selection_validates_real_media_and_does_not_change_on_invalid_input(self):
         manifest, audio = self.narration()
         state = AppState(script=self.script, final_video_path='old.mp4')
