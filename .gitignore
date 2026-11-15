@@ -39,6 +39,7 @@ docs/.pdca-snapshots/
 rss_sources.json
 schedules.json
 schedules.json.lock.sqlite3*
+*.host.json
 topic_history.json
 url_history.json
 bgm/*.mp3

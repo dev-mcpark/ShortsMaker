@@ -348,7 +348,8 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         with self.client, ui.column() as root, patch.object(scheduling_tab, 'schedule_manager', self.manager), patch.object(
                 scheduling_tab, 'load_source_catalog', return_value=(object(), {})), patch.object(ui, 'timer') as timers:
             scheduling_tab.render_scheduling_tab(self.state)
-            poll = next(call.args[1] for call in timers.call_args_list if call.args[0] == 30.0)
+            poll = next(call.args[1] for call in timers.call_args_list
+                        if call.args[1].__name__ == 'refresh_changed_records')
             self.click('선택 완성본을 이 회차에 연결')
             dialog = next(e for e in self.client.elements.values() if isinstance(e, ui.dialog))
             attach_button = next(e for e in root.descendants() if getattr(e, 'text', '') == '선택 완성본을 이 회차에 연결')

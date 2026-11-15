@@ -15,6 +15,7 @@ from pathlib import Path
 
 from shorts_maker.services.operating_budget import begin_episode, episode_environment, episode_path, load_episode
 from shorts_maker.services.operating_status import operator_status, schedule_sha256
+from shorts_maker.services.queue_host_status import write_host_status
 from shorts_maker.utils.config import PROJECT_ROOT, settings
 from shorts_maker.utils.scheduler import ScheduleManager
 
@@ -81,22 +82,35 @@ def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedu
 
 
 async def serve(manager):
+    def report(state='running'):
+        try:
+            write_host_status(manager, state)
+        except (OSError, ValueError) as error:
+            manager.logger.warning('Queue host status unavailable: %s', error)
+
     stopped = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         asyncio.get_running_loop().add_signal_handler(sig, stopped.set)
-    manager.start_scheduler()
-    await manager.queue_overdue()
-    print(json.dumps({'state': 'queue_only_host_running', 'pid': os.getpid(),
-                      'schedules': manager.get_next_run_times()}), flush=True)
+    state = 'error'
     try:
+        manager.start_scheduler()
+        await manager.queue_overdue()
+        manager.sync_jobs()
+        report()
+        print(json.dumps({'state': 'queue_only_host_running', 'pid': os.getpid(),
+                          'schedules': manager.get_next_run_times()}), flush=True)
         while not stopped.is_set():
             try:
                 await asyncio.wait_for(stopped.wait(), timeout=30)
             except asyncio.TimeoutError:
                 manager.sync_jobs()
                 await manager.queue_overdue()
+                manager.sync_jobs()
+                report()
+        state = 'stopped'
     finally:
         manager.stop_scheduler()
+        report(state)
 
 
 def main():

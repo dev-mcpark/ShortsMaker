@@ -21,6 +21,7 @@ from shorts_maker.utils.source_manager import SourceManager
 
 
 _INTERVAL_WEEKS = {"Every 2 Weeks": 2, "Every 4 Weeks": 4}
+TRIGGER_FIELDS = ('time', 'frequency', 'interval_anchor_at', 'first_run_at', 'review_operator')
 
 
 _PROVIDER_LIMIT = re.compile(r"(?<!\d)429(?!\d)|RESOURCE_EXHAUSTED", re.IGNORECASE)
@@ -119,9 +120,7 @@ class ScheduleManager:
             self._unregister_job(job_id)
         for job_id, schedule in desired.items():
             previous = jobs[job_id].args[0] if job_id in jobs else {}
-            if not previous or any(previous.get(key) != schedule.get(key) for key in (
-                'time', 'frequency', 'interval_anchor_at', 'first_run_at', 'review_operator',
-            )):
+            if not previous or any(previous.get(key) != schedule.get(key) for key in TRIGGER_FIELDS):
                 self._register_job(schedule)
 
     @staticmethod

@@ -12,6 +12,7 @@ from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.gui.components.common.source_access import load_source_catalog
 from shorts_maker.gui.components.operator_panel import render_operator_panel
 from shorts_maker.gui.components.review_continuation import render_review_continuation
+from shorts_maker.gui.components.queue_host_panel import render_queue_host_panel
 from shorts_maker.gui.components.scheduled_script_history import render_script_history_browser
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.utils.scheduler import ScheduleManager
@@ -75,6 +76,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
     with ui.row().classes('w-full h-auto lg:h-full gap-6 flex flex-col lg:flex-row flex-nowrap'):
         # === Left Panel: Create & Control ===
         with ui.column().classes('w-full lg:w-96 gap-4'):
+
+            render_queue_host_panel(schedule_manager)
 
             # === Scheduler Status Card ===
             with ui.card().classes('w-full p-0 bg-slate-800 border border-slate-600 overflow-hidden'):
@@ -439,7 +442,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                         ui.label('다음 실행:').classes('text-xs text-teal-400')
                                                         ui.label(next_run[:16].replace('T', ' ')).classes('text-sm text-teal-300 font-medium')
                                             elif enabled:
-                                                ui.label('별도 대기 호스트 사용 · 운영 상태 별도 확인'
+                                                ui.label('별도 대기 호스트 사용 · 위 호스트 상태에서 다음 실행 확인'
                                                          if schedule.get('review_operator') == 'agent'
                                                          else 'Studio 스케줄러가 중지됐거나 작업이 등록되지 않았습니다.').classes(
                                                     'text-xs text-amber-300')
