@@ -3,6 +3,9 @@ import asyncio
 import hashlib
 import json
 import tempfile
+import subprocess
+import sqlite3
+import sys
 import unittest
 from datetime import datetime,timedelta
 from pathlib import Path
@@ -139,6 +142,59 @@ class ReviewContinuationTests(unittest.TestCase):
         self.assertEqual(current['name'],'다른 작업에서 변경')
         self.assertFalse(current['enabled'])
         self.assertNotIn('review_continuation',current)
+
+    def test_live_child_lock_blocks_all_review_writes_until_explicit_retry(self):
+        lock=self.manager.filename.with_name(self.manager.filename.name+'.lock.sqlite3')
+        child=subprocess.Popen([sys.executable,'-c',
+            "import sqlite3,sys; db=sqlite3.connect(sys.argv[1],isolation_level=None); "
+            "db.execute('BEGIN EXCLUSIVE'); print('locked',flush=True); sys.stdin.read(1); db.close()",str(lock)],
+            stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+        try:
+            self.assertEqual(child.stdout.readline().strip(),'locked')
+            self.assertIsNone(child.poll())
+            before=self.manager.filename.read_bytes()
+            for method in (self.manager.record_private_review_copy,self.manager.accept_pending_video):
+                with self.subTest(method=method.__name__):
+                    with self.assertRaisesRegex(ValueError,'다른 회차'):
+                        method(self.schedule['id'],str(self.video))
+                    self.assertEqual(self.manager.filename.read_bytes(),before)
+            with self.assertRaisesRegex(ValueError,'다른 회차'):self.resume()
+        finally:
+            child.communicate('x',timeout=5)
+        self.assertEqual(child.returncode,0)
+        resumed=self.resume()
+        self.assertEqual(resumed['last_result'],'private_review_deferred')
+        self.assertNotIn('accepted_at',resumed)
+
+    def test_unattached_script_rejection_cannot_race_an_attachment(self):
+        self.manager.update_schedule(self.schedule['id'],{'last_youtube_id':None,'last_video_path':None,'last_video_sha256':None})
+        before=self.manager.filename.read_bytes()
+        db=sqlite3.connect(self.manager.filename.with_name(self.manager.filename.name+'.lock.sqlite3'),isolation_level=None)
+        try:
+            db.execute('BEGIN EXCLUSIVE')
+            with self.assertRaisesRegex(ValueError,'다른 회차'):
+                self.manager.reject_pending_script(self.schedule['id'])
+            self.assertEqual(before,self.manager.filename.read_bytes())
+        finally:
+            db.close()
+        rejected=self.manager.reject_pending_script(self.schedule['id'])
+        self.assertEqual(rejected['last_result'],'script_rejected')
+        self.assertNotIn('accepted_at',rejected)
+
+    def test_broken_pending_links_block_preview_attachment_acceptance_and_continuation(self):
+        markers=[self.episode.with_suffix('.operation.pending.json'),self.video.with_suffix('.upload-pending.json')]
+        before=self.manager.filename.read_bytes()
+        for marker in markers:
+            marker.symlink_to(self.root/'missing-result')
+            try:
+                for method in (self.manager.pending_video_info,self.manager.record_private_review_copy,self.manager.accept_pending_video):
+                    with self.subTest(marker=marker.name,method=method.__name__):
+                        with self.assertRaises(ValueError):method(self.schedule['id'],str(self.video))
+                        self.assertEqual(self.manager.filename.read_bytes(),before)
+                with self.assertRaises(ValueError):self.resume()
+            finally:
+                marker.unlink()
+        self.assertEqual(self.manager.filename.read_bytes(),before)
 
     def test_native_explicit_confirmation_busy_deleted_view_and_preserved_owner_state(self):
         state=AppState();client=Client(page('/review-continue'));self.addCleanup(client.delete)

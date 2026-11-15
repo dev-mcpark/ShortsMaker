@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import sqlite3
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import IsolatedAsyncioTestCase
@@ -250,6 +251,30 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.assertEqual(current['last_result'], 'script_review_pending')
         self.assertFalse(current['enabled'])
         self.assertNotIn('accepted_at', current)
+        self.attached.assert_called_once()
+
+    async def test_external_lock_keeps_confirmation_selection_and_schedule_for_explicit_retry(self):
+        self.render()
+        before=self.manager.filename.read_bytes()
+        with self.client, patch.object(operator_panel,'safe_notify') as notify:
+            self.click('선택 완성본을 이 회차에 연결')
+            dialog=next(e for e in self.client.elements.values() if type(e).__name__=='Dialog')
+            db=sqlite3.connect(self.manager.filename.with_name(self.manager.filename.name+'.lock.sqlite3'),isolation_level=None)
+            try:
+                db.execute('BEGIN EXCLUSIVE')
+                self.click('이 비공개 완성본 연결')
+                self.assertEqual(before,self.manager.filename.read_bytes())
+                self.assertEqual(self.state.final_video_path,str(self.video))
+                self.assertTrue(dialog.value)
+                self.attached.assert_not_called()
+                self.assertIn('다른 회차',notify.call_args.args[0])
+            finally:
+                db.close()
+            self.click('이 비공개 완성본 연결')
+            self.assertFalse(dialog.value)
+        current=self.manager.get_schedule(self.schedule['id'])
+        self.assertEqual(current['last_youtube_id'],'private_test_12')
+        self.assertNotIn('accepted_at',current)
         self.attached.assert_called_once()
 
     async def test_cancelled_or_stale_selection_and_episode_cannot_attach(self):
