@@ -9,6 +9,7 @@ from shorts_maker.gui.components.common.source_access import load_source_catalog
 from shorts_maker.gui.components.script_form import render_script_form
 from shorts_maker.gui.components.work_drafts_panel import render_work_drafts_panel
 from shorts_maker.gui.components.rss_preview import render_rss_preview
+from shorts_maker.gui.components.script_review_panel import render_script_review_panel
 from shorts_maker.gui.config.ui_theme import SCENE_GRADIENTS
 from shorts_maker.planner.script_planner import ShortsScript
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
@@ -123,6 +124,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
             form_panel = render_script_form(state, sync_json_from_form,
                                             lambda: save_script(), lambda: discard_draft())
             ui.label('현재 적용된 대본 · 수정 내용 적용 후 갱신됩니다.').classes('text-xs text-slate-400 mb-2')
+            render_script_review_panel(state)
             # ── 각본 헤더 ──────────────────────────────────────
             with ui.element('div').classes('w-full p-5 rounded-xl bg-gradient-to-r from-violet-950/20 to-indigo-950/20 border border-violet-500/20 mb-5 backdrop-blur-md'):
                 with ui.row().classes('w-full items-start justify-between mb-2'):
