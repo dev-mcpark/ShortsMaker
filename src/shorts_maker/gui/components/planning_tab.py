@@ -9,7 +9,7 @@ from shorts_maker.gui.components.common.source_access import load_source_catalog
 from shorts_maker.gui.components.script_form import render_script_form
 from shorts_maker.gui.components.work_drafts_panel import render_work_drafts_panel
 from shorts_maker.gui.components.rss_preview import render_rss_preview
-from shorts_maker.gui.components.script_review_panel import render_script_review_panel
+from shorts_maker.gui.components.script_review_panel import render_script_review_panel, render_review_recovery
 from shorts_maker.gui.config.ui_theme import SCENE_GRADIENTS
 from shorts_maker.planner.script_planner import ShortsScript
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
@@ -439,6 +439,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                 feedback_section.visible = state.script_context is not None
 
             draft_panel = render_work_drafts_panel(state, restore_draft_view)
+            render_review_recovery(state, restore_draft_view)
 
             # JSON 편집기 (고급)
             with ui.expansion('JSON 편집기', icon='code').classes('w-full').props('header-class="text-xs text-gray-300 px-0"'):
