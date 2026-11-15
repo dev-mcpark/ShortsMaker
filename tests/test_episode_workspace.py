@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -344,6 +345,106 @@ ProductionService.prepare_narration=narration
                                                                   kind='production', value=asdict(ProductionResult(True))))
         with self.assertRaisesRegex(ValueError, '단계'):
             action.validate_receipt(path, digest)
+
+    def balance_panel(self):
+        self.enterContext(patch.object(core, 'loop', asyncio.get_running_loop()))
+        client = Client(page('/episode-balance-fixture'));self.addCleanup(client.delete)
+        with client, ui.column() as root:
+            render_episode_workspace(self.state, Mock())
+        button = next(e for e in root.descendants() if getattr(e, 'text', '') == '회차 잔여 확인')
+        handler = next(e.handler for e in button._event_listeners.values() if e.type == 'click')
+        async def inspect():
+            with client:
+                before = asyncio.all_tasks()
+                result = handler(None)
+                if asyncio.iscoroutine(result):
+                    await result
+                tasks = asyncio.all_tasks() - before
+                if tasks:
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    self.assertFalse(any(isinstance(result, BaseException) for result in results), results)
+        return client, root, inspect
+
+    async def test_episode_balance_failure_replaces_old_amount_and_explicit_retry_recovers_readonly(self):
+        client, root, inspect = self.balance_panel()
+        paths = [self.manager.filename, episode_path(self.record['id']),
+                 google_budget._database_path(), openai_budget._database_path()]
+        before = [p.read_bytes() for p in paths]
+        scope = dict(self.state.operating_scope)
+        await inspect()
+        text = lambda: '\n'.join(getattr(e, 'text', '') for e in root.descendants())
+        self.assertIn('월·회차 중 작은 잔여:', text())
+        for provider in (google_budget, openai_budget):
+            ledger = provider._database_path()
+            backup = ledger.with_suffix('.held')
+            ledger.rename(backup)
+            try:
+                await inspect()
+                self.assertNotIn('월·회차 중 작은 잔여:', text())
+                self.assertIn('확인 필요', text())
+                self.assertIn('기존 장부와 월 사용 기준', text())
+                self.assertNotIn('--init', text())
+                self.assertFalse(ledger.exists())
+            finally:
+                backup.rename(ledger)
+            await inspect()
+            self.assertIn('월·회차 중 작은 잔여:', text())
+        self.assertEqual(before, [p.read_bytes() for p in paths])
+        self.assertEqual(self.state.operating_scope, scope)
+        self.assertIsNone(self.state.production_service)
+
+    async def test_episode_balance_ignores_duplicate_refresh_while_reader_is_inflight(self):
+        client, root, inspect = self.balance_panel()
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def delayed(function):
+            entered.set();await release.wait();return function()
+        with patch('shorts_maker.gui.components.episode_workspace.asyncio.to_thread', side_effect=delayed) as read:
+            first = asyncio.create_task(inspect())
+            await entered.wait()
+            second = asyncio.create_task(inspect())
+            await asyncio.sleep(0);await asyncio.sleep(0)
+            count = read.await_count
+            release.set()
+            await asyncio.gather(first, second)
+            self.assertEqual(count, 1)
+        self.assertFalse(self.state.is_busy)
+
+    async def test_episode_balance_shows_smaller_monthly_room_and_clears_stale_period_and_sqlite_errors(self):
+        client, root, inspect = self.balance_panel()
+        text = lambda: '\n'.join(getattr(e, 'text', '') for e in root.descendants())
+        with patch.object(settings, 'google_budget_opening_krw', 9000), patch.object(
+                settings, 'openai_budget_opening_usd', .9):
+            await inspect()
+        self.assertIn('Google ₩1,000 · OpenAI $0.100000', text())
+        self.assertIn('KST', text())
+        with patch.object(settings, 'google_budget_month', '2000-01'):
+            await inspect()
+        self.assertNotIn('월·회차 중 작은 잔여:', text())
+        self.assertIn('확인 필요', text())
+        await inspect()
+        with patch('shorts_maker.gui.components.episode_workspace.episode_environment',
+                   side_effect=sqlite3.OperationalError('fixture locked ledger')):
+            await inspect()
+        self.assertNotIn('월·회차 중 작은 잔여:', text())
+        self.assertIn('확인 필요', text())
+
+    async def test_episode_balance_ignores_busy_stale_deleted_views_and_late_results(self):
+        client, root, inspect = self.balance_panel()
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def delayed(function):
+            entered.set();await release.wait();return (123, .01)
+        with patch('shorts_maker.gui.components.episode_workspace.asyncio.to_thread', side_effect=delayed) as read:
+            self.state.pipeline_running = True
+            await inspect();read.assert_not_awaited()
+            self.state.pipeline_running = False
+            task = asyncio.create_task(inspect());await entered.wait()
+            root.clear();release.set();await task
+            self.assertNotIn('Google ₩123', '\n'.join(getattr(e, 'text', '') for e in client.elements.values()))
+            await inspect();self.assertEqual(read.await_count, 1)
+        client2, root2, inspect2 = self.balance_panel()
+        self.state.detach_operating_scope()
+        with patch('shorts_maker.gui.components.episode_workspace.asyncio.to_thread') as read:
+            await inspect2();read.assert_not_called()
 
     async def test_explicit_scope_detach_dialog_preserves_inputs_and_stale_events(self):
         self.enterContext(patch.object(core, 'loop', asyncio.get_running_loop()))

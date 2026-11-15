@@ -214,7 +214,7 @@ def budget_status() -> dict:
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'no_charge_reconciliations'"
             ).fetchone() else 0
     except (OSError, sqlite3.Error) as error:
-        raise RuntimeError("GOOGLE_BUDGET_EXCEEDED: 비용 장부에 접근할 수 없습니다. --init으로 최초 생성해야 합니다.") from error
+        raise RuntimeError("GOOGLE_BUDGET_EXCEEDED: 비용 장부에 접근할 수 없습니다. 기존 장부와 월 사용 기준을 확인·복구하세요.") from error
     used = settings.google_budget_opening_krw + local
     return {"enabled": True, "period": period,
             "budget_krw": settings.google_monthly_budget_krw,

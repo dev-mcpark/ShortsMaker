@@ -182,7 +182,7 @@ def budget_status() -> dict:
                 "WHERE period = ? AND source_url IS NOT NULL GROUP BY source_url", (period,),
             )) if "source_url" in {column[1] for column in db.execute("PRAGMA table_info(requests)")} else {}
     except (OSError, sqlite3.Error) as error:
-        raise OpenAIBudgetExceeded("OPENAI_BUDGET_EXCEEDED: 비용 장부에 접근할 수 없습니다. --init으로 최초 생성해야 합니다.") from error
+        raise OpenAIBudgetExceeded("OPENAI_BUDGET_EXCEEDED: 비용 장부에 접근할 수 없습니다. 기존 장부와 월 사용 기준을 확인·복구하세요.") from error
     opening = _micro_usd(Decimal(str(settings.openai_budget_opening_usd)))
     ceiling = int(Decimal(str(settings.openai_monthly_budget_usd)) * 1_000_000)
     return {"enabled": True, "period": period,

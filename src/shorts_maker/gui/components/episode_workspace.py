@@ -1,6 +1,9 @@
 """Visible, explicit episode binding for the ordinary Studio controls."""
 
 import asyncio
+import sqlite3
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from nicegui import ui
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify
@@ -14,6 +17,7 @@ def render_episode_workspace(state, refresh):
         return
     expected = state.execution_key()
     scope = EpisodeScope.model_validate(state.operating_scope)
+    loading = {'value': False}
     with ui.column().classes('w-full p-3 bg-amber-950 border border-amber-700 gap-2 shrink-0') as panel:
         ui.label(f'예약 회차 제작 · {scope.episode_id[:8]}').classes('font-bold text-amber-200')
         ui.label('첫 프레임·원본·편집·비공개 업로드는 같은 회차의 잔여 한도로 실행합니다. '
@@ -21,20 +25,28 @@ def render_episode_workspace(state, refresh):
         ui.label('수정 대본은 예약 운영에서 “확인한 수정 대본을 회차에 저장” 후 제작하세요. '
                  '업로드 후에는 예약 운영에서 완성본을 연결합니다. 연결·사용자 채택·공개는 별도입니다.').classes('text-xs text-amber-100')
         status = ui.label('회차 예산은 잔여 확인을 눌러 조회하세요.').classes('text-xs text-amber-200 break-all')
+        ui.label('조회 시점의 예약 여유입니다. 실제 청구액·새 지출 허가가 아니며 요청 전 서비스가 다시 검사합니다.').classes(
+            'text-xs text-amber-100')
 
         async def inspect():
-            if state.is_busy or expected != state.execution_key() or panel.is_deleted:
+            if loading['value'] or state.is_busy or expected != state.execution_key() or panel.is_deleted:
                 return
+            loading['value'] = True
+            status.text = '회차 잔여 조회 중…'
+            script = state.script
             def read():
-                _, record = scope_status(scope, state.script)
+                _, record = scope_status(scope, script)
                 _, room = episode_environment(record)
                 return (min(room['google_remaining_krw'], google_budget.budget_status()['remaining_krw']),
                         min(room['openai_remaining_usd'], openai_budget.budget_status()['remaining_usd']))
             try:
                 google, openai = await asyncio.to_thread(read)
-                message = f'월·회차 중 작은 잔여: Google ₩{google:,} · OpenAI ${openai:.6f} (장부 예약 기준)'
-            except (OSError, ValueError, KeyError) as error:
-                message = f'확인 필요: {error}'
+                when = datetime.now(ZoneInfo('Asia/Seoul')).strftime('%m-%d %H:%M:%S KST')
+                message = f'조회 {when} · 월·회차 중 작은 잔여: Google ₩{google:,} · OpenAI ${openai:.6f} (장부 예약 기준)'
+            except (OSError, ValueError, KeyError, RuntimeError, sqlite3.Error) as error:
+                message = f'확인 필요 · 잔여를 판단할 수 없습니다: {error}'
+            finally:
+                loading['value'] = False
             if expected == state.execution_key() and not panel.is_deleted:
                 status.text = message
 
