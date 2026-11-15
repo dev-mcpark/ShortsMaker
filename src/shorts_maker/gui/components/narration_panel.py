@@ -36,7 +36,7 @@ def render_narration_panel(state):
                     if use_prepared and not choice.value:
                         raise ValueError('연결할 내레이션 세트를 선택하세요.')
                     state.select_prepared_narration(choice.value if use_prepared else None)
-                    safe_notify('기존 음성을 연결했습니다. 새 음성 API 호출이 없습니다.' if use_prepared else '다음 편집에서 새 음성을 생성합니다.', type='positive')
+                    safe_notify('기존 음성을 연결했습니다. 새 음성 API 호출이 없습니다.' if use_prepared else '다음 편집은 일치하는 보관 음성을 재사용하고, 없는 장면만 요청합니다.', type='positive')
                     safe_refresh(panel)
                 except (OSError, ValueError, TypeError) as error:
                     safe_notify(f'음성 연결 실패: {error}', type='negative')
@@ -59,7 +59,7 @@ def render_narration_panel(state):
                     ui.label(f'연결한 음성을 다시 확인하세요: {error}').classes('text-xs text-amber-300')
                     ui.label('새 음성으로 자동 전환하지 않습니다. 파일을 복구하거나, 목록에서 다시 연결하거나, 새 음성 생성으로 전환을 직접 선택하세요.').classes('text-xs text-amber-300')
             else:
-                ui.label('현재 선택: 새 음성 생성 · 편집 시 API 비용이 발생합니다. 목록에 없는 음성은 연결하지 않습니다.').classes('text-xs text-amber-200')
+                ui.label('현재 선택: 기본 음성 준비 · 같은 음색·문장의 보관 세트를 재사용하고, 미완료 장면 요청에 API 비용이 발생합니다.').classes('text-xs text-amber-200')
             if state.narration_preparing:
                 def settled():
                     if view.is_deleted:

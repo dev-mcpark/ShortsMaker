@@ -732,7 +732,7 @@ class ProductionService:
             manual_clip_paths: 수동 모드 시 {scene_number: file_path} 딕셔너리.
                                None이면 VEO API를 통한 자동 생성.
             prepared_audio_paths: 재사용할 씬별 내레이션 파일. 호출자가 보관/삭제합니다.
-            retain_narration: 새 음성을 편집 전에 보관해 다음 Studio 편집에서 재사용합니다.
+            retain_narration: 보관 기록 경로를 결과에 포함합니다. 기본 음성 생성도 장면별로 보관합니다.
 
         Returns:
             ProductionResult 객체
@@ -824,11 +824,13 @@ class ProductionService:
                 if hasattr(editor, "preflight_music"):
                     editor.preflight_music(script)
                 if prepared_audio_paths is None:
-                    audio_paths = await editor.prepare_narration(script)
+                    audio_paths = await editor.prepare_narration(script, is_cancelled=self.is_cancelled)
                     if retain_narration:
-                        from shorts_maker.services.prepared_narration import retain_narration_set
-                        narration_manifest = await asyncio.to_thread(
-                            retain_narration_set, script, audio_paths, getattr(editor, 'tts_voice', 'alloy'))
+                        narration_manifest = getattr(editor, 'prepared_narration_manifest', None)
+                        if narration_manifest is None:
+                            from shorts_maker.services.prepared_narration import retain_narration_set
+                            narration_manifest = await asyncio.to_thread(
+                                retain_narration_set, script, audio_paths, getattr(editor, 'tts_voice', 'alloy'))
                 else:
                     if len(prepared_audio_paths) != num_scenes:
                         raise ValueError("씬 수와 내레이션 수가 일치하지 않습니다.")

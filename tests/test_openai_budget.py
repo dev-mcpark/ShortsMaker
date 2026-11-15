@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from shorts_maker.services import openai_budget
 from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.planner.script_planner import ScriptPlanner
+from shorts_maker.planner.models import ShortsScript, VideoScene
 from shorts_maker.utils.config import Settings, settings
 
 
@@ -86,9 +87,10 @@ class OpenAIBudgetTests(unittest.TestCase):
 
         editor = VideoEditor(bgm_volume=0)
         editor._generate_tts = AsyncMock()
-        script = SimpleNamespace(
-            scenes=[SimpleNamespace(script_text="가" * 100),
-                    SimpleNamespace(script_text="나" * 300)],
+        script = ShortsScript(
+            title="Budget fixture", description="", tags=[], style="plain", source_name="test", generation_mode="image",
+            scenes=[VideoScene(scene_number=1, script_text="가" * 100, visual_description="one"),
+                    VideoScene(scene_number=2, script_text="나" * 300, visual_description="two")],
             mood="sci-fi", source_url="https://example.com/story",
         )
         with self.assertRaisesRegex(openai_budget.OpenAIBudgetExceeded, "내레이션 최대 예약액"):

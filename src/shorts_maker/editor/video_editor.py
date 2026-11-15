@@ -20,7 +20,7 @@ from shorts_maker.utils.bgm_manager import BGMManager
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
-from shorts_maker.services.openai_budget import check_openai_speech_budget, reserve_openai_speech
+from shorts_maker.services.openai_budget import reserve_openai_speech
 from shorts_maker.services.openai_models import SPEECH_MODEL
 
 # [CRITICAL FIX] Manually set ImageMagick path for macOS Homebrew install
@@ -61,6 +61,7 @@ class VideoEditor:
         self.bgm_manager = BGMManager()
 
         self.client = None  # Local edits with prepared narration need no API key.
+        self.prepared_narration_manifest: Optional[str] = None
         self._temp_files: List[str] = []  # 임시 파일 추적
 
         # User-configurable options
@@ -154,24 +155,21 @@ class VideoEditor:
             except Exception:
                 pass
 
-    async def prepare_narration(self, script) -> List[str]:
-        """Generate narration once, before the costly visual generation step."""
+    async def prepare_narration(self, script, *, is_cancelled: Optional[Callable[[], bool]] = None) -> List[str]:
+        """Retain/reuse checkpointed speech before visuals; keep editing's music gate."""
+        from shorts_maker.services.narration_preparation import plan_narration, prepare_script_narration
+        from shorts_maker.services.prepared_narration import narration_paths
+
+        self.prepared_narration_manifest = None
         self.preflight_music(script)
-        check_openai_speech_budget(
-            self.TTS_MODEL, [scene.script_text for scene in script.scenes], self.TTS_MAX_ATTEMPTS,
-        )
-        audio_paths = []
         voice = self._get_voice_for_mood(getattr(script, 'mood', 'cinematic'))
-        try:
-            for index, scene in enumerate(script.scenes):
-                path = await self._generate_tts(scene.script_text, index, voice,
-                                                source_url=getattr(script, "source_url", None))
-                audio_paths.append(path)
-            self.validate_narration(audio_paths)
-            return audio_paths
-        except Exception:
-            self.cleanup_temp_files()
-            raise
+        quote = await asyncio.to_thread(plan_narration, script, voice)
+        manifest = await prepare_script_narration(
+            script, voice, quote['additional_request_reserve_usd'],
+            cancelled=is_cancelled or (lambda: False))
+        paths = narration_paths(script, manifest)
+        self.prepared_narration_manifest = manifest
+        return paths
 
     @staticmethod
     def validate_narration(audio_paths: List[str], script=None) -> None:

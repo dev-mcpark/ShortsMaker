@@ -121,6 +121,85 @@ class NarrationPreparationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(record['reserved_usd_total'], reserve)
         self.tts.assert_not_awaited()
 
+    def default_service(self):
+        (self.root/'clip.mp4').write_bytes(b'local clip fixture')
+        service=ProductionService(editor_options={'tts_voice':'nova','bgm_volume':0})
+        service._valid_clip=Mock(return_value=True)
+        editor=VideoEditor(tts_voice='nova',bgm_volume=0)
+        editor.compose_video=AsyncMock(side_effect=RuntimeError('local edit stopped'))
+        service._editor=editor
+        service._get_generator=Mock(side_effect=AssertionError('manual clips need no provider'))
+        return service,{scene.scene_number:str(self.root/'clip.mp4') for scene in self.script.scenes}
+
+    async def test_default_edit_preserves_first_voice_and_does_not_replay_unknown_second_request(self):
+        service,clips=self.default_service()
+        self.tts.side_effect=[str(self.audio),RuntimeError('provider response unknown')]
+        result=await service.produce_video(self.script,clips,retain_narration=True)
+        self.assertFalse(result.success)
+        self.assertIn('unknown',result.error)
+        manifests=list(self.root.glob('evaluation/narration_preparation/*/narration.json'))
+        self.assertEqual(len(manifests),1)
+        record=json.loads(manifests[0].read_text())
+        self.assertEqual(record['scenes']['1']['status'],'complete')
+        self.assertEqual(record['scenes']['2']['status'],'pending')
+        first=manifests[0].parent/'scene_1.mp3'
+        before=first.read_bytes(),manifests[0].read_bytes()
+        self.tts.reset_mock();self.tts.side_effect=None
+        retry,clips=self.default_service()
+        stopped=await retry.produce_video(self.script,clips,retain_narration=True)
+        self.assertFalse(stopped.success)
+        self.assertIn('UNVERIFIED',stopped.error)
+        self.assertEqual(before,(first.read_bytes(),manifests[0].read_bytes()))
+        self.tts.assert_not_awaited()
+        service._editor.compose_video.assert_not_awaited()
+        retry._editor.compose_video.assert_not_awaited()
+
+    async def test_default_edit_cooperative_stop_and_resume_only_unstarted_voice(self):
+        service,clips=self.default_service()
+        async def speech(*args,**kw):
+            service.cancel()
+            return str(self.audio)
+        self.tts.side_effect=speech
+        result=await service.produce_video(self.script,clips,retain_narration=True)
+        self.assertFalse(result.success)
+        self.assertEqual(self.tts.await_count,1)
+        self.assertIn('보존',result.error)
+        service._editor.compose_video.assert_not_awaited()
+        quote=preparation.plan_narration(self.script,'nova')
+        self.assertEqual(quote['missing_scenes'],[2])
+        self.tts.reset_mock();self.tts.side_effect=None
+        retry,clips=self.default_service()
+        stopped=await retry.produce_video(self.script,clips,retain_narration=True)
+        self.assertFalse(stopped.success)
+        self.assertIn('local edit stopped',stopped.error)
+        self.tts.assert_awaited_once()
+        quote=preparation.plan_narration(self.script,'nova')
+        self.assertEqual(quote['additional_request_reserve_usd'],0)
+        self.assertTrue(Path(quote['manifest_path']).is_file())
+        VideoEditor.validate_narration(narration_paths(self.script,quote['manifest_path']))
+
+    async def test_default_success_uses_one_manifest_and_stable_scene_order_with_resolved_auto_voice(self):
+        self.script.scenes=[self.script.scenes[0].model_copy(update={'scene_number':7}),self.script.scenes[1]]
+        service,clips=self.default_service()
+        service._editor.tts_voice='auto'
+        voice=service._editor._get_voice_for_mood(self.script.mood)
+        output=self.root/'fixture-final.mp4';output.write_bytes(b'local mocked editor output')
+        service._editor.compose_video.side_effect=None
+        service._editor.compose_video.return_value=str(output)
+        with patch('shorts_maker.services.production_service.check_video_quality'):
+            result=await service.produce_video(self.script,clips,retain_narration=True)
+        self.assertTrue(result.success,result.error)
+        quote=preparation.plan_narration(self.script,voice)
+        self.assertEqual(result.narration_manifest_path,quote['manifest_path'])
+        self.assertEqual(service._editor.prepared_narration_manifest,quote['manifest_path'])
+        self.assertFalse((self.root/'evaluation/narration_sets').exists())
+        paths=narration_paths(self.script,result.narration_manifest_path)
+        self.assertEqual([Path(p).stem for p in paths],['scene_7','scene_2'])
+        self.assertEqual([call.args[1] for call in self.tts.await_args_list],[7,2])
+        self.assertEqual([call.args[2] for call in self.tts.await_args_list],[voice,voice])
+        self.assertTrue(all(call.kwargs['source_url']==self.script.source_url for call in self.tts.await_args_list))
+        VideoEditor.validate_narration(paths,self.script)
+
     def render(self):
         self.state = AppState(script=self.script, final_video_path='existing.mp4', tts_voice='nova')
         self.state.confirm_script_review()

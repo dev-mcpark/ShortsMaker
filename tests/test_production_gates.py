@@ -1100,21 +1100,28 @@ class ProductionGateTests(unittest.TestCase):
             _check.assert_not_called()
 
     def test_narration_duration_limit_and_audio_reuse(self):
-        editor = object.__new__(VideoEditor)
-        editor._temp_files = []
-        editor.logger = Mock()
-        editor._get_voice_for_mood = Mock(return_value="alloy")
-        editor._generate_tts = AsyncMock(side_effect=["one.mp3", "two.mp3"])
-        editor.cleanup_temp_files = Mock()
-        audio = SimpleNamespace(duration=40, get_frame=Mock(return_value=np.array([0.2])), close=Mock())
-        with patch("shorts_maker.editor.video_editor.AudioFileClip", return_value=audio):
-            with self.assertRaisesRegex(ValueError, "내레이션"):
-                asyncio.run(editor.prepare_narration(sample_script()))
-        editor.cleanup_temp_files.assert_called_once()
-        self.assertEqual([call.kwargs["source_url"] for call in editor._generate_tts.await_args_list],
-                         ["https://example.com"] * 2)
+        with tempfile.TemporaryDirectory() as directory, patch.object(settings, 'output_dir', Path(directory)):
+            source = Path(directory) / 'tone.mp3'
+            source.write_bytes(b'fixture speech')
+            editor = VideoEditor(bgm_volume=0)
+            audio = SimpleNamespace(duration=40, get_frame=Mock(return_value=np.array([0.2])), close=Mock())
+            with patch("shorts_maker.editor.video_editor.AudioFileClip", return_value=audio), patch.object(
+                VideoEditor, '_generate_tts', new_callable=AsyncMock, return_value=str(source)
+            ) as speech:
+                with self.assertRaisesRegex(ValueError, "내레이션"):
+                    asyncio.run(editor.prepare_narration(sample_script()))
+                self.assertEqual([call.kwargs["source_url"] for call in speech.await_args_list],
+                                 ["https://example.com"] * 2)
+                manifests = list(Path(directory).rglob('narration.json'))
+                self.assertEqual(len(manifests), 1)
+                self.assertTrue(all(entry['status'] == 'complete' for entry in json.loads(manifests[0].read_text())['scenes'].values()))
+                self.assertIsNone(editor.prepared_narration_manifest)
+                speech.reset_mock()
+                with self.assertRaisesRegex(ValueError, '내레이션'):
+                    asyncio.run(editor.prepare_narration(sample_script()))
+                speech.assert_not_awaited()
 
-        editor._generate_tts.reset_mock()
+        editor._generate_tts = AsyncMock()
         editor.cleanup_old_temp_files = Mock()
         editor._cleanup_clips = Mock()
         editor._track_temp_file = Mock()
