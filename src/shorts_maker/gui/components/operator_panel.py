@@ -122,6 +122,10 @@ def render_operator_panel(state, manager, schedule, on_attached):
                      data['last_result'], '운영 상태 확인 필요' if data['last_result'] else '아직 실행 전')
         ui.label(f'회차 {data["run_count"] or 0} · {phase}').classes('text-sm text-slate-200')
         ui.label(f'마지막 조회 {readout["checked_at"]}').classes('text-xs text-slate-400')
+        if data.get('planning_auth_required'):
+            ui.label('YouTube 업로드 계정 연결 필요 · 유료 기획 전에 중단됐습니다. '
+                     '완성본·업로드 → YouTube 업로드 연결에서 기존 채널 계정을 연결한 뒤 같은 회차를 재개하세요.').classes(
+                'text-sm text-amber-200').props('role=alert')
         if schedule.get('review_operator') != 'agent':
             ui.label('Studio 직접 실행 일정입니다. 월 장부·비주얼 상한을 사용하며 에이전트 회차 한도를 새로 만들지 않습니다.').classes('text-xs text-slate-400')
         elif not data.get('last_episode_id'):
@@ -212,7 +216,7 @@ def render_operator_panel(state, manager, schedule, on_attached):
         ui.label('예약 회차를 기획 중입니다. 메뉴를 이동해도 실행은 계속되며 저장된 회차에서 결과를 확인합니다.').classes('text-xs text-teal-200').bind_visibility_from(state, 'scheduled_planning_in_progress')
         if (schedule.get('review_operator') == 'agent' and schedule.get('last_result') == 'operator_pending'
                 and not schedule.get('enabled') and not schedule.get('last_video_path') and not schedule.get('last_youtube_id')):
-            ui.button('예약 회차 기획 시작', on_click=plan_preview).props('outline color=teal').bind_enabled_from(
+            ui.button('계정 연결 후 기획 재개' if schedule.get('planning_auth_required') else '예약 회차 기획 시작', on_click=plan_preview).props('outline color=teal').bind_enabled_from(
                 state, 'is_busy', lambda busy: not busy)
         if schedule.get('last_result') == 'script_review_pending' and not schedule.get('last_youtube_id') and not schedule.get('enabled'):
             if not schedule.get('last_video_path'):

@@ -81,6 +81,8 @@ class ReviewContinuationTests(unittest.TestCase):
             asyncio.run(clock());paid.assert_not_awaited()
 
     def test_due_new_slot_archives_unaccepted_copy_once_and_does_not_inherit_spend_scope(self):
+        self.manager.update_schedule(self.schedule['id'], {'planning_auth_required': False})
+        self.schedule = self.manager.get_schedule(self.schedule['id'])
         resumed=self.resume()
         future=self.first+timedelta(days=14,seconds=1)
         class Frozen(datetime):
@@ -92,11 +94,12 @@ class ReviewContinuationTests(unittest.TestCase):
         self.assertEqual(current['run_count'],2)
         self.assertEqual(current['last_result'],'operator_pending')
         self.assertFalse(current['enabled'])
-        for key in ('last_episode_id','last_youtube_id','last_video_path','last_script','review_continuation','accepted_at'):
+        for key in ('last_episode_id','last_youtube_id','last_video_path','last_script','review_continuation','accepted_at','planning_auth_required'):
             self.assertNotIn(key,current)
         history=current['run_history'][-1]
         self.assertEqual(history['last_youtube_id'],resumed['last_youtube_id'])
         self.assertEqual(history['review_continuation'],resumed['review_continuation'])
+        self.assertIs(history['planning_auth_required'], False)
         self.assertNotIn('accepted_at',history)
         self.assertEqual(self.video.read_bytes(),b'fixture video')
 

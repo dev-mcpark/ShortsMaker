@@ -39,6 +39,7 @@ _RUN_FIELDS = (
     'last_rendered_url', 'last_video_path', 'last_video_sha256', 'last_youtube_id', 'accepted_at',
     'queued_at', 'last_episode_id',
     'scheduled_for', 'late_by_seconds', 'skipped_slots', 'script_revisions', 'last_script_path', 'review_continuation',
+    'planning_auth_required',
 )
 
 
@@ -735,10 +736,13 @@ class ScheduleManager:
                 try:
                     await asyncio.to_thread(YouTubeUploader().get_authenticated_service, interactive=False)
                 except Exception:
+                    self.update_schedule(schedule['id'], {'planning_auth_required': True})
                     raise YouTubeAuthRequired(
                         'YOUTUBE_AUTH_REQUIRED: 유료 기획 전에 YouTube 업로드 계정을 다시 연결하세요. '
                         '기존 auth-only 절차 후 같은 회차를 재개할 수 있습니다.'
                     ) from None
+                if schedule.get('planning_auth_required'):
+                    self.update_schedule(schedule['id'], {'planning_auth_required': False})
         else:
             if not schedule.get('enabled', True):
                 return

@@ -18,6 +18,8 @@ def operator_status(schedule: dict) -> dict:
         'last_video_path', 'last_youtube_id')}
     if schedule.get('review_continuation'):
         result['review_continuation'] = schedule['review_continuation']
+    if schedule.get('planning_auth_required'):
+        result['planning_auth_required'] = True
     if schedule.get('last_episode_id'):
         try:
             path = episode_path(schedule['last_episode_id'])

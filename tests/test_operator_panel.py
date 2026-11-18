@@ -26,6 +26,24 @@ from test_gui_creation_flows import script
 
 
 class OperatorPanelTests(IsolatedAsyncioTestCase):
+    async def test_auth_block_reason_survives_reopen_without_a_new_auth_or_plan_request(self):
+        self.schedule = self.manager.update_schedule(self.schedule['id'], {
+            'last_result': 'operator_pending', 'last_video_path': None, 'last_youtube_id': None,
+            'planning_auth_required': True})
+        self.assertTrue(operator_status(self.schedule)['planning_auth_required'])
+        before = self.manager.filename.read_bytes()
+        with patch.object(operator_panel, 'plan_pending_schedule', new_callable=AsyncMock) as planning:
+            for _ in range(2):
+                root, refresh = self.render()
+                with self.client:
+                    await refresh()
+                await asyncio.sleep(0)
+                self.assertIn('YouTube 업로드 계정 연결 필요', self.text(root))
+                self.assertIn('계정 연결 후 기획 재개', self.text(root))
+                root.clear()
+            planning.assert_not_awaited()
+        self.assertEqual(before, self.manager.filename.read_bytes())
+
     def prepare_revision(self):
         self.state.load_saved_script(script().model_copy(update={'title': '직접 다듬은 대본'}))
         self.state.confirm_script_review()

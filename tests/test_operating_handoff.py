@@ -661,7 +661,9 @@ class OperatingHandoffTests(unittest.TestCase):
                 asyncio.run(self.manager._execute_pipeline(self.schedule, operator=True))
             auth.assert_called_once_with(interactive=False)
             pipeline.assert_not_awaited()
-            self.assertEqual(self.manager.get_schedule(self.schedule['id']), before)
+            failed = self.manager.get_schedule(self.schedule['id'])
+            self.assertTrue(failed.pop('planning_auth_required', False))
+            self.assertEqual(failed, before)
             self.assertEqual(episode_path(record['id']).read_bytes(), episode_before)
             self.assertEqual(episode_environment(record)[1], budget_before)
             auth.side_effect = None
@@ -673,6 +675,7 @@ class OperatingHandoffTests(unittest.TestCase):
         self.assertEqual(after['run_count'], 1)
         self.assertEqual(after['last_result'], 'script_review_pending')
         self.assertFalse(after['enabled'])
+        self.assertFalse(after.get('planning_auth_required'))
 
     def test_interrupted_planning_remains_unverified_and_cannot_be_submitted_again(self):
         record = self.queued_episode()
