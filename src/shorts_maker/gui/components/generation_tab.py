@@ -793,6 +793,11 @@ def render_generation_tab(state: 'AppState') -> None:
     rendered_script = state.script.model_dump_json() if state.script else None
     raw_readiness = {'verdicts': {}}
 
+    def failed_preview_notice():
+        ui.label('품질 검사를 통과하지 못한 영상입니다. 이 파일은 미리보기로만 열립니다.').classes(
+            'text-xs text-amber-200').bind_visibility_from(state, 'failed_video_preview_path',
+                lambda path: bool(path) and not state.final_video_path)
+
     # 세션 뷰에 필요한 헬퍼
     phase_labels = {}
     phases = ['ready', 'visuals', 'editing', 'complete']
@@ -936,9 +941,7 @@ def render_generation_tab(state: 'AppState') -> None:
                         video_player.bind_source_from(state, 'preview_video_path', backward=media_source)
                         video_player.bind_visibility_from(state, 'preview_video_path', bool)
                         placeholder_content.bind_visibility_from(state, 'preview_video_path', lambda path: not path)
-                        ui.label('품질 검사를 통과하지 못한 영상의 미리보기입니다. 이 파일은 업로드할 완성본으로 선택되지 않았습니다.').classes(
-                            'text-xs text-amber-200').bind_visibility_from(state, 'failed_video_preview_path',
-                                lambda path: bool(path) and not state.final_video_path)
+                        failed_preview_notice()
 
                 # ── 파이프라인 진행 상태 모니터 ──
                 with ui.element('div').classes('w-full rounded-xl bg-slate-900 border border-slate-800 p-5') as pipeline_status_card:
@@ -970,11 +973,14 @@ def render_generation_tab(state: 'AppState') -> None:
 
             # --- 2B. RIGHT SIDE: SCENE MANUAL GRID UPLOADER (수동 모드 시 화면 가득 활성화) ---
             with ui.element('div').classes('w-full bg-slate-950') as manual_uploader_area:
+                ui.label().classes('px-4 text-sm text-slate-300').bind_text_from(
+                    state, 'pipeline_message').bind_visibility_from(state, 'pipeline_message', bool)
                 with ui.column().classes('w-full p-4 lg:p-6 gap-2') as manual_preview:
                     ui.label('편집 결과 미리보기').classes('text-sm font-bold text-white')
                     manual_video_player = ui.video('').classes('w-full max-w-[220px] max-h-[360px] bg-black')
-                    manual_video_player.bind_source_from(state, 'final_video_path', backward=media_source)
-                manual_preview.bind_visibility_from(state, 'final_video_path', bool)
+                    manual_video_player.bind_source_from(state, 'preview_video_path', backward=media_source)
+                    failed_preview_notice()
+                manual_preview.bind_visibility_from(state, 'preview_video_path', bool)
                 scene_cards_container = ui.grid(columns='repeat(auto-fill, minmax(min(100%, 320px), 1fr))').classes('w-full gap-4 p-4 lg:p-6')
 
         # ── 3. VISIBILITY SWITCHING LOGIC ──

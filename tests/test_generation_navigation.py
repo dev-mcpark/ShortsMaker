@@ -145,12 +145,30 @@ class GenerationNavigationTests(IsolatedAsyncioTestCase):
         self.assertEqual(state.failed_video_preview_path, '/tmp/new-partial.mp4')
         self.assertEqual(players[0].source, '/offline-media/new-partial.mp4')
         self.assertTrue(players[0].visible)
-        self.assertEqual(players[1].source, '')
         state.get_or_create_service = Mock()
         notify = Mock()
         await callback('publishing_tab.py', 'upload_video', {'state': state, 'safe_notify': notify})()
         state.get_or_create_service.assert_not_called()
         notify.assert_called_once()
+
+    async def test_manual_edit_failure_can_be_inspected_after_navigation(self):
+        state, players = await self.complete_after_navigation(manual=True, success=False)
+        state.pipeline_message = '편집 품질 검사 실패'
+        for player in [players[1], self.render_view(state)[1]]:
+            binding._refresh_step()
+            preview = player.parent_slot.parent
+            manual_area = preview.parent_slot.parent
+            self.assertTrue(manual_area.visible)
+            self.assertTrue(preview.visible)
+            self.assertEqual(player.source, '/offline-media/new-partial.mp4')
+            self.assertTrue(any(isinstance(item, ui.label) and item.visible
+                                and '품질 검사' in item.text for item in preview.descendants()))
+            self.assertTrue(any(isinstance(item, ui.label) and item.visible
+                                and item.text == state.pipeline_message for item in manual_area.descendants()))
+        self.assertIsNone(state.final_video_path)
+        state.invalidate_video_result()
+        binding._refresh_step()
+        self.assertFalse(players[1].parent_slot.parent.visible)
 
     async def test_loading_another_script_and_invalidating_results_clear_failed_preview(self):
         state = AppState(script=script())
