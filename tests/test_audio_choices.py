@@ -1,5 +1,6 @@
 """Per-script audio recovery without restoring secrets or approvals."""
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -151,6 +152,53 @@ class AudioChoicesTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, '저장된 음성'):
                 load_audio_choices(script)
 
+    def test_exact_track_reopens_without_an_unused_mood_track(self):
+        from shorts_maker.editor.video_editor import VideoEditor
+
+        script = sample_script()
+        music = settings.output_dir / 'bgm'
+        music.mkdir()
+        track = music / 'chosen.mp3'
+        track.write_bytes(b'local licensed selection fixture')
+        Path(f'{track}.license.json').write_text(json.dumps({
+            'title': 'Chosen', 'artist': 'Fixture', 'source_url': 'https://example.com/music',
+            'license': 'Fixture license', 'attribution_required': False,
+            'sha256': hashlib.sha256(track.read_bytes()).hexdigest(),
+        }))
+        choices = {**CHOICES, 'bgm_track': track.name, 'bgm_mood': 'not-installed'}
+        saved = save_audio_choices(script, choices)
+        before = saved.read_bytes()
+        with patch.object(settings, 'bgm_dir', music):
+            editor = VideoEditor(**choices)
+            self.assertEqual(editor.preflight_music(script), str(track))
+            restored = AppState()
+            restored.load_saved_script(script)
+            self.assertEqual({key: getattr(restored, key) for key in choices}, choices)
+            self.assertIsNone(restored.audio_recovery)
+            track.write_bytes(b'changed selected track')
+            with self.assertRaisesRegex(ValueError, '저장된 음성'):
+                load_audio_choices(script)
+        self.assertEqual(saved.read_bytes(), before)
+
+    def test_muted_music_reopens_without_files_but_unmuting_keeps_music_gate(self):
+        from shorts_maker.editor.video_editor import VideoEditor
+
+        script = sample_script()
+        choices = {**CHOICES, 'bgm_track': 'missing.mp3', 'bgm_mood': 'not-installed', 'bgm_volume': 0.0}
+        saved = save_audio_choices(script, choices)
+        before = saved.read_bytes()
+        with patch.object(settings, 'bgm_dir', settings.output_dir / 'empty-bgm'):
+            restored = AppState()
+            restored.load_saved_script(script)
+            self.assertEqual({key: getattr(restored, key) for key in choices}, choices)
+            self.assertIsNone(restored.audio_recovery)
+            editor = VideoEditor(**choices)
+            self.assertIsNone(editor.preflight_music(script))
+            editor.bgm_volume = 0.2
+            with self.assertRaisesRegex(ValueError, '사용 권한'):
+                editor.preflight_music(script)
+        self.assertEqual(saved.read_bytes(), before)
+
     def test_failed_atomic_save_keeps_previous_choices(self):
         script = sample_script()
         path = save_audio_choices(script, CHOICES)
@@ -186,3 +234,43 @@ class AudioChoicesTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             state.save_audio_choices()
         self.assertEqual(path.read_bytes(), before)
+
+
+class SavedMusicSelectorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sidebar_shows_restored_muted_selection_after_opening_script(self):
+        import asyncio
+        from nicegui import binding, core, ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from shorts_maker.gui.pages import main_page
+
+        script = sample_script()
+        state = AppState()
+        client = Client(page('/restore-music-options'))
+        self.addCleanup(client.delete)
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(settings, 'output_dir', Path(directory)), \
+                patch.object(settings, 'scripts_dir', Path(directory)), \
+                patch.object(settings, 'bgm_dir', Path(directory)), \
+                patch.object(main_page, 'get_session_state', return_value=state), \
+                patch.object(main_page, 'render_budget_panel'), patch.object(ui, 'notify'), \
+                patch.object(core, 'loop', asyncio.get_running_loop()), client:
+            filename = 'saved.json'
+            (Path(directory) / filename).write_text(script.model_dump_json())
+            save_audio_choices(script, {**CHOICES, 'bgm_mood': 'old mood', 'bgm_track': 'old.mp3', 'bgm_volume': 0.0})
+            main_page.render_main_page()
+            picker = next(e for e in client.elements.values() if e._props.get('label') == '저장된 각본 검색')
+            picker.value = filename
+            button = next(e for e in client.elements.values() if getattr(e, 'text', '') == '불러오기')
+            next(e.handler for e in button._event_listeners.values() if e.type == 'click')(None)
+            await asyncio.sleep(0)
+            binding._refresh_step()
+            self.assertEqual(state.script, script)
+            for name, saved in [('BGM 분위기', 'old mood'), ('BGM 트랙', 'old.mp3')]:
+                field = next(e for e in client.elements.values() if e._props.get('aria-label') == name)
+                self.assertEqual(field.value, saved)
+                self.assertIn(saved, field._props[field.VALUE_PROP]['label'])
+            field.value = ''
+            binding._refresh_step()
+            self.assertEqual(state.bgm_track, '')
+            self.assertNotIn('old.mp3', field.options)

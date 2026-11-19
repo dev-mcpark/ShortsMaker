@@ -199,28 +199,33 @@ def render_main_page() -> None:
                     'mysterious': 'Mysterious', 'energetic': 'Energetic Pop',
                     'dark': 'Dark Mystery', 'synthwave': 'Retro Synthwave',
                 }.items() if bgm_manager.get_bgm_path(mood)})
-                if state.bgm_mood not in mood_options:
-                    mood_options[state.bgm_mood] = f'사용 가능한 곡 없음 · {state.bgm_mood}'
-                bgm_select = ui.select(
-                    options=mood_options,
-                    value=state.bgm_mood
-                ).props('outlined dense dark aria-label="BGM 분위기"').classes('w-full mb-3')
-                bgm_select.bind_value(state, 'bgm_mood')
-                bgm_select.bind_enabled_from(state, 'is_busy', backward=lambda busy: not busy)
+                def music_selector(attribute, options, label, unavailable):
+                    def include_saved(value):
+                        if value not in options:
+                            return {**options, value: f'{unavailable} · {value}'}
+                        return options
+
+                    initial = getattr(state, attribute)
+                    field = ui.select(include_saved(initial), value=initial).props(
+                        f'outlined dense dark aria-label="{label}"').classes('w-full mb-2')
+
+                    def restore(value):
+                        # A reopened script may refer to an unavailable, inactive choice.
+                        if value not in field.options or (value in options and len(field.options) != len(options)):
+                            field.set_options(include_saved(value), value=value)
+                        return value
+
+                    field.bind_value(state, attribute, backward=restore)
+                    field.bind_enabled_from(state, 'is_busy', backward=lambda busy: not busy)
+
+                music_selector('bgm_mood', mood_options, 'BGM 분위기', '사용 가능한 곡 없음')
                 ui.label('영상 편집은 사용 허가 음악이 없으면 중단합니다. 음성만 준비는 음악 없이 가능합니다.') \
                     .classes('text-[10px] text-slate-400 mb-2')
 
                 ui.label('사용할 음악').classes('text-[10px] text-slate-400 font-semibold mb-1')
                 track_options = {'': '분위기에 맞춰 선택'}
                 track_options.update(bgm_manager.list_documented_tracks())
-                if state.bgm_track and state.bgm_track not in track_options:
-                    track_options[state.bgm_track] = f'사용할 수 없는 곡 · {state.bgm_track}'
-                bgm_track_select = ui.select(
-                    options=track_options,
-                    value=state.bgm_track,
-                ).props('outlined dense dark aria-label="BGM 트랙"').classes('w-full mb-1')
-                bgm_track_select.bind_value(state, 'bgm_track')
-                bgm_track_select.bind_enabled_from(state, 'is_busy', backward=lambda busy: not busy)
+                music_selector('bgm_track', track_options, 'BGM 트랙', '사용할 수 없는 곡')
                 ui.label('직접 고른 곡을 우선 사용합니다. 저장하면 대본을 다시 열 때 복원됩니다.') \
                     .classes('text-[10px] text-slate-400 mb-3')
 
