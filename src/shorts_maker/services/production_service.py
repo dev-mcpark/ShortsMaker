@@ -267,13 +267,13 @@ class ProductionService:
         self._update_progress(ProductionPhase.GENERATING, 100, '내레이션 보관 완료 · 연결 후 들어보세요.')
         return manifest
 
-    def _init_scene_progresses(self, num_scenes: int):
+    def _init_scene_progresses(self, script: ShortsScript):
         """씬별 진행 상황 초기화"""
-        self._progress.total_scenes = num_scenes
+        self._progress.total_scenes = len(script.scenes)
         self._progress.completed_scenes = 0
         self._progress.current_scene = 0
         self._progress.scene_progresses = [
-            SceneProgress(scene_number=i + 1) for i in range(num_scenes)
+            SceneProgress(scene_number=scene.scene_number) for scene in script.scenes
         ]
 
     def _update_scene_progress(self, scene_idx: int, status: str,
@@ -646,8 +646,8 @@ class ProductionService:
                 return None, None
 
             if script:
-                num_scenes = len(script.scenes) if script.scenes else 5
-                self._init_scene_progresses(num_scenes)
+                num_scenes = len(script.scenes)
+                self._init_scene_progresses(script)
                 self._update_progress(ProductionPhase.PLANNING, 100,
                                        f"✓ 스크립트 완료: {script.title} ({num_scenes}개 씬)")
                 return script, context
@@ -701,8 +701,7 @@ class ProductionService:
                 return None
 
             if final_script:
-                num_scenes = len(final_script.scenes) if final_script.scenes else 5
-                self._init_scene_progresses(num_scenes)
+                self._init_scene_progresses(final_script)
                 self._update_progress(ProductionPhase.PLANNING, 100,
                                        f"✓ 재생성 완료 (시도 {context.attempt_count}/{context.max_attempts})")
                 return final_script
@@ -748,11 +747,11 @@ class ProductionService:
 
         try:
             # Phase 1: Visual Generation
+            self._init_scene_progresses(script)
             self._start_phase(ProductionPhase.GENERATING, num_scenes)
-            self._init_scene_progresses(num_scenes)
 
             if manual_clip_paths is not None and not manual_clip_paths:
-                return self._failed_result("씬 1의 클립 파일이 없습니다.", clips)
+                return self._failed_result(f"씬 {script.scenes[0].scene_number}의 클립 파일이 없습니다.", clips)
             manual_paths = manual_clip_paths or {}
             scene_numbers = {scene.scene_number for scene in script.scenes}
             if any(type(number) is not int or number not in scene_numbers for number in manual_paths):
@@ -853,7 +852,7 @@ class ProductionService:
                 self._update_progress(
                     ProductionPhase.GENERATING,
                     self._progress.completed_scenes / num_scenes * 100,
-                    f"씬 {index + 1}/{num_scenes} "
+                    f"장면 {scene.scene_number} ({index + 1}/{num_scenes}) "
                     f"{'수동 클립 사용' if manual else '저장된 결과 사용' if cached else '생성 중'}",
                 )
                 try:

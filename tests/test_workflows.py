@@ -64,6 +64,9 @@ class WorkflowTests(unittest.TestCase):
             self.assertAlmostEqual(estimate_new_visual_cost(script, 'image'), 0.068)
             self.assertAlmostEqual(estimate_new_visual_cost(script, 'hybrid'), 0.214)
             self.assertAlmostEqual(estimate_new_visual_cost(script, 'video'), 0.48)
+            script.scenes[1].visual_mode = None
+            script.scenes.reverse()
+            self.assertAlmostEqual(estimate_new_visual_cost(script, 'hybrid'), 0.36)
 
     def test_topic_scoring_asks_for_stakes_and_source_supported_payoff(self):
         planner = object.__new__(ScriptPlanner)
@@ -269,12 +272,12 @@ class WorkflowTests(unittest.TestCase):
 
     def test_empty_manual_clips_do_not_start_paid_generation(self):
         service = ProductionService(mode="video")
-        script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=1)])
+        script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=7)])
 
         result = asyncio.run(service.produce_video(script, manual_clip_paths={}))
 
         self.assertFalse(result.success)
-        self.assertIn("씬 1", result.error)
+        self.assertIn("씬 7", result.error)
         self.assertIsNone(service._generator)
 
     @patch("shorts_maker.services.production_service.check_video_quality")
@@ -282,23 +285,32 @@ class WorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "output.mp4"
             output.touch()
+            second_clip = Path(directory) / "second.mp4"
+            second_clip.touch()
             clip = Path(directory) / "clip.mp4"
             clip.touch()
             service = ProductionService(mode="video")
             service._valid_clip = Mock(return_value=True)  # This wiring fixture has no encoded video bytes.
             editor = SimpleNamespace(compose_video=AsyncMock(return_value=str(output)))
             service._editor = editor
-            script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=1)])
+            script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=7)])
 
+            script.scenes.append(SimpleNamespace(scene_number=3))
+            seen = []
+            service.set_progress_callback(lambda progress: seen.extend(
+                row.scene_number for row in progress.scene_progresses if row.status == "processing"
+            ))
             result = asyncio.run(
-                service.produce_video(script, manual_clip_paths={1: str(clip)})
+                service.produce_video(script, manual_clip_paths={3: str(second_clip), 7: str(clip)})
             )
 
         self.assertTrue(result.success)
-        self.assertEqual(result.clips, [str(clip)])
+        self.assertEqual(result.clips, [str(clip), str(second_clip)])
+        self.assertEqual(list(dict.fromkeys(seen)), [7, 3])
+        self.assertEqual([row.scene_number for row in service.progress.scene_progresses], [7, 3])
         self.assertIsNone(service._generator)
         editor.compose_video.assert_awaited_once()
-        self.assertEqual(editor.compose_video.await_args.args, ([str(clip)], script))
+        self.assertEqual(editor.compose_video.await_args.args, ([str(clip), str(second_clip)], script))
         self.assertTrue(callable(editor.compose_video.await_args.kwargs["progress_callback"]))
 
     def test_missing_manual_file_is_rejected_before_editing(self):
@@ -431,11 +443,15 @@ class WorkflowTests(unittest.TestCase):
         editor._get_voice_for_mood = Mock(return_value="alloy")
         editor._generate_tts = AsyncMock(return_value="audio.mp3")
         editor._create_visual_clip = Mock()
-        script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=1, script_text="Hello")])
+        script = SimpleNamespace(scenes=[SimpleNamespace(scene_number=7, script_text="Hello")])
 
+        progress = Mock()
         with self.assertRaisesRegex(RuntimeError, "취소"):
-            asyncio.run(editor.compose_video(["scene.png"], script, is_cancelled=lambda: True))
+            asyncio.run(editor.compose_video(["scene.png"], script, is_cancelled=lambda: True,
+                                             audio_paths=["saved.mp3"], progress_callback=progress))
 
+        self.assertEqual(progress.call_args.args[1], "장면 7 (1/1) 준비된 음성 사용")
+        editor._generate_tts.assert_not_awaited()
         editor._create_visual_clip.assert_not_called()
         editor.cleanup_temp_files.assert_called_once()
 

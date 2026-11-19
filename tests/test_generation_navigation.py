@@ -25,6 +25,14 @@ class GenerationNavigationTests(IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         self.client.delete()
 
+    async def test_progress_cards_identify_reordered_scenes_and_actual_states(self):
+        from shorts_maker.services.production_service import SceneProgress
+        with self.client, ui.column() as grid:
+            generation_tab.update_scene_grid(
+                [SceneProgress(7, 'processing'), SceneProgress(3, 'failed')], grid)
+        labels = [item.text for item in grid.descendants() if isinstance(item, ui.label)]
+        self.assertEqual(labels, ['장면 7', '처리 중', '장면 3', '실패'])
+
     def render_view(self, state):
         source = lambda path: f'/offline-media/{Path(path).name}' if path else ''
         with self.client, ui.element('div') as container, patch.object(

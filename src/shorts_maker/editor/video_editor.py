@@ -235,7 +235,8 @@ class VideoEditor:
             for i, (path, scene) in enumerate(zip(media_paths, script.scenes)):
                 self.logger.info(f"Editing scene {scene.scene_number}...")
                 if progress_callback:
-                    progress_callback(5 + 65 * i / len(script.scenes), f"씬 {i + 1}/{len(script.scenes)} TTS 생성 중...")
+                    action = "준비된 음성 사용" if audio_paths is not None else "음성 생성 중"
+                    progress_callback(5 + 65 * i / len(script.scenes), f"장면 {scene.scene_number} ({i + 1}/{len(script.scenes)}) {action}")
 
                 # 1. TTS
                 audio_path = audio_paths[i] if audio_paths is not None else await self._generate_tts(
@@ -274,7 +275,7 @@ class VideoEditor:
             
                 processed_clips.append(final_scene_clip)
                 if progress_callback:
-                    progress_callback(5 + 65 * (i + 1) / len(script.scenes), f"씬 {i + 1}/{len(script.scenes)} 편집 완료")
+                    progress_callback(5 + 65 * (i + 1) / len(script.scenes), f"장면 {scene.scene_number} ({i + 1}/{len(script.scenes)}) 편집 완료")
 
             if not processed_clips:
                 self.logger.warning("No clips to compose.")
@@ -298,9 +299,9 @@ class VideoEditor:
                 final_video = final_video.with_effects([vfx.MultiplySpeed(speed_factor)])
         
             # 4. BGM
-            if progress_callback:
-                progress_callback(75, "BGM 합성 중...")
             if bgm_path:
+                if progress_callback:
+                    progress_callback(75, "BGM 합성 중...")
                 normalized_bgm_path = await asyncio.to_thread(self._normalize_bgm_audio, bgm_path)
                 bgm = AudioFileClip(normalized_bgm_path)
                 if bgm.duration < final_video.duration:

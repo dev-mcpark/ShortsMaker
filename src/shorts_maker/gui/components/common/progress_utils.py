@@ -42,27 +42,20 @@ def update_scene_grid(scene_progresses: List, scene_grid: ui.element) -> None:
 
             for i, scene_prog in enumerate(scene_progresses):
                 status = getattr(scene_prog, 'status', 'pending')
-                progress = 100 if status == 'completed' else (50 if status == 'processing' else 0)
                 gradient = SCENE_GRADIENTS[i % len(SCENE_GRADIENTS)]
-
-                # 상태별 아이콘 및 색상
-                status_icon = {
-                    'pending': ('hourglass_empty', 'text-gray-500'),
-                    'generating': ('autorenew', 'text-amber-400 animate-spin'),
-                    'completed': ('check_circle', 'text-green-400'),
-                    'failed': ('error', 'text-red-400'),
-                }.get(status, ('help', 'text-gray-400'))
+                icon, color, label = {
+                    'pending': ('hourglass_empty', 'text-gray-500', '대기'),
+                    'processing': ('autorenew', 'text-amber-400 animate-spin', '처리 중'),
+                    'completed': ('check_circle', 'text-green-400', '완료'),
+                    'failed': ('error', 'text-red-400', '실패'),
+                }.get(status, ('help', 'text-gray-400', '상태 확인 필요'))
 
                 # 씬 카드 생성
                 with ui.card().classes(f'w-24 h-28 p-2 bg-gradient-to-br {gradient} rounded-lg'):
                     with ui.column().classes('items-center gap-1'):
-                        ui.label(f'Scene {i + 1}').classes('text-xs text-white font-bold')
-                        ui.icon(status_icon[0], size='sm').classes(status_icon[1])
-                        ui.label(f'{int(progress)}%').classes('text-xs text-white/80')
-                        ui.linear_progress(
-                            value=progress / 100,
-                            show_value=False
-                        ).props('color=white').classes('h-1 w-full')
+                        ui.label(f'장면 {scene_prog.scene_number}').classes('text-xs text-white font-bold')
+                        ui.icon(icon, size='sm').classes(color)
+                        ui.label(label).classes('text-xs text-white/80')
 
     except RuntimeError:
         # UI 요소가 삭제된 경우 무시
