@@ -43,6 +43,8 @@ class FailedScriptDraftTests(TestCase):
         self.assertEqual(len(choices), 1)
         self.assertEqual(warnings, [])
         name = next(iter(choices)); record, _ = work_drafts.read_work_draft(name)
+        self.assertIn(data['title'], choices[name]['label'])
+        self.assertIn('미적용', choices[name]['label'])
         saved = json.loads(record.editor_text)
         self.assertIsNone(record.applied_script)
         self.assertIsNone(saved['mood'])
@@ -68,6 +70,14 @@ class FailedScriptDraftTests(TestCase):
                 self.assertIsNone(record.applied_script)
                 self.assertIn(text if not text.startswith('{"') else 'duration_seconds', record.editor_text)
         self.assertEqual(self.create.await_count, 4)
+
+    def test_incomplete_or_non_object_editor_text_stays_searchable_as_an_untitled_draft(self):
+        for text in ('{"title":', 'null', '[]', '{"title": 3}', '[' * 1200 + ']' * 1200):
+            work_drafts.save_work_draft(None, text, {})
+        choices, warnings = work_drafts.saved_work_drafts()
+        self.assertEqual(warnings, [])
+        self.assertEqual(len(choices), 5)
+        self.assertTrue(all('새 대본 입력 초안' in item['label'] for item in choices.values()))
 
     def test_storage_failure_keeps_existing_snapshot_and_reports_no_saved_copy(self):
         existing = work_drafts.save_work_draft(None, 'keep this unfinished text', {})

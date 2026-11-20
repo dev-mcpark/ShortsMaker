@@ -1,6 +1,7 @@
 """Explicit, private text-work snapshots; no credentials, approvals or provider state."""
 
 import hashlib
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -64,8 +65,18 @@ def saved_work_drafts() -> tuple[dict, list]:
     for path in snapshot_paths('studio_drafts'):
         try:
             record, digest = read_work_draft(path.name)
-            title = record.applied_script.title if record.applied_script else '새 대본 입력 초안'
-            if record.applied_script is None and not record.editor_text.strip() and record.planning_input:
+            title = '새 대본 입력 초안'
+            if record.applied_script:
+                title = record.applied_script.title
+            elif record.editor_text.strip():
+                try:
+                    draft = json.loads(record.editor_text)
+                except (ValueError, RecursionError):
+                    draft = None
+                if isinstance(draft, dict) and isinstance(draft.get('title'), str) and draft['title'].strip():
+                    display_title = draft['title'].strip()[:100].encode('utf-8', errors='replace').decode()
+                    title = f'미적용 · {display_title}'
+            elif record.planning_input:
                 title = f'소재 선택 · {(record.planning_input["url"] or record.planning_input["category"])[:100]}'
             records.append((path.stat().st_mtime_ns, path.name, {
                 'label': f'{title} · {record.saved_at.astimezone():%Y-%m-%d %H:%M:%S} · {path.stem[-8:]}',
