@@ -1,6 +1,6 @@
 # Current status
 
-Updated: 2026-11-19. This file owns the active milestone and known limits. Code and tests remain the final evidence.
+Updated: 2026-11-20. This file owns the active milestone and known limits. Code and tests remain the final evidence.
 
 ## Goal and milestones
 
@@ -31,7 +31,7 @@ Current implementation still falls short of full product/operational acceptance.
 
 | Stage | State | Exit evidence |
 | --- | --- | --- |
-| 0. Studio product workflow and safe delivery | In progress | App-native creation/intervention/recovery and deployed usability must satisfy the product criteria above. Latest code has760 offline tests; Studio11188 remains on770b805. Actual live app planning reached the pre-spend auth gate; today’s authentication-reason patch still needs safe activation. No paid planning or owner acceptance resulted. Developer/service workarounds do not close UI gaps. |
+| 0. Studio product workflow and safe delivery | In progress | App-native creation/intervention/recovery and deployed usability must satisfy the product criteria above. Latest code has761 offline tests; Studio11188 remains on770b805. Actual live app planning reached the pre-spend auth gate; today’s authentication-reason patch still needs safe activation. No paid planning or owner acceptance resulted. Developer/service workarounds do not close UI gaps. |
 | 1. Cost-aware generation | Complete | Commit `3f537b2`; offline tests passed. Hybrid default, scene-level reuse, estimated visual cap, current image model. |
 | 2. Source-grounded quality gate | Complete offline; limited live RSS-fit check | Primary article text is passed to the script validator; missing source and contradictory `unsupported_claim` responses fail closed. On 2026-10-21, two paid article analyses classified a future announcement and a completed facility as expected, and their responses followed the intended planner branches offline. This does not validate unattended topic quality or a finished script. |
 | 3. Production scorecard | Sillim and Jamsu accepted and owner-confirmed public; complete billed allocation remains open | Each cut passed the technical gate and owner whole-cut review. The app uploaded privately; the owner separately made each public. Jamsu has matched native-currency provider usage records, while final invoices and complete currency/shared-cost allocation remain open. The manual pilots do not count as scheduled accepted cycles. |
@@ -40,6 +40,7 @@ Current implementation still falls short of full product/operational acceptance.
 
 ## Current evidence and limits
 
+- **2026-11-20 production progress after navigation.** The edit callback previously polled its original widgets. Reopening Generation mid-edit showed default phases and lost all scene rows. Both source modes now read the same session progress updated by the existing service callback. A native regression reproduced the missing status, then verified reopen, in-place scene failure and reset. An isolated Chrome fixture went from automatic view to a cleared view to manual view and showed scene 7 complete, scene 3 processing, then scene 3 failed. 761 offline tests passed. Live Studio and queue remained running; no production restart, provider request or upload was involved.
 - **2026-11-19 manual edit failure review.** After a failed edit returned a file, the visible manual player read only the final selection. The failure preview and service message were in the hidden automatic workspace. The manual view now shows the session's progress message and the review-only file with its quality notice. A native regression failed before the fix and passed for completion during navigation, reopening and clearing the selection. All 760 offline tests passed. Isolated Chrome QA played a temporary 0.8s MP4 to the end with the failure message and notice visible. Studio11188 and queue82355 continued running. This change awaits safe activation. The November18 episode still requires upload authentication with zero new reservations.
 - **2026-11-19 reordered scene progress.** With scenes 7 and 3 in that order, service callbacks previously reported 1 and 2, and an empty manual selection incorrectly named scene 1. Progress records now carry the script IDs through planning and editing. The shared Studio grid shows the processing or failure state for the corresponding card. An offline render using two colored fixtures and prepared tones verified output order and the two prepared-audio progress messages. The muted render also skips the music-mixing message. Native NiceGUI coverage checks the same cards, and the hybrid estimate test covers a moved automatic scene preceding an explicit video. The 759-test offline suite passed. The live Studio still awaits safe deployment. [Local render](../outputs/evaluation/studio_scene_progress_20261119/local_edit.json), [offline verification](../outputs/evaluation/studio_scene_progress_20261119/transport_check.json).
 

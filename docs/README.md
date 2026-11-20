@@ -1,6 +1,6 @@
 # Project map
 
-`ProductionService` builds per-scene progress from the script in playback order. Planning, regeneration and production share these rows. The Generation and Pipeline grids read each row’s script scene number and processing status. Editor progress reports the same ID and position and distinguishes supplied audio from a speech request.
+`ProductionService` builds per-scene progress from the script in playback order. Planning, regeneration and production share these rows. Generation binds its phase, service message and scene status lines to AppState so each reopened view can display ongoing work. The Pipeline grid and Generation use the same status labels and script scene numbers. Editor progress reports the same ID and position and distinguishes supplied audio from a speech request.
 
 `ScheduleManager` retains `planning_auth_required` for a failed operator pre-planning upload-auth check without changing the pending episode or budgets. `operating_status.operator_status` exposes only a true marker; `operator_panel` renders the persistent reconnection reason and reuses the existing bounded planning confirmation. Successful noninteractive auth clears it; `_RUN_FIELDS` archives/resets it on a new slot. The handoff, operator-panel and review-continuation tests cover failure/reopen/recovery and lifecycle. It stores no credential or auth URL and starts no automatic reconnect/retry.
 

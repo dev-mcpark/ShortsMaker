@@ -369,15 +369,12 @@ class CreationCallbackTests(unittest.IsolatedAsyncioTestCase):
                                   progress=SimpleNamespace(phase=ProductionPhase.FAILED,
                                                            scene_progresses=[], progress_percent=0))
         state.new_production_service = lambda: service
-        manual_preview = SimpleNamespace(visible=True)
+        manual_preview = SimpleNamespace(visible=True, is_deleted=False)
         env = {'state': state, 'safe_notify': Mock(), 'logger': Mock(), 'asyncio': asyncio,
                'ProductionPhase': ProductionPhase, 'ProductionProgress': object,
-               'gen_spinner': SimpleNamespace(visible=False),
-               'scene_progress_container': SimpleNamespace(visible=False, clear=Mock()),
                'manual_preview': manual_preview, 'manual_video_player': Mock(),
                'injected_video_player': SimpleNamespace(visible=True),
                'injected_placeholder': SimpleNamespace(visible=False),
-               'update_scene_grid': Mock(), 'update_progress_ui': Mock(),
                'rendered_script': state.script.model_dump_json(),
                'settings': SimpleNamespace(paid_production_enabled=True)}
         tree = ast.parse((COMPONENTS / 'generation_tab.py').read_text())

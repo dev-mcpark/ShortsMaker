@@ -11,11 +11,11 @@ from shorts_maker.gui.components.narration_panel import render_narration_panel
 from shorts_maker.gui.components.image_picker import open_image_picker
 from shorts_maker.gui.components.existing_scene_picker import open_existing_scene_picker
 from shorts_maker.services.first_frame_candidates import retained_candidate
-from shorts_maker.services.production_service import ProductionPhase, ProductionProgress
+from shorts_maker.services.production_service import ProductionPhase
 from shorts_maker.services.raw_review import load_raw_verdict, raw_review_status, save_raw_verdict
 from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
 from shorts_maker.services.visual_review import approve_first_frame, inspect_frame, review_path, verified_first_frame
-from shorts_maker.gui.components.common.progress_utils import update_scene_grid
+from shorts_maker.gui.components.common.progress_utils import scene_status
 from shorts_maker.utils.veo_prompt_exporter import MAX_MANUAL_CLIP_BYTES, VeoPromptExporter
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
@@ -798,22 +798,6 @@ def render_generation_tab(state: 'AppState') -> None:
             'text-xs text-amber-200').bind_visibility_from(state, 'failed_video_preview_path',
                 lambda path: bool(path) and not state.final_video_path)
 
-    # 세션 뷰에 필요한 헬퍼
-    phase_labels = {}
-    phases = ['ready', 'visuals', 'editing', 'complete']
-
-    def update_progress_ui(phase: str, progress: float, message: str = ""):
-        try:
-            for p, label in phase_labels.items():
-                if p == phase:
-                    label.classes(replace='text-violet-400 font-bold')
-                elif phases.index(p) < phases.index(phase):
-                    label.classes(replace='text-emerald-400')
-                else:
-                    label.classes(replace='text-slate-600')
-        except (ValueError, RuntimeError) as e:
-            logger.debug(f"Progress UI sync skipped: {e}")
-
     # 전체를 아우르는 반응형 컬럼 구조
     with ui.column().classes('w-full gap-0 bg-slate-950'):
 
@@ -884,9 +868,23 @@ def render_generation_tab(state: 'AppState') -> None:
                     state, 'is_busy', lambda _: _auto_edit_ready(state, raw_readiness['verdicts']))
                 auto_btn.visible = not state.manual_video_mode
 
-                # 상태 인디케이터 스피너
-                gen_spinner = ui.spinner(size='sm').props('color=violet').classes('my-1')
-                gen_spinner.visible = False
+                ui.spinner(size='sm').props('color=violet').bind_visibility_from(state, 'pipeline_running')
+
+        phase_names = {
+            ProductionPhase.PLANNING: '기획 중', ProductionPhase.GENERATING: '재료 준비 중',
+            ProductionPhase.EDITING: '편집 중', ProductionPhase.UPLOADING: '업로드 중',
+            ProductionPhase.COMPLETED: '작업 완료', ProductionPhase.FAILED: '작업 중단',
+        }
+        with ui.column().classes('w-full px-4 lg:px-6 gap-1'):
+            ui.label().classes('text-sm font-semibold').bind_text_from(
+                state, 'pipeline_phase', lambda phase: phase_names.get(phase, '')).bind_visibility_from(
+                    state, 'pipeline_phase', lambda phase: phase in phase_names)
+            ui.label().classes('text-sm text-slate-300').bind_text_from(
+                state, 'pipeline_message').bind_visibility_from(state, 'pipeline_message', bool)
+            ui.label().classes('whitespace-pre-line text-sm text-slate-300').bind_text_from(
+                state, 'scene_progresses', lambda rows: '\n'.join(
+                    f'장면 {row.scene_number} · {scene_status(row.status)[2]}' for row in rows)
+            ).bind_visibility_from(state, 'scene_progresses', bool)
 
         # ── 2. MAIN PRODUCTION WORKSPACE ──
         with ui.row().classes('w-full gap-0'):
@@ -943,38 +941,8 @@ def render_generation_tab(state: 'AppState') -> None:
                         placeholder_content.bind_visibility_from(state, 'preview_video_path', lambda path: not path)
                         failed_preview_notice()
 
-                # ── 파이프라인 진행 상태 모니터 ──
-                with ui.element('div').classes('w-full rounded-xl bg-slate-900 border border-slate-800 p-5') as pipeline_status_card:
-                    with ui.row().classes('w-full items-center justify-between mb-4'):
-                        ui.label('파이프라인 진행 이력').classes('text-xs font-bold text-slate-400 uppercase tracking-widest')
-                        ui.label().bind_text_from(state, 'pipeline_message').classes('text-xs text-violet-400 font-semibold')
-
-                    # 파이프라인 단계 로드바
-                    with ui.row().classes('w-full justify-between items-center bg-slate-950/60 rounded-xl border border-slate-800/80 p-4 mb-4'):
-                        step_configs = [
-                            ('ready', 'hourglass_empty', 'Ready'),
-                            ('visuals', 'auto_awesome', 'Veo Visuals'),
-                            ('editing', 'movie_edit', 'FFmpeg Editing'),
-                            ('complete', 'check_circle', 'Finished')
-                        ]
-                        for i, (phase_id, icon, label_text) in enumerate(step_configs):
-                            with ui.column().classes('items-center gap-1.5 flex-grow'):
-                                icon_class = 'text-violet-400' if i == 0 else 'text-slate-600'
-                                with ui.element('div').classes('w-9 h-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center transition-all duration-300'):
-                                    ui.icon(icon, size='xs').classes(icon_class)
-                                phase_labels[phase_id] = ui.label(label_text).classes('text-[10px] text-slate-500 font-semibold uppercase tracking-wider')
-
-                            if i < len(step_configs) - 1:
-                                ui.element('div').classes('h-px bg-slate-800 flex-grow max-w-[60px] mb-5')
-
-                    # 실시간 생성 씬 격자 모니터 (비디오 생성 상태 확인)
-                    scene_progress_container = ui.column().classes('w-full gap-2 mt-2')
-                    scene_progress_container.visible = False
-
             # --- 2B. RIGHT SIDE: SCENE MANUAL GRID UPLOADER (수동 모드 시 화면 가득 활성화) ---
             with ui.element('div').classes('w-full bg-slate-950') as manual_uploader_area:
-                ui.label().classes('px-4 text-sm text-slate-300').bind_text_from(
-                    state, 'pipeline_message').bind_visibility_from(state, 'pipeline_message', bool)
                 with ui.column().classes('w-full p-4 lg:p-6 gap-2') as manual_preview:
                     ui.label('편집 결과 미리보기').classes('text-sm font-bold text-white')
                     manual_video_player = ui.video('').classes('w-full max-w-[220px] max-h-[360px] bg-black')
@@ -1034,12 +1002,10 @@ def render_generation_tab(state: 'AppState') -> None:
             except (OSError, ValueError, TypeError, RuntimeError) as error:
                 safe_notify(f'제작 준비를 다시 확인하세요: {error}', type='negative')
                 return
-            production_running = True
+            if manual_preview.is_deleted:
+                return
 
             try:
-                gen_spinner.visible = True
-                scene_progress_container.visible = True
-                scene_progress_container.clear()
                 if video_player:
                     video_player.visible = False
                 if placeholder_content:
@@ -1056,42 +1022,13 @@ def render_generation_tab(state: 'AppState') -> None:
                 state.failed_video_preview_path = None
                 state.generated_clips = []
 
-                def on_progress(progress: ProductionProgress):
-                    state.sync_from_progress(progress)
-
-                service.set_progress_callback(on_progress)
-
-                async def monitor_progress():
-                    while production_running:
-                        progress = service.progress
-                        try:
-                            update_scene_grid(progress.scene_progresses, scene_progress_container)
-                        except RuntimeError:
-                            pass
-                        try:
-                            phase_map = {
-                                ProductionPhase.GENERATING: 'visuals',
-                                ProductionPhase.EDITING: 'editing',
-                                ProductionPhase.COMPLETED: 'complete'
-                            }
-                            if progress.phase in phase_map:
-                                update_progress_ui(phase_map[progress.phase], progress.progress_percent)
-                        except (RuntimeError, KeyError):
-                            pass
-                        if progress.phase in [ProductionPhase.COMPLETED, ProductionPhase.FAILED]:
-                            break
-                        await asyncio.sleep(0.3)
-
-                monitor_task = asyncio.create_task(monitor_progress())
+                service.set_progress_callback(state.sync_from_progress)
 
                 logger.info("=== Production Pipeline Execution Triggered ===")
                 options = {'manual_clip_paths': manual_clip_paths, 'retain_narration': True}
                 if prepared_audio is not None:
                     options['prepared_audio_paths'] = prepared_audio
                 result = await service.produce_video(state.script, **options)
-
-                production_running = False
-                await monitor_task
 
                 retained_voice = getattr(result, 'narration_manifest_path', None)
                 if retained_voice:
@@ -1101,7 +1038,6 @@ def render_generation_tab(state: 'AppState') -> None:
                     state.final_video_path = result.video_path
                     state.failed_video_preview_path = None
                     state.generated_clips = result.clips
-                    update_progress_ui('complete', 100)
                     safe_notify(
                         f"영상 제작 완료 · 예상 비주얼 API 비용 ${result.estimated_visual_cost_usd:.3f} "
                         f"· 재사용·수동 {result.reused_scenes}장면",
@@ -1119,12 +1055,7 @@ def render_generation_tab(state: 'AppState') -> None:
                 safe_notify(f"실행 도중 오류 발생: {e}", type='negative')
                 logger.error(f"Production Error Event: {e}")
             finally:
-                production_running = False
                 state.pipeline_running = False
-                try:
-                    gen_spinner.visible = False
-                except RuntimeError:
-                    pass
 
         async def run_production():
             if not state.script:

@@ -6,6 +6,18 @@ from typing import List
 from shorts_maker.gui.config.ui_theme import SCENE_GRADIENTS
 
 
+_SCENE_STATUSES = {
+    'pending': ('hourglass_empty', 'text-gray-500', '대기'),
+    'processing': ('autorenew', 'text-amber-400 animate-spin', '처리 중'),
+    'completed': ('check_circle', 'text-green-400', '완료'),
+    'failed': ('error', 'text-red-400', '실패'),
+}
+
+
+def scene_status(status: str) -> tuple[str, str, str]:
+    return _SCENE_STATUSES.get(status, ('help', 'text-gray-400', '상태 확인 필요'))
+
+
 def format_time(seconds: float) -> str:
     """시간 포맷팅 (분:초)
     
@@ -43,12 +55,7 @@ def update_scene_grid(scene_progresses: List, scene_grid: ui.element) -> None:
             for i, scene_prog in enumerate(scene_progresses):
                 status = getattr(scene_prog, 'status', 'pending')
                 gradient = SCENE_GRADIENTS[i % len(SCENE_GRADIENTS)]
-                icon, color, label = {
-                    'pending': ('hourglass_empty', 'text-gray-500', '대기'),
-                    'processing': ('autorenew', 'text-amber-400 animate-spin', '처리 중'),
-                    'completed': ('check_circle', 'text-green-400', '완료'),
-                    'failed': ('error', 'text-red-400', '실패'),
-                }.get(status, ('help', 'text-gray-400', '상태 확인 필요'))
+                icon, color, label = scene_status(status)
 
                 # 씬 카드 생성
                 with ui.card().classes(f'w-24 h-28 p-2 bg-gradient-to-br {gradient} rounded-lg'):

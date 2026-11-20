@@ -13,6 +13,7 @@ from nicegui.elements.video import Video
 from nicegui.page import page
 
 from shorts_maker.gui.components import generation_tab
+from shorts_maker.gui.components.common.progress_utils import update_scene_grid
 from shorts_maker.gui.state.app_state import AppState
 from shorts_maker.services.production_service import ProductionPhase
 from test_gui_creation_flows import callback, script
@@ -28,7 +29,7 @@ class GenerationNavigationTests(IsolatedAsyncioTestCase):
     async def test_progress_cards_identify_reordered_scenes_and_actual_states(self):
         from shorts_maker.services.production_service import SceneProgress
         with self.client, ui.column() as grid:
-            generation_tab.update_scene_grid(
+            update_scene_grid(
                 [SceneProgress(7, 'processing'), SceneProgress(3, 'failed')], grid)
         labels = [item.text for item in grid.descendants() if isinstance(item, ui.label)]
         self.assertEqual(labels, ['장면 7', '처리 중', '장면 3', '실패'])
@@ -43,9 +44,40 @@ class GenerationNavigationTests(IsolatedAsyncioTestCase):
                 generation_tab, 'render_manual_panel', Mock()), patch.object(
                 generation_tab, 'VeoPromptExporter', Mock()):
             generation_tab.render_generation_tab(state)
+        self.view_root = container
         players = [element for element in container.descendants() if isinstance(element, Video)]
         self.assertEqual(len(players), 2)
         return players
+
+    async def test_reopened_view_tracks_running_scenes_through_failure_and_reset(self):
+        from shorts_maker.services.production_service import ProductionProgress, SceneProgress
+
+        state = AppState(script=script(), pipeline_running=True)
+        progress = ProductionProgress(phase=ProductionPhase.EDITING,
+                                      scene_progresses=[SceneProgress(7, 'completed'), SceneProgress(3, 'processing')])
+        state.sync_from_progress(progress)
+
+        def visible_text():
+            binding._refresh_step()
+            return ' '.join(el.text for el in self.view_root.descendants()
+                            if isinstance(el, ui.label) and all(p.visible for p in el.ancestors(include_self=True)))
+
+        for manual in (False, True):
+            state.manual_video_mode = manual
+            self.render_view(state)
+            self.assertIn('편집 중', visible_text())
+            self.assertIn('장면 3 · 처리 중', visible_text())
+            self.view_root.delete()
+        self.render_view(state)
+        progress.scene_progresses[1].status = 'failed'
+        progress.phase = ProductionPhase.FAILED
+        state.sync_from_progress(progress)
+        state.pipeline_running = False
+        self.assertIn('장면 7 · 완료', visible_text())
+        self.assertIn('장면 3 · 실패', visible_text())
+        self.assertIn('작업 중단', visible_text())
+        state.reset_pipeline()
+        self.assertNotIn('장면 3 · 실패', visible_text())
 
     async def complete_after_navigation(self, *, success=True, manual=False, prepared=False, retained=False):
         state = AppState(script=script(), manual_video_mode=manual)
@@ -77,11 +109,8 @@ class GenerationNavigationTests(IsolatedAsyncioTestCase):
         environment = {
             'state': state, 'safe_notify': notifications, 'logger': Mock(), 'asyncio': asyncio,
             'ProductionPhase': ProductionPhase, 'ProductionProgress': object,
-            'gen_spinner': SimpleNamespace(visible=False),
-            'scene_progress_container': SimpleNamespace(visible=False, clear=Mock()),
-            'manual_preview': SimpleNamespace(visible=False), 'manual_video_player': old_manual_player,
+            'manual_preview': SimpleNamespace(visible=False, is_deleted=False), 'manual_video_player': old_manual_player,
             'injected_video_player': old_player, 'injected_placeholder': SimpleNamespace(visible=False),
-            'update_scene_grid': Mock(), 'update_progress_ui': Mock(),
             'safe_refresh': Mock(), 'narration_panel': Mock(),
             'rendered_script': state.script.model_dump_json(),
             'settings': SimpleNamespace(paid_production_enabled=not prepared),
@@ -154,7 +183,7 @@ class GenerationNavigationTests(IsolatedAsyncioTestCase):
     async def test_manual_edit_failure_can_be_inspected_after_navigation(self):
         state, players = await self.complete_after_navigation(manual=True, success=False)
         state.pipeline_message = '편집 품질 검사 실패'
-        for player in [players[1], self.render_view(state)[1]]:
+        for player, view in [(players[1], self.view_root), (self.render_view(state)[1], self.view_root)]:
             binding._refresh_step()
             preview = player.parent_slot.parent
             manual_area = preview.parent_slot.parent
@@ -164,7 +193,7 @@ class GenerationNavigationTests(IsolatedAsyncioTestCase):
             self.assertTrue(any(isinstance(item, ui.label) and item.visible
                                 and '품질 검사' in item.text for item in preview.descendants()))
             self.assertTrue(any(isinstance(item, ui.label) and item.visible
-                                and item.text == state.pipeline_message for item in manual_area.descendants()))
+                                and item.text == state.pipeline_message for item in view.descendants()))
         self.assertIsNone(state.final_video_path)
         state.invalidate_video_result()
         binding._refresh_step()
