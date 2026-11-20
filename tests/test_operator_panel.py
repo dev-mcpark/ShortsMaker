@@ -38,11 +38,22 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
                 with self.client:
                     await refresh()
                 await asyncio.sleep(0)
-                self.assertIn('YouTube 업로드 계정 연결 필요', self.text(root))
+                self.assertIn('지난 기획 시도', self.text(root))
+                self.assertIn('저장된 인증 확인', self.text(root))
                 self.assertIn('계정 연결 후 기획 재개', self.text(root))
                 root.clear()
             planning.assert_not_awaited()
         self.assertEqual(before, self.manager.filename.read_bytes())
+
+    async def test_music_selection_stop_shows_its_own_reason(self):
+        self.schedule = self.manager.update_schedule(self.schedule['id'], {
+            'last_result': 'music_selection_required', 'planning_auth_required': False})
+        root, refresh = self.render()
+        with self.client:
+            await refresh()
+        await asyncio.sleep(0)
+        self.assertIn('배경음악 선택 필요', self.text(root))
+        self.assertNotIn('지난 기획 시도', self.text(root))
 
     def prepare_revision(self):
         self.state.load_saved_script(script().model_copy(update={'title': '직접 다듬은 대본'}))

@@ -117,14 +117,16 @@ def render_operator_panel(state, manager, schedule, on_attached):
         phase = {'operator_pending': '제작 인계 대기',
                  'script_review_pending': '완성본 검토 대기' if data.get('last_youtube_id') else '각본·장면 검토 대기',
                  'run_in_progress': '실행 중 또는 결과 확인 필요', 'planning_failed': '기획 중단',
+                 'music_selection_required': '배경음악 선택 필요',
                  'private_review_deferred': '미채택 검토본 보존 · 다음 회차 예약 가능',
                  'private_review_accepted': '완성본 채택 완료', 'script_rejected': '각본 제외'}.get(
                      data['last_result'], '운영 상태 확인 필요' if data['last_result'] else '아직 실행 전')
         ui.label(f'회차 {data["run_count"] or 0} · {phase}').classes('text-sm text-slate-200')
         ui.label(f'마지막 조회 {readout["checked_at"]}').classes('text-xs text-slate-400')
         if data.get('planning_auth_required'):
-            ui.label('YouTube 업로드 계정 연결 필요 · 유료 기획 전에 중단됐습니다. '
-                     '완성본·업로드 → YouTube 업로드 연결에서 기존 채널 계정을 연결한 뒤 같은 회차를 재개하세요.').classes(
+            ui.label('지난 기획 시도에서 YouTube 업로드 인증을 확인하지 못해 비용 발생 전에 중단했습니다. '
+                     '이미 연결했다면 이 회차의 기획을 재개하세요. 현재 연결 상태는 '
+                     '완성본·업로드 → YouTube 업로드 연결 → 저장된 인증 확인에서 확인할 수 있습니다.').classes(
                 'text-sm text-amber-200').props('role=alert')
         if schedule.get('review_operator') != 'agent':
             ui.label('Studio 직접 실행 일정입니다. 월 장부·비주얼 상한을 사용하며 에이전트 회차 한도를 새로 만들지 않습니다.').classes('text-xs text-slate-400')
