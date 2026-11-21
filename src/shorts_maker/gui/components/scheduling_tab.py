@@ -404,6 +404,9 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                     ui.button('검토할 각본 불러오기', on_click=load_pending_script).props(
                                                         'flat dense color=amber').bind_enabled_from(
                                                             state, 'is_busy', backward=lambda busy: not busy)
+                                            elif not enabled and schedule.get('last_result') == 'music_selection_required':
+                                                ui.label('배경음악 선택 필요 · 일정 일시정지').classes('text-xs text-amber-300')
+                                                ui.label('대본·장면 검토에서 저장된 작업 초안을 열고 음악 분위기와 곡을 확인하세요.').classes('text-xs text-gray-300')
                                             elif not enabled and schedule.get('last_result') == 'run_in_progress':
                                                 ui.label('제작 완료 미확인 · 출력과 청구 내역 확인 후 일정 재개').classes('text-xs text-amber-300')
                                             elif not enabled and schedule.get('last_result') == 'model_migration_required':
@@ -576,7 +579,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                             for schedule in run_schedules[:10]:
                                 last_result = schedule.get('last_result', 'unknown')
                                 is_success = last_result in {'success', 'private_review_accepted'}
-                                is_pending = last_result in {'operator_pending', 'script_review_pending', 'private_review_deferred', 'run_in_progress'}
+                                is_pending = last_result in {'operator_pending', 'script_review_pending', 'private_review_deferred',
+                                                             'run_in_progress', 'music_selection_required'}
                                 run_count = schedule.get('run_count', 0)
 
                                 color = 'green' if is_success else 'amber' if is_pending else 'red'
@@ -591,14 +595,18 @@ def render_scheduling_tab(state: 'AppState') -> None:
 
                                             with ui.column().classes('gap-0'):
                                                 ui.label(schedule['name']).classes('text-sm font-medium text-white')
-                                                ui.label(schedule.get('last_run', '')[:19].replace('T', ' ')).classes('text-xs text-gray-300')
+                                                for field, label in (('scheduled_for', '예약 시각'), ('queued_at', '제작 대기 생성'),
+                                                                     ('last_run', '최근 처리')):
+                                                    stamp = schedule.get(field)
+                                                    if isinstance(stamp, str) and stamp:
+                                                        ui.label(f"{label} · {stamp[:19].replace('T', ' ')}").classes('text-xs text-gray-300')
                                                 script = schedule.get('last_script')
                                                 if isinstance(script, dict) and script.get('title'):
                                                     ui.label(script['title']).classes('text-xs text-gray-300')
 
                                         with ui.row().classes('items-center gap-2'):
                                             ui.badge(f'#{run_count}').props('color=blue-grey-8 text-color=white').classes('text-xs')
-                                            ui.badge(last_result).props(f'color={color}-9 text-color=white').classes('text-xs')
+                                            ui.badge('배경음악 선택 필요' if last_result == 'music_selection_required' else last_result).props(f'color={color}-9 text-color=white').classes('text-xs')
 
                 history_list()
 

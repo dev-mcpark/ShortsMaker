@@ -55,6 +55,22 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.assertIn('배경음악 선택 필요', self.text(root))
         self.assertNotIn('지난 기획 시도', self.text(root))
 
+    async def test_history_distinguishes_due_slot_handoff_and_later_music_stop(self):
+        self.manager.update_schedule(self.schedule['id'], {
+            'last_result': 'music_selection_required', 'last_script': None,
+            'scheduled_for': '2026-11-18T10:06:00', 'queued_at': '2026-11-18T10:06:02.189937',
+            'last_run': '2026-11-20T17:20:56.970515',
+        })
+        before = self.manager.filename.read_bytes()
+        with self.client, ui.column() as root, patch.object(scheduling_tab, 'schedule_manager', self.manager), patch.object(
+                scheduling_tab, 'load_source_catalog', return_value=(object(), {})), patch.object(ui, 'timer'):
+            scheduling_tab.render_scheduling_tab(self.state)
+        text = self.text(root)
+        for label in ('예약 시각 · 2026-11-18 10:06:00', '제작 대기 생성 · 2026-11-18 10:06:02',
+                      '최근 처리 · 2026-11-20 17:20:56', '배경음악 선택 필요'):
+            self.assertIn(label, text)
+        self.assertEqual(self.manager.filename.read_bytes(), before)
+
     def prepare_revision(self):
         self.state.load_saved_script(script().model_copy(update={'title': '직접 다듬은 대본'}))
         self.state.confirm_script_review()
