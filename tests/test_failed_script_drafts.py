@@ -71,6 +71,23 @@ class FailedScriptDraftTests(TestCase):
                 self.assertIn(text if not text.startswith('{"') else 'duration_seconds', record.editor_text)
         self.assertEqual(self.create.await_count, 4)
 
+    def test_writer_failure_preserves_exact_prompt_excerpt_and_episode_on_truncated_json(self):
+        self.item['content'] = ' ' + '본문 근거 ' * 1100
+        self.reply.finish_reason = 'length'
+        episode = 'ab' * 16
+        with patch.dict('os.environ', SHORTSMAKER_EPISODE_ID=episode), self.assertRaises(ValueError):
+            self.write('{"title":')
+        choices, warnings = work_drafts.saved_work_drafts()
+        record, _ = work_drafts.read_work_draft(next(iter(choices)))
+        evidence = record.writer_source
+        self.assertEqual(warnings, [])
+        self.assertEqual(evidence.episode_id, episode)
+        self.assertEqual(evidence.source_url, self.item['url'])
+        self.assertEqual(evidence.excerpt, self.item['content'].strip()[:5000])
+        self.assertIn(evidence.excerpt, self.create.await_args.kwargs['messages'][0]['content'])
+        self.assertEqual(record.editor_text, '{"title":')
+        self.assertIsNone(record.applied_script)
+
     def test_incomplete_or_non_object_editor_text_stays_searchable_as_an_untitled_draft(self):
         for text in ('{"title":', 'null', '[]', '{"title": 3}', '[' * 1200 + ']' * 1200):
             work_drafts.save_work_draft(None, text, {})

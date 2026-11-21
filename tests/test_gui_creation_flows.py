@@ -46,6 +46,10 @@ def planning_environment(state, service):
 
 
 class CreationCallbackTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(patch.object(settings, 'output_dir', root))
+
     async def test_successful_manual_clip_replacement_invalidates_previous_edit(self):
         async def read():
             return b'new-clip'

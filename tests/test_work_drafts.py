@@ -301,6 +301,33 @@ class WorkDraftUiTests(IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         await asyncio.sleep(0)
 
+    async def test_writer_source_preview_is_read_only_and_legacy_evidence_is_not_inferred(self):
+        self.state = AppState(script=script(), final_video_path='keep.mp4')
+        self.state.remember_script_draft(self.state.script_editor_key(), '{unfinished')
+        source = work_drafts.WriterSource(source_url='https://example.com/article', excerpt='작성 당시 문장',
+                                         episode_id='a' * 32)
+        saved = work_drafts.save_work_draft(None, '{old', {}, writer_source=source)
+        older = work_drafts.save_work_draft(None, '{"source_url":"https://example.com/article"}', {})
+        root = self.render()
+        def dialogs():
+            return [e for e in self.client.elements.values() if isinstance(e, ui.dialog) and e.value]
+        for name, expected in [(saved.name, source.excerpt), (older.name, '원문 발췌가 저장되어 있지 않습니다')]:
+            with self.client:
+                self.field(root, '저장된 작업 초안 검색').set_value(name)
+                self.click(root, '작성 원문 확인')
+            dialog, = dialogs()
+            self.assertIn(expected, ' '.join(e.text for e in dialog.descendants() if isinstance(e, ui.label)))
+            dialog.close()
+        saved.write_bytes(older.read_bytes())
+        with self.client:
+            self.field(root, '저장된 작업 초안 검색').set_value(saved.name)
+            self.click(root, '작성 원문 확인')
+        self.assertEqual(dialogs(), [])
+        self.assertEqual(self.state.script_editor_text(), '{unfinished')
+        self.assertEqual(self.state.final_video_path, 'keep.mp4')
+        self.assertIsNone(self.state.operating_scope)
+        self.assertIsNone(self.state.production_service)
+
     async def test_save_then_new_session_reopen_keeps_incomplete_text_without_auto_apply(self):
         self.state.remember_script_draft(self.state.script_editor_key(), '{아직 작성 중')
         root = self.render()

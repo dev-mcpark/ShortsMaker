@@ -2,6 +2,7 @@ import asyncio
 import os
 import json
 import hashlib
+import re
 import tempfile
 import feedparser
 import httpx
@@ -843,9 +844,12 @@ class ScriptPlanner:
         except (ValueError, TypeError) as error:
             if not isinstance(recovery_text, str) or not recovery_text.strip():
                 raise
-            from shorts_maker.services.work_drafts import save_work_draft
+            from shorts_maker.services.work_drafts import WriterSource, save_work_draft
             try:
-                path = save_work_draft(None, recovery_text, {})
+                episode_id = os.getenv('SHORTSMAKER_EPISODE_ID', '')
+                source = WriterSource(source_url=item.get('url') or '', excerpt=source_excerpt,
+                                      episode_id=episode_id if re.fullmatch(r'[0-9a-f]{32}', episode_id) else None)
+                path = save_work_draft(None, recovery_text, {}, writer_source=source)
             except (ValueError, OSError) as storage_error:
                 raise ValueError(f'{error} · 초안 보관 실패: {storage_error}. 추가 생성 요청은 보내지 않았습니다.') from error
             raise ValueError(

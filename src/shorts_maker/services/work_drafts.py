@@ -15,6 +15,14 @@ def script_draft_key(script: ShortsScript | None) -> str:
     return hashlib.sha256((script.model_dump_json() if script else '').encode('utf-8')).hexdigest()
 
 
+class WriterSource(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+
+    source_url: str
+    excerpt: str = Field(min_length=1, max_length=5000)
+    episode_id: str | None = Field(default=None, pattern=r'^[0-9a-f]{32}$')
+
+
 class WorkDraft(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
 
@@ -25,6 +33,8 @@ class WorkDraft(BaseModel):
     editor_text: str
     first_frames: dict[str, dict[str, str]] = Field(default_factory=dict)
     planning_input: dict[str, str] | None = None
+
+    writer_source: WriterSource | None = None
 
     @model_validator(mode='after')
     def verify_binding(self):
@@ -42,12 +52,12 @@ class WorkDraft(BaseModel):
 
 
 def save_work_draft(script: ShortsScript | None, editor_text: str, first_frames: dict,
-                    *, planning_input: dict | None = None) -> Path:
+                    *, planning_input: dict | None = None, writer_source: WriterSource | None = None) -> Path:
     record = WorkDraft(saved_at=datetime.now(timezone.utc), script_sha256=script_draft_key(script),
                        applied_script=script, editor_text=editor_text,
                        first_frames={str(number): values for number, values in first_frames.items()},
-                       planning_input=planning_input)
-    exclude = {'planning_input'} if planning_input is None else set()
+                       planning_input=planning_input, writer_source=writer_source)
+    exclude = {key for key in ('planning_input', 'writer_source') if getattr(record, key) is None}
     return publish_snapshot('studio_drafts', record.model_dump_json(indent=2, exclude=exclude).encode('utf-8'))
 
 

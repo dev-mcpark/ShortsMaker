@@ -3,7 +3,7 @@
 from nicegui import ui
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
-from shorts_maker.services.work_drafts import saved_work_drafts
+from shorts_maker.services.work_drafts import read_work_draft, saved_work_drafts
 
 
 def render_work_drafts_panel(state, on_restored):
@@ -43,6 +43,33 @@ def render_work_drafts_panel(state, on_restored):
             if records:
                 choice = ui.select({name: record['label'] for name, record in records.items()},
                                    label='저장된 작업 초안 검색', with_input=True).props('outlined dark clearable').classes('w-full')
+
+                def preview_source():
+                    try:
+                        current()
+                        if choice.value not in records:
+                            raise ValueError('확인할 작업 초안을 선택하세요.')
+                        record, digest = read_work_draft(choice.value)
+                        if digest != records[choice.value]['sha256']:
+                            raise ValueError('선택한 초안이 바뀌었습니다. 목록을 새로고침하세요.')
+                    except (ValueError, OSError) as error:
+                        safe_notify(str(error), type='warning')
+                        return
+                    source = record.writer_source
+                    with ui.dialog() as dialog, ui.card().classes('w-full max-w-2xl'):
+                        ui.label('각본 작성에 사용한 원문 발췌').classes('font-semibold')
+                        if source:
+                            if source.episode_id:
+                                ui.label(f'작성 회차 · {source.episode_id}').classes('break-all')
+                            ui.label(source.source_url).classes('text-sm break-all')
+                            ui.label(source.excerpt).classes('whitespace-pre-wrap break-words')
+                        else:
+                            ui.label('이 사본에는 작성 당시의 원문 발췌가 저장되어 있지 않습니다.')
+                        ui.button('닫기', on_click=dialog.close).props('flat')
+                    dialog.open()
+
+                ui.button('작성 원문 확인', on_click=preview_source).props('outline').bind_enabled_from(
+                    state, 'is_busy', lambda busy: not busy and bool(choice.value))
 
                 def restore():
                     try:
