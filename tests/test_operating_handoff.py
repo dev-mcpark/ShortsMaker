@@ -30,6 +30,73 @@ from shorts_maker.utils.scheduler import ScheduleManager
 
 
 class OperatingHandoffTests(unittest.TestCase):
+    def test_single_revision_uses_only_validator_and_same_episode(self):
+        from shorts_maker.services import revision_validation as rv
+        from shorts_maker.services.audio_choices import save_audio_choices
+        from shorts_maker.services.work_drafts import save_work_draft, read_work_draft
+        from test_gui_creation_flows import script as sample
+        from unittest.mock import Mock
+        record = self.queued_episode()
+        sid = self.schedule['id']
+        expected = self.manager.update_schedule(sid, {'last_result': 'music_selection_required'})
+        script = sample()
+        script.scenes = [script.scenes[0].model_copy(update={'scene_number': n}) for n in range(1, 6)]
+        script.mood = 'calm'
+        draft = save_work_draft(None, script.model_dump_json(), {})
+        original = save_work_draft(None, script.model_copy(update={'title': '원래 대본'}).model_dump_json(), {})
+        save_audio_choices(script, {'tts_voice': 'nova', 'bgm_mood': 'auto', 'bgm_track': '', 'bgm_volume': 0})
+        messages = rv.ScriptValidator.review_messages(script, '확인한 원문')
+        price = rv.chat_reservation_usd(rv.PRIMARY_CHAT_MODEL, messages, rv.ScriptValidator.MAX_COMPLETION_TOKENS)
+        ep = episode_path(record['id'])
+        request = ep.with_suffix('.revision-request.json')
+        request.write_text(json.dumps({'episode_id': record['id'], 'schedule_sha256': schedule_sha256(expected),
+            'source_excerpt': '확인한 원문', 'source_url': script.source_url,
+            'original': original.name, 'original_sha256': read_work_draft(original.name)[1],
+            'candidate': draft.name, 'candidate_sha256': read_work_draft(draft.name)[1],
+            'request_messages_sha256': hashlib.sha256(json.dumps(messages, ensure_ascii=False).encode()).hexdigest(),
+            'model': rv.PRIMARY_CHAT_MODEL, 'reservation_estimate_usd': str(price)}))
+        digest = hashlib.sha256(request.read_bytes()).hexdigest()
+        cmd = rv.worker_command(self.manager, sid, digest)
+        with self.assertRaises(ValueError):
+            run_scoped(self.manager, sid, ['other'], revision_sha256=digest)
+        with self.assertRaises(ValueError):
+            rv.preflight(self.manager, sid, 'wrong digest')
+        self.assertEqual(rv.prepared_revision(self.manager, expected)[0], digest)
+        planner = Mock(_validate_and_save=AsyncMock(return_value=script))
+        def child(command, cwd, env):
+            with patch.dict(os.environ, env), patch.object(settings, 'paid_production_enabled', True), patch.object(
+                    settings, 'openai_monthly_budget_usd', float(env['OPENAI_MONTHLY_BUDGET_USD'])), patch.object(
+                    rv, 'ScriptPlanner', wraps=rv.ScriptPlanner) as factory:
+                factory.SUPPORTED_MOODS = ('calm',)
+                factory.MIN_SCENES, factory.MAX_SCENES = 5, 7
+                factory.return_value = planner
+                rv.execute(self.manager, sid, digest)
+            return SimpleNamespace(returncode=0)
+        with patch('subprocess.run', side_effect=child):
+            self.assertEqual(run_scoped(self.manager, sid, cmd, revision_sha256=digest), 0)
+        planner._validate_and_save.assert_awaited_once_with(script, {'content': '확인한 원문'})
+        after = self.manager.get_schedule(sid)
+        self.assertEqual(after['last_episode_id'], record['id'])
+        self.assertEqual(after['last_result'], 'script_review_pending')
+        self.assertFalse(after['enabled'])
+        self.assertEqual(json.loads(ep.with_suffix('.script.json').read_text()), after['last_script'])
+        self.assertFalse(ep.with_suffix('.operation.pending.json').exists())
+        self.manager.update_schedule(sid, {'last_result': 'music_selection_required', 'last_script': None})
+        with self.assertRaises(ValueError):
+            rv.preflight(self.manager, sid, digest)
+
+    def test_revision_cli_routes_only_fixed_command_before_any_spend(self):
+        from scripts import operate_schedule
+        digest = 'a' * 64
+        sid = self.schedule['id']
+        with patch.object(sys, 'argv', ['operate_schedule.py', '--schedules', str(self.manager.filename),
+                'run', '--validate-revision', digest, sid]), patch.object(operate_schedule, 'run_scoped', return_value=0) as scoped:
+            with self.assertRaises(SystemExit) as exit_code:
+                operate_schedule.main()
+        self.assertEqual(exit_code.exception.code, 0)
+        self.assertEqual(scoped.call_args.args[2][-3:], ['_validate-revision', sid, digest])
+        self.assertEqual(scoped.call_args.kwargs, {'revision_sha256': digest})
+
     def revision_fixture(self):
         from test_gui_creation_flows import script
         record = self.queued_episode()

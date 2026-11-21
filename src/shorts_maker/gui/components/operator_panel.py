@@ -105,6 +105,51 @@ def render_operator_panel(state, manager, schedule, on_attached):
                 ui.button('이 회차 기획 실행', on_click=confirm).props('color=teal').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
         dialog.open()
 
+    async def revision_validation_preview():
+        import subprocess
+        import sys
+        from shorts_maker.services.revision_validation import prepared_revision
+        from shorts_maker.utils.config import PROJECT_ROOT, settings
+
+        def current():
+            if (panel.is_deleted or state.is_busy or not settings.paid_production_enabled
+                    or manager.get_schedule(schedule['id']) != schedule):
+                raise ValueError('현재 회차와 직접 제작 설정을 확인하세요.')
+        try:
+            current()
+            digest, script, amount = await run.io_bound(prepared_revision, manager, schedule)
+            current()
+        except (ValueError, OSError, RuntimeError, KeyError, TypeError, ArithmeticError) as error:
+            safe_notify(str(error), type='warning')
+            return
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-xl'):
+            ui.label(script.title).classes('text-lg font-bold')
+            ui.label(f'수정 대본 모델 검증 1회 · 예약액 ${amount}')
+            ui.label('준비된 원문으로 검증합니다. 통과하면 같은 회차의 장면 검토로 이어집니다.')
+            async def confirm():
+                if dialog.is_deleted or not dialog.value:
+                    return
+                try:
+                    current()
+                except ValueError as error:
+                    safe_notify(str(error), type='warning')
+                    return
+                state.scheduled_planning_in_progress = True
+                dialog.close()
+                try:
+                    command = [sys.executable, str(PROJECT_ROOT / 'scripts/operate_schedule.py'), '--schedules',
+                               str(manager.filename.resolve()), 'run', '--validate-revision', digest, schedule['id']]
+                    result = await run.io_bound(subprocess.run, command, cwd=PROJECT_ROOT, capture_output=True)
+                    ok = not result.returncode and (manager.get_schedule(schedule['id']) or {}).get('last_result') == 'script_review_pending'
+                    safe_notify('수정 대본 검증 통과 · 회차에서 대본을 불러오세요.' if ok else
+                                '검증 중단 · 회차 상태와 저장된 검토 기록을 확인하세요.', type='positive' if ok else 'warning')
+                finally:
+                    state.scheduled_planning_in_progress = False
+                    on_attached()
+            ui.button('취소', on_click=dialog.close).props('flat')
+            ui.button('수정 대본 1회 검증', on_click=confirm).props('color=teal')
+        dialog.open()
+
     @ui.refreshable
     def details():
         if not readout:
@@ -215,6 +260,9 @@ def render_operator_panel(state, manager, schedule, on_attached):
     with ui.expansion('현재 회차 상태·연결', on_value_change=opened).classes('w-full') as panel:
         details()
         ui.button('회차 상태 새로고침', on_click=refresh).props('flat icon=refresh').bind_enabled_from(loading, 'value', lambda value: not value)
+        if schedule.get('review_operator') == 'agent' and not schedule.get('enabled') and schedule.get('last_result') == 'music_selection_required':
+            ui.button('준비된 수정 대본 검증', on_click=revision_validation_preview).props('outline').bind_enabled_from(
+                state, 'is_busy', lambda busy: not busy)
         ui.label('예약 회차를 기획 중입니다. 메뉴를 이동해도 실행은 계속되며 저장된 회차에서 결과를 확인합니다.').classes('text-xs text-teal-200').bind_visibility_from(state, 'scheduled_planning_in_progress')
         if (schedule.get('review_operator') == 'agent' and schedule.get('last_result') == 'operator_pending'
                 and not schedule.get('enabled') and not schedule.get('last_video_path') and not schedule.get('last_youtube_id')):

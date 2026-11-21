@@ -1,5 +1,7 @@
 # Project map
 
+`services/revision_validation.py` checks an operator-prepared private episode request, the two draft hashes, reviewed article and message hash, exact reservation, music choice and existing reviews. Studio and the CLI use `operate_schedule.py run --validate-revision DIGEST SCHEDULE_ID` with a fixed validator child. The episode marker survives ambiguous returns. A separate one-use marker prevents resubmission after a known rejection. An accepted model result enters ordinary same-episode script review. Preparing the request file is currently an operator step.
+
 The applied-script review panel previews a user-supplied current article alongside the script. It uses the same `ScriptValidator.review_messages`, completion limit and `openai_budget.chat_reservation_usd` as validation. Opening the comparison does not initialize a model client, reserve funds, save the excerpt or change an episode.
 
 `ScriptPlanner._write_script` sends its bounded primary-source excerpt to the writer and retains the same string with failed response text in the private WorkDraft. Its optional `WriterSource` records the input URL and, for scoped runs, the episode identifier. The draft picker reads the selected snapshot again and checks its listed SHA before showing this evidence. The identifier grants no execution scope. Earlier snapshots remain readable and ordinary editor saves omit writer evidence.

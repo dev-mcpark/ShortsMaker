@@ -29,7 +29,7 @@ def active_episode(manager, schedule_id):
 
 
 def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedule_sha256=None,
-               studio_request=None, request_sha256=None):
+               studio_request=None, request_sha256=None, revision_sha256=None):
     lock_path = manager.filename.with_name(f'{manager.filename.name}.lock.sqlite3')
     connection = sqlite3.connect(lock_path, timeout=0, isolation_level=None)
     try:
@@ -43,7 +43,13 @@ def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedu
             if not schedule.get('last_episode_id'):
                 episode = begin_episode(schedule['id'], schedule['run_count'])
                 manager.update_schedule(schedule['id'], {'last_episode_id': episode['id']})
-        schedule, record = active_episode(manager, schedule_id)
+        if revision_sha256 is not None:
+            from shorts_maker.services.revision_validation import preflight, worker_command
+            if planning or studio_request or command != worker_command(manager, schedule_id, revision_sha256):
+                raise ValueError('수정 대본의 고정 검증 명령이 필요합니다.')
+            schedule, record, *_ = preflight(manager, schedule_id, revision_sha256)
+        else:
+            schedule, record = active_episode(manager, schedule_id)
         if studio_request is not None:
             from shorts_maker.services.studio_episode_action import read_request, worker_command
             request = read_request(studio_request, request_sha256)
@@ -77,6 +83,8 @@ def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedu
         from shorts_maker.services.studio_episode_action import validate_receipt
         # Missing/corrupt results retain the existing episode pending gate for reconciliation.
         validate_receipt(studio_request, request_sha256)
+    if revision_sha256 is not None and result.returncode:
+        raise RuntimeError('검증 실행 결과 대조가 필요합니다. 대기 표식을 보존합니다.')
     path.replace(path.with_name(f'{record["id"]}.operation.{uuid.uuid4().hex}.json'))
     return result.returncode
 
@@ -120,12 +128,15 @@ def main():
     sub.add_parser('status')
     sub.add_parser('serve')
     sub.add_parser('install-host')
-    for action in ('plan', '_plan', 'run', 'attach', 'resume-after-review'):
+    for action in ('plan', '_plan', '_validate-revision', 'run', 'attach', 'resume-after-review'):
         command = sub.add_parser(action)
         command.add_argument('schedule_id')
         if action == 'plan':
             command.add_argument('--expected-schedule-sha256')
+        if action == '_validate-revision':
+            command.add_argument('digest')
         if action == 'run':
+            command.add_argument('--validate-revision')
             command.add_argument('--studio-request')
             command.add_argument('--request-sha256')
             command.add_argument('command', nargs=argparse.REMAINDER)
@@ -189,7 +200,16 @@ def main():
         with script_path.open('x', encoding='utf-8') as file:
             json.dump(current['last_script'], file, ensure_ascii=False, indent=2)
         print('Script awaiting editorial review:', script_path)
+    elif args.action == '_validate-revision':
+        from shorts_maker.services.revision_validation import execute
+        execute(manager, args.schedule_id, args.digest)
     elif args.action == 'run':
+        if args.validate_revision:
+            from shorts_maker.services.revision_validation import worker_command
+            if args.command or args.studio_request or args.request_sha256:
+                raise ValueError('수정 대본 검증에는 다른 명령을 함께 지정할 수 없습니다.')
+            raise SystemExit(run_scoped(manager, args.schedule_id,
+                worker_command(manager, args.schedule_id, args.validate_revision), revision_sha256=args.validate_revision))
         schedule, _ = active_episode(manager, args.schedule_id)
         if schedule['last_result'] != 'script_review_pending':
             raise ValueError('회차의 기획을 완료하고 각본부터 검토하세요.')
