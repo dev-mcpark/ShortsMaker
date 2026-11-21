@@ -110,12 +110,8 @@ def _reserve(model: str, amount: Decimal, source_url: str | None = None) -> str 
     return request_id
 
 
-def reserve_openai_chat(model: str, messages: list[dict], max_completion_tokens: int,
-                        *, source_url: str | None = None) -> str | None:
-    """Reserve a text request before submission, including its full output-token ceiling."""
-    require_model_active(model)
-    if _configured_period() is None:
-        return None
+def chat_reservation_usd(model: str, messages: list[dict], max_completion_tokens: int) -> Decimal:
+    """Compute the same whole-microdollar amount recorded by the local ledger."""
     if model not in _CHAT_PRICES or type(max_completion_tokens) is not int or max_completion_tokens < 1:
         raise OpenAIBudgetExceeded("OPENAI_BUDGET_EXCEEDED: 확인되지 않은 채팅 모델 또는 출력 상한입니다.")
     input_price, output_price = _CHAT_PRICES[model]
@@ -123,7 +119,16 @@ def reserve_openai_chat(model: str, messages: list[dict], max_completion_tokens:
     input_bound = len(json.dumps(messages, ensure_ascii=False).encode("utf-8")) + 1024
     estimate = (Decimal(input_bound) * input_price
                 + Decimal(max_completion_tokens) * output_price) / 1_000_000
-    return _reserve(model, estimate, source_url)
+    return Decimal(_micro_usd(estimate)) / 1_000_000
+
+
+def reserve_openai_chat(model: str, messages: list[dict], max_completion_tokens: int,
+                        *, source_url: str | None = None) -> str | None:
+    """Reserve a text request before submission, including its full output-token ceiling."""
+    require_model_active(model)
+    if _configured_period() is None:
+        return None
+    return _reserve(model, chat_reservation_usd(model, messages, max_completion_tokens), source_url)
 
 
 def reserve_openai_speech(model: str, text: str, *, source_url: str | None = None) -> str | None:

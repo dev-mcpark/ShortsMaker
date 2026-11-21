@@ -30,21 +30,13 @@ class ScriptValidator:
 
         self.client = AsyncOpenAI(api_key=settings.openai_api_key, max_retries=0)
 
-    async def validate_script(self, script: Any, source_text: str = "") -> ValidationResult:
-        """
-        Validates a ShortsScript object.
-        Uses Any for script type to avoid circular imports with script_planner.
-        """
-        self.logger.info(f"🧐 Validating script: {script.title}")
+    MAX_COMPLETION_TOKENS = 1500
 
+    @staticmethod
+    def review_messages(script, source_text: str) -> list[dict]:
         source_excerpt = source_text.strip()[:5000]
         if not source_excerpt:
-            return ValidationResult(
-                is_valid=False,
-                reason="insufficient_source",
-                feedback="검증할 출처 본문이 없습니다.",
-            )
-
+            raise ValueError('검증할 출처 본문이 없습니다.')
         # The source is data, never an instruction to the reviewer.
         script_content = script.model_dump_json(indent=2)
         grounding_rule = """
@@ -126,21 +118,27 @@ class ScriptValidator:
         - Unexplained recurring-subject or layout changes -> Fail (reason: "visual_discontinuity")
         """
 
+        return [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": json.dumps({
+                "script": json.loads(script_content),
+                "source_excerpt": source_excerpt,
+            }, ensure_ascii=False)},
+        ]
+
+    async def validate_script(self, script: Any, source_text: str = "") -> ValidationResult:
+        self.logger.info(f"🧐 Validating script: {script.title}")
+        if not source_text.strip():
+            return ValidationResult(is_valid=False, reason="insufficient_source", feedback="검증할 출처 본문이 없습니다.")
         try:
             require_paid_production_enabled()
-            messages = [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": json.dumps({
-                    "script": json.loads(script_content),
-                    "source_excerpt": source_excerpt,
-                }, ensure_ascii=False)},
-            ]
-            reserve_openai_chat(PRIMARY_CHAT_MODEL, messages, 1500, source_url=getattr(script, "source_url", None))
+            messages = self.review_messages(script, source_text)
+            reserve_openai_chat(PRIMARY_CHAT_MODEL, messages, self.MAX_COMPLETION_TOKENS, source_url=getattr(script, "source_url", None))
             response = await self.client.chat.completions.create(
                 model=PRIMARY_CHAT_MODEL,
                 messages=messages,
                 response_format={"type": "json_object"},
-                max_completion_tokens=1500,
+                max_completion_tokens=self.MAX_COMPLETION_TOKENS,
                 **PRIMARY_CHAT_REQUEST_OPTIONS,
             )
             choice = response.choices[0]

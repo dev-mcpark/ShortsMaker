@@ -1,5 +1,7 @@
 # Project map
 
+The applied-script review panel previews a user-supplied current article alongside the script. It uses the same `ScriptValidator.review_messages`, completion limit and `openai_budget.chat_reservation_usd` as validation. Opening the comparison does not initialize a model client, reserve funds, save the excerpt or change an episode.
+
 `ScriptPlanner._write_script` sends its bounded primary-source excerpt to the writer and retains the same string with failed response text in the private WorkDraft. Its optional `WriterSource` records the input URL and, for scoped runs, the episode identifier. The draft picker reads the selected snapshot again and checks its listed SHA before showing this evidence. The identifier grants no execution scope. Earlier snapshots remain readable and ordinary editor saves omit writer evidence.
 
 

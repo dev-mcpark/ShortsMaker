@@ -135,6 +135,35 @@ class ScriptReviewPanelTests(ReviewFixture, unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
         binding._refresh_step()
 
+    async def test_source_comparison_quotes_actual_request_without_reserving_or_reviewing(self):
+        root, _ = self.render()
+        article = next(e for e in root.descendants() if isinstance(e, ui.textarea))
+        button = next(e for e in root.descendants() if getattr(e, 'text', '') == '원문과 장면 대조하기')
+        click = next(e.handler for e in button._event_listeners.values() if e.type == 'click')
+        article.value = ' 한' + '글' * 4999 + '잘림'
+        from shorts_maker.services import openai_budget
+        from shorts_maker.planner.script_validator import ScriptValidator
+        messages = ScriptValidator.review_messages(self.script, article.value)
+        model = script_review_panel.PRIMARY_CHAT_MODEL
+        with patch.object(openai_budget, '_configured_period', return_value='2026-11'), patch.object(openai_budget, '_reserve') as reserve:
+            openai_budget.reserve_openai_chat(model, messages, ScriptValidator.MAX_COMPLETION_TOKENS)
+            amount = reserve.call_args.args[1]
+            reserve.reset_mock()
+            with self.client:
+                click(None)
+            reserve.assert_not_called()
+        text = ' '.join(str(getattr(e, 'text', '')) for e in self.client.elements.values())
+        self.assertIn(f'${amount:.6f}', text)
+        self.assertIn('한' + '글' * 4999, text)
+        self.assertNotIn('잘림', text)
+        self.assertIn(self.script.scenes[0].visual_description, text)
+        self.assertTrue(self.state.is_script_reviewed())
+        self.assertEqual(self.state.final_video_path, 'existing-final.mp4')
+        self.state.remember_script_draft(self.state.script_editor_key(), '{incomplete')
+        with self.client, patch.object(script_review_panel, 'chat_reservation_usd') as estimate:
+            click(None)
+            estimate.assert_not_called()
+
     async def test_native_verdict_source_warning_and_manual_review_remain_separate(self):
         self.write('rejected');self.write('pending', verdict=None)
         (self.reviews/'bad.request.json').write_text('null')

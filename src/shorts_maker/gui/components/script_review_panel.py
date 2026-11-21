@@ -6,6 +6,10 @@ import json
 from nicegui import ui
 
 from shorts_maker.gui.components.common.safe_ui import safe_refresh, safe_notify
+from shorts_maker.planner.script_validator import ScriptValidator
+from shorts_maker.services.openai_budget import chat_reservation_usd
+from shorts_maker.services.openai_models import PRIMARY_CHAT_MODEL
+from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.services.script_reviews import read_script_reviews, read_review_script
 
 
@@ -74,6 +78,41 @@ def render_script_review_panel(state):
             loading['value'] = False
             if not panel.is_deleted and state.script_editor_key() == key:
                 safe_refresh(body)
+
+    def preview():
+        if (comparison.is_deleted or state.is_busy or state.script_editor_key() != key
+                or state.has_unapplied_script_draft()):
+            safe_notify('수정 내용을 적용한 뒤 현재 대본에서 다시 여세요.', type='warning')
+            return
+        try:
+            messages = ScriptValidator.review_messages(script, article.value or '')
+            amount = chat_reservation_usd(PRIMARY_CHAT_MODEL, messages, ScriptValidator.MAX_COMPLETION_TOKENS)
+        except (ValueError, RuntimeError) as error:
+            safe_notify(str(error), type='warning')
+            return
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-2xl'):
+            ui.label(script.title).classes('text-lg font-bold break-words')
+            ui.label(f'{PRIMARY_CHAT_MODEL} 검증 1회 예상 예약액 ${amount:.6f}').classes('text-sm')
+            ui.label('입력한 본문의 앞 5,000자까지 반영한 미리보기입니다.').classes('text-xs')
+            ui.label(json.loads(messages[1]['content'])['source_excerpt']).classes('whitespace-pre-wrap break-words')
+            ui.label(script.description).classes('text-sm whitespace-pre-wrap break-words')
+            for scene in script.scenes:
+                with ui.expansion(f'장면 {scene.scene_number} · {scene.script_text}').classes('w-full min-w-0'):
+                    ui.label(scene.visual_description).classes('whitespace-pre-wrap break-words')
+                    ui.label(scene.motion_instruction).classes('whitespace-pre-wrap break-words')
+            ui.button('닫기', on_click=dialog.close).props('flat')
+        dialog.open()
+
+    with ui.expansion('수정 대본·원문 대조', icon='compare').classes('w-full mb-4 min-w-0') as comparison:
+        comparison.bind_visibility_from(state, 'script', backward=lambda _: state.script_editor_key() == key)
+        if SourceManager.is_allowed_url(script.source_url):
+            ui.link('현재 대본의 출처 기사 열기', script.source_url, new_tab=True).props('rel="noopener noreferrer"')
+        ui.label('기사 본문을 붙여 넣으면 장면별 내레이션·화면과 검증 예약 예상액을 무료로 확인합니다. '
+                 '입력은 이 화면에서만 사용합니다.').classes('text-xs text-slate-300')
+        article = ui.textarea('지금 대조할 기사 본문').props('outlined dark rows=4').classes('w-full')
+        ui.button('원문과 장면 대조하기', on_click=preview).props('outline').classes('min-h-[44px]').bind_enabled_from(
+            state, 'is_busy', lambda busy: not busy and state.script_editor_key() == key
+            and not state.has_unapplied_script_draft() and bool((article.value or '').strip()))
 
     with ui.expansion('현재 대본의 모델 검토 기록', icon='fact_check').classes('w-full mb-4 min-w-0') as panel:
         panel.bind_visibility_from(state, 'script', backward=lambda _: state.script_editor_key() == key)
