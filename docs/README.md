@@ -1,5 +1,7 @@
 # Project map
 
+For an agent episode stopped for music, the operator panel can prepare the existing revision request from the exact episode-bound writer excerpt saved by the planner and the current reviewed script. `services/revision_validation.py` quotes the trusted prompts, rechecks the displayed inputs and blockers under the scheduler lock, and uses the existing private WorkDraft and one-use request format. The separate fixed validator child remains the paid entry point.
+
 `services/revision_validation.py` checks an operator-prepared private episode request, the two draft hashes, reviewed article and message hash, exact reservation, music choice and existing reviews. Studio and the CLI use `operate_schedule.py run --validate-revision DIGEST SCHEDULE_ID` with a fixed validator child. The episode marker survives ambiguous returns. A separate one-use marker prevents resubmission after a known rejection. An accepted model result enters ordinary same-episode script review. Preparing the request file is currently an operator step.
 
 The applied-script review panel previews a user-supplied current article alongside the script. It uses the same `ScriptValidator.review_messages`, completion limit and `openai_budget.chat_reservation_usd` as validation. Opening the comparison does not initialize a model client, reserve funds, save the excerpt or change an episode.

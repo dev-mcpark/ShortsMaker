@@ -10,6 +10,7 @@ from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.services.operating_budget import load_episode
 from shorts_maker.services.operating_status import operator_status, schedule_sha256
 from shorts_maker.services.scheduled_planning import planning_preflight, plan_pending_schedule
+from shorts_maker.services.revision_validation import preview_recovery, prepare_recovery
 
 
 def render_operator_panel(state, manager, schedule, on_attached):
@@ -121,6 +122,75 @@ def render_operator_panel(state, manager, schedule, on_attached):
                 ui.button('취소', on_click=dialog.close).props('flat')
                 ui.button('이 회차 기획 실행', on_click=confirm).props('color=teal').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
         planning_dialog = dialog
+        dialog.open()
+
+    recovery_dialog = None
+    recovery_checking = False
+
+    async def recovery_preview():
+        nonlocal recovery_dialog, recovery_checking
+        if (panel.is_deleted or recovery_checking
+                or (recovery_dialog is not None and not recovery_dialog.is_deleted and recovery_dialog.value)):
+            return
+        script = state.script
+        review_receipt = state.reviewed_script_sha256
+
+        def current():
+            if (panel.is_deleted or state.is_busy or not script or state.script is not script
+                    or state.reviewed_script_sha256 != review_receipt
+                    or not state.is_script_reviewed() or state.has_unapplied_script_draft()
+                    or (state.operating_scope and state.operating_scope['episode_id'] != schedule['last_episode_id'])
+                    or manager.get_schedule(schedule['id']) != schedule):
+                raise ValueError('수정 대본을 적용·확인한 뒤 현재 회차를 다시 확인하세요.')
+
+        recovery_checking = True
+        try:
+            current()
+            preview = await run.io_bound(preview_recovery, manager, schedule, script)
+            current()
+        except (ValueError, RuntimeError, OSError, TypeError, KeyError, ArithmeticError) as error:
+            if not panel.is_deleted:
+                safe_notify(str(error), type='warning')
+            return
+        finally:
+            recovery_checking = False
+        if recovery_dialog is not None and not recovery_dialog.is_deleted:
+            recovery_dialog.delete()
+
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-2xl'):
+            ui.label('수정 대본과 작성 원문 확인').classes('text-lg font-bold')
+            ui.label(script.title).classes('font-semibold')
+            with ui.scroll_area().classes('w-full h-72'):
+                ui.label(preview['source_url']).classes('text-sm break-all')
+                ui.label(preview['source_excerpt']).classes('text-sm whitespace-pre-wrap break-words')
+                ui.label('확인한 수정 대본').classes('font-semibold')
+                for scene in script.scenes:
+                    ui.label(scene.script_text).classes('text-sm break-words')
+            ui.label(f'모델 검증 예상 예약액 ${preview["reservation_estimate_usd"]} · 이 화면에서는 요청만 저장합니다.')
+
+            async def save():
+                if dialog.is_deleted or not dialog.value:
+                    return
+                try:
+                    current()
+                except ValueError as error:
+                    safe_notify(str(error), type='warning')
+                    return
+                state.scheduled_planning_in_progress = True
+                try:
+                    await run.io_bound(prepare_recovery, manager, schedule, script, preview)
+                except (ValueError, RuntimeError, OSError, TypeError, KeyError, ArithmeticError) as error:
+                    safe_notify(str(error), type='warning')
+                else:
+                    dialog.close()
+                    safe_notify('요청을 저장했습니다. 준비된 수정 대본 검증에서 비용을 확인하고 실행할 수 있습니다.',
+                                type='positive')
+                finally:
+                    state.scheduled_planning_in_progress = False
+
+            ui.button('취소', on_click=dialog.close).props('flat').classes('min-h-[44px]')
+            ui.button('원문 확인 · 검증 요청 저장', on_click=save).props('color=teal').classes('min-h-[44px]')
+        recovery_dialog = dialog
         dialog.open()
 
     async def revision_validation_preview():
@@ -279,6 +349,10 @@ def render_operator_panel(state, manager, schedule, on_attached):
         details()
         ui.button('회차 상태 새로고침', on_click=refresh).props('flat icon=refresh').bind_enabled_from(loading, 'value', lambda value: not value)
         if schedule.get('review_operator') == 'agent' and not schedule.get('enabled') and schedule.get('last_result') == 'music_selection_required':
+            ui.button('확인한 수정 대본으로 검증 요청 준비', on_click=recovery_preview).props('outline').classes(
+                'min-h-[44px]').bind_enabled_from(
+                    state, 'is_busy', lambda busy: not busy and state.is_script_reviewed()
+                    and not state.has_unapplied_script_draft())
             ui.button('준비된 수정 대본 검증', on_click=revision_validation_preview).props('outline').bind_enabled_from(
                 state, 'is_busy', lambda busy: not busy)
         ui.label('예약 회차를 기획 중입니다. 메뉴를 이동해도 실행은 계속되며 저장된 회차에서 결과를 확인합니다.').classes('text-xs text-teal-200').bind_visibility_from(state, 'scheduled_planning_in_progress')

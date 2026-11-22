@@ -5,19 +5,22 @@ import hashlib
 import json
 import os
 import sys
+import tempfile
 from decimal import Decimal
 
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.planner.script_planner import ScriptPlanner
 from shorts_maker.planner.script_validator import ScriptValidator
 from shorts_maker.services.audio_choices import load_audio_choices
+from shorts_maker.services.draft_store import snapshot_paths
 from shorts_maker.services.openai_budget import budget_status, chat_reservation_usd
 from shorts_maker.services.openai_models import PRIMARY_CHAT_MODEL
 from shorts_maker.services.operating_budget import episode_environment, episode_path, load_episode
 from shorts_maker.services.operating_status import schedule_sha256
 from shorts_maker.services.script_reviews import read_script_reviews
-from shorts_maker.services.work_drafts import read_work_draft
+from shorts_maker.services.work_drafts import read_work_draft, save_work_draft
 from shorts_maker.utils.config import PROJECT_ROOT, settings
+from shorts_maker.utils.source_manager import SourceManager
 
 
 def worker_command(manager, schedule_id, digest):
@@ -25,13 +28,89 @@ def worker_command(manager, schedule_id, digest):
             '--schedules', str(manager.filename.resolve()), '_validate-revision', schedule_id, digest]
 
 
-def preflight(manager, schedule_id, digest):
-    schedule = manager.get_schedule(schedule_id)
+def _stopped_episode(schedule):
     if (not schedule or schedule.get('review_operator') != 'agent' or schedule.get('enabled')
             or schedule.get('last_result') != 'music_selection_required' or schedule.get('last_script')
             or schedule.get('last_video_path') or schedule.get('last_youtube_id')):
         raise ValueError('음악 선택에서 중단된 미첨부 회차만 수정본을 검증할 수 있습니다.')
-    record = load_episode(schedule.get('last_episode_id'), schedule)
+    return load_episode(schedule.get('last_episode_id'), schedule)
+
+
+def _quote(script, excerpt, record):
+    if (not SourceManager.is_allowed_url(script.source_url)
+            or not isinstance(excerpt, str) or not 0 < len(excerpt.strip()) <= 5000
+            or script.mood not in ScriptPlanner.SUPPORTED_MOODS
+            or not ScriptPlanner.MIN_SCENES <= len(script.scenes) <= ScriptPlanner.MAX_SCENES):
+        raise ValueError('수정 대본의 출처·음악 분위기·장면 수를 확인하세요.')
+    choices = load_audio_choices(script)
+    if not choices or (choices['bgm_volume'] > 0 and not choices['bgm_track']):
+        raise ValueError('수정본에 검토한 곡이나 무음 설정을 먼저 저장하세요.')
+    existing = read_script_reviews(script)
+    if existing['records'] or existing['unreadable']:
+        raise ValueError('동일한 수정본의 검증 기록을 먼저 대조하세요.')
+    messages = ScriptValidator.review_messages(script, excerpt)
+    price = chat_reservation_usd(PRIMARY_CHAT_MODEL, messages, ScriptValidator.MAX_COMPLETION_TOKENS)
+    env, room = episode_environment(record)
+    if price > Decimal(str(min(room['openai_remaining_usd'], budget_status()['remaining_usd']))):
+        raise ValueError('검증 예약액을 감당할 회차 또는 월 잔액이 필요합니다.')
+    return hashlib.sha256(json.dumps(messages, ensure_ascii=False).encode()).hexdigest(), price, env
+
+
+def preview_recovery(manager, expected, script):
+    """Quote a correction from the exact episode's saved writer excerpt."""
+    schedule = manager.get_schedule(expected['id'])
+    if schedule != expected:
+        raise ValueError('회차 상태가 바뀌었습니다. 일정을 새로고침하세요.')
+    record = _stopped_episode(schedule)
+    base = episode_path(record['id'])
+    request = base.with_suffix('.revision-request.json')
+    if any(os.path.lexists(path) for path in (
+            request, request.with_suffix('.started'), base.with_suffix('.operation.pending.json'),
+            base.with_suffix('.script.json'))):
+        raise ValueError('기존 검증 요청 또는 이전 실행 결과를 먼저 확인하세요.')
+    originals = []
+    for path in snapshot_paths('studio_drafts'):
+        try:
+            original, digest = read_work_draft(path.name)
+        except (OSError, ValueError):
+            continue
+        if original.writer_source and original.writer_source.episode_id == record['id']:
+            originals.append((path.name, original, digest))
+    if len(originals) != 1:
+        raise ValueError('이 회차에 정확히 연결된 작성 원문 사본 하나가 필요합니다.')
+    name, original, original_sha256 = originals[0]
+    source = original.writer_source
+    original_text = json.loads(original.editor_text)
+    if (not isinstance(original_text, dict) or original_text.get('source_url') != script.source_url
+            or source.source_url != script.source_url):
+        raise ValueError('원래 회차와 같은 출처의 수정 대본을 확인하세요.')
+    messages_sha256, amount, _ = _quote(script, source.excerpt, record)
+    return {'original': name, 'original_sha256': original_sha256, 'source_url': source.source_url,
+            'source_excerpt': source.excerpt, 'episode_id': record['id'],
+            'schedule_sha256': schedule_sha256(schedule), 'model': PRIMARY_CHAT_MODEL,
+            'reservation_estimate_usd': str(amount), 'request_messages_sha256': messages_sha256}
+
+
+def prepare_recovery(manager, expected, script, preview):
+    """Publish a verified, one-use request without invoking a provider."""
+    with manager._review_transition_lock():
+        current = preview_recovery(manager, expected, script)
+        if current != preview:
+            raise ValueError('원문이나 검증 견적이 바뀌었습니다. 다시 확인하세요.')
+        candidate = save_work_draft(None, script.model_dump_json(indent=2), {})
+        _, digest = read_work_draft(candidate.name)
+        request = episode_path(current['episode_id']).with_suffix('.revision-request.json')
+        payload = {**current, 'candidate': candidate.name, 'candidate_sha256': digest}
+        with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=request.parent) as stream:
+            json.dump(payload, stream, ensure_ascii=False)
+            stream.flush()
+            os.fsync(stream.fileno())
+            os.link(stream.name, request)
+
+
+def preflight(manager, schedule_id, digest):
+    schedule = manager.get_schedule(schedule_id)
+    record = _stopped_episode(schedule)
     path = episode_path(record['id']).with_suffix('.revision-request.json')
     if (path.is_symlink() or not path.is_file() or path.stat().st_size > 100000
             or os.path.lexists(path.with_suffix('.started')) or os.path.lexists(episode_path(record['id']).with_suffix('.script.json'))):
@@ -48,24 +127,14 @@ def preflight(manager, schedule_id, digest):
     excerpt = request['source_excerpt']
     if (actual != request['candidate_sha256'] or original_sha != request['original_sha256']
             or script.source_url != request['source_url'] or script.source_url != json.loads(original.editor_text)['source_url']
-            or (original.writer_source and original.writer_source.episode_id != record['id'])
-            or not isinstance(excerpt, str) or not 0 < len(excerpt.strip()) <= 5000
-            or script.mood not in ScriptPlanner.SUPPORTED_MOODS
-            or not ScriptPlanner.MIN_SCENES <= len(script.scenes) <= ScriptPlanner.MAX_SCENES):
+            or (original.writer_source and (original.writer_source.episode_id != record['id']
+                or original.writer_source.source_url != script.source_url
+                or original.writer_source.excerpt != excerpt))):
         raise ValueError('회차의 원본·수정 대본·출처·음악 선택을 확인하세요.')
-    choices = load_audio_choices(script)
-    if not choices or (choices['bgm_volume'] > 0 and not choices['bgm_track']):
-        raise ValueError('수정본에 검토한 곡이나 무음 설정을 먼저 저장하세요.')
-    messages = ScriptValidator.review_messages(script, excerpt)
-    price = chat_reservation_usd(PRIMARY_CHAT_MODEL, messages, ScriptValidator.MAX_COMPLETION_TOKENS)
-    env, room = episode_environment(record)
-    if (hashlib.sha256(json.dumps(messages, ensure_ascii=False).encode()).hexdigest() != request['request_messages_sha256']
-            or request['model'] != PRIMARY_CHAT_MODEL or price != Decimal(request['reservation_estimate_usd'])
-            or price > Decimal(str(min(room['openai_remaining_usd'], budget_status()['remaining_usd'])))):
-        raise ValueError('검증 요청 내용·모델·예약액과 회차 또는 월 잔액을 확인하세요.')
-    existing = read_script_reviews(script)
-    if existing['records'] or existing['unreadable']:
-        raise ValueError('동일한 수정본의 검증 기록을 먼저 대조하세요.')
+    messages_sha256, price, env = _quote(script, excerpt, record)
+    if (messages_sha256 != request['request_messages_sha256'] or request['model'] != PRIMARY_CHAT_MODEL
+            or price != Decimal(request['reservation_estimate_usd'])):
+        raise ValueError('검증 요청 내용·모델·예약액을 다시 확인하세요.')
     return schedule, record, path, script, excerpt, env
 
 
@@ -100,7 +169,10 @@ def prepared_revision(manager, expected):
     schedule = manager.get_schedule(expected['id'])
     if schedule != expected:
         raise ValueError('회차 상태가 바뀌었습니다. 일정을 새로고침하세요.')
-    path = episode_path(schedule['last_episode_id']).with_suffix('.revision-request.json')
+    base = episode_path(schedule['last_episode_id'])
+    if os.path.lexists(base.with_suffix('.operation.pending.json')):
+        raise ValueError('이전 회차 실행 결과를 먼저 대조하세요.')
+    path = base.with_suffix('.revision-request.json')
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 100000:
         raise ValueError('이 회차에 준비된 원문 대조 요청이 없습니다.')
     content = path.read_bytes()

@@ -208,6 +208,55 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.assertEqual(before, self.manager.filename.read_bytes())
         self.assertEqual(ledger_bytes, [path.read_bytes() for path in ledgers])
 
+    async def test_music_stop_can_prepare_its_saved_source_in_studio_without_a_paid_request(self):
+        from shorts_maker.services.audio_choices import save_audio_choices
+        from shorts_maker.services.revision_validation import prepared_revision
+        from shorts_maker.services.work_drafts import WriterSource, save_work_draft
+
+        self.schedule = self.manager.update_schedule(self.schedule['id'], {
+            'last_result': 'music_selection_required', 'last_script': None})
+        candidate = script('음악 설정을 수정한 대본')
+        candidate.scenes = [candidate.scenes[0].model_copy(update={'scene_number': n})
+                            for n in range(1, 6)]
+        exact_excerpt = '이 회차의 작성기에 넘긴 원문입니다.'
+        original = save_work_draft(None, candidate.model_copy(
+            update={'title': '원래 대본', 'mood': None}).model_dump_json(), {},
+            writer_source=WriterSource(source_url=candidate.source_url, excerpt=exact_excerpt,
+                                       episode_id=self.episode['id']))
+        save_audio_choices(candidate, {'tts_voice': 'nova', 'bgm_mood': 'auto',
+                                       'bgm_track': '', 'bgm_volume': 0})
+        self.state.load_saved_script(candidate)
+        self.state.confirm_script_review()
+        self.render()
+        request = episode_path(self.episode['id']).with_suffix('.revision-request.json')
+        protected = [original, self.manager.filename, google_budget._database_path(), openai_budget._database_path()]
+        before = [path.read_bytes() for path in protected]
+        with self.client, patch.object(settings, 'paid_production_enabled', True), \
+                patch('subprocess.run') as child:
+            await self.click_and_wait('확인한 수정 대본으로 검증 요청 준비', 'recovery_preview')
+            self.assertIn(exact_excerpt, [getattr(e, 'text', '') for e in self.client.elements.values()])
+            self.assertFalse(request.exists())
+            changed = json.loads(before[0])
+            changed['writer_source']['excerpt'] = '다른 원문'
+            original.write_text(json.dumps(changed, ensure_ascii=False), encoding='utf-8')
+            with patch.object(operator_panel, 'safe_notify') as notify:
+                await self.click_and_wait('원문 확인 · 검증 요청 저장', 'save')
+                self.assertIn('원문이나 검증 견적이 바뀌었습니다', notify.call_args.args[0])
+            self.assertFalse(request.exists())
+            original.write_bytes(before[0])
+            await self.click_and_wait('원문 확인 · 검증 요청 저장', 'save')
+            saved = request.read_bytes()
+            digest, draft, amount = prepared_revision(self.manager, self.schedule)
+            self.assertEqual(hashlib.sha256(saved).hexdigest(), digest)
+            self.assertEqual(draft, candidate)
+            self.assertGreater(float(amount), 0)
+            await self.click_and_wait('준비된 수정 대본 검증', 'revision_validation_preview')
+            self.assertIn('수정 대본 1회 검증', [getattr(e, 'text', '') for e in self.client.elements.values()])
+            child.assert_not_called()
+        self.assertEqual(before, [path.read_bytes() for path in protected])
+        self.assertEqual(request.read_bytes(), saved)
+        self.assertFalse(request.with_suffix('.started').exists())
+
     async def test_planning_runs_once_through_navigation_without_replacing_user_work(self):
         self.pending()
         original_script = self.state.script.model_dump_json()

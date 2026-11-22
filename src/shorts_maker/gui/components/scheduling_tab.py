@@ -405,7 +405,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                             state, 'is_busy', backward=lambda busy: not busy)
                                             elif not enabled and schedule.get('last_result') == 'music_selection_required':
                                                 ui.label('배경음악 선택 필요 · 일정 일시정지').classes('text-xs text-amber-300')
-                                                ui.label('대본·장면 검토에서 저장된 작업 초안을 열고 음악 분위기와 곡을 확인하세요.').classes('text-xs text-gray-300')
+                                                ui.label('저장된 초안을 열어 수정·확인하고 음성·음악 설정을 저장하세요. '
+                                                         '현재 회차 상태·연결에서 원문을 대조해 검증 요청을 준비할 수 있습니다.').classes('text-xs text-gray-300')
                                             elif not enabled and schedule.get('last_result') == 'run_in_progress':
                                                 ui.label('제작 완료 미확인 · 출력과 청구 내역 확인 후 일정 재개').classes('text-xs text-amber-300')
                                             elif not enabled and schedule.get('last_result') == 'model_migration_required':
