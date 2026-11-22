@@ -7,6 +7,8 @@ from pathlib import Path
 from nicegui import run, ui
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
+from shorts_maker.gui.components.scheduled_run_view import STOP_GUIDANCE
+from shorts_maker.gui.components.work_drafts_panel import render_episode_writer_draft
 from shorts_maker.services.operating_budget import episode_path, load_episode
 from shorts_maker.services.operating_status import operator_status, schedule_sha256
 from shorts_maker.services.scheduled_planning import planning_preflight, plan_pending_schedule
@@ -279,14 +281,13 @@ def render_operator_panel(state, manager, schedule, on_attached):
             ui.label(readout['error']).classes('text-xs text-amber-200 break-all')
             return
         data = readout['data']
+        stop = STOP_GUIDANCE.get(data['last_result'])
         phase = {'operator_pending': '제작 인계 대기',
                  'script_review_pending': '완성본 검토 대기' if data.get('last_youtube_id') else '각본·장면 검토 대기',
-                 'run_in_progress': '실행 중 또는 결과 확인 필요', 'planning_failed': '기획 중단',
-                 'music_selection_required': '배경음악 선택 필요',
                  'private_review_deferred': '미채택 검토본 보존 · 다음 회차 예약 가능',
                  'private_review_accepted': '완성본 채택 완료', 'script_rejected': '각본 제외'}.get(
                      data['last_result'], '운영 상태 확인 필요' if data['last_result'] else '아직 실행 전')
-        ui.label(f'회차 {data["run_count"] or 0} · {phase}').classes('text-sm text-slate-200')
+        ui.label(f'회차 {data["run_count"] or 0} · {stop[0] if stop else phase}').classes('text-sm text-slate-200')
         ui.label(f'마지막 조회 {readout["checked_at"]}').classes('text-xs text-slate-400')
         if data.get('planning_auth_required'):
             ui.label('지난 기획 시도에서 YouTube 업로드 인증을 확인하지 못해 비용 발생 전에 중단했습니다. '
@@ -299,6 +300,8 @@ def render_operator_panel(state, manager, schedule, on_attached):
             ui.label('아직 회차 장부가 없습니다. 실제 예약 대기 항목에서만 회차를 시작합니다.').classes('text-xs text-slate-400')
         if data.get('operation_pending_unverified'):
             ui.label('실행 결과 대조 필요 · 요청 기록을 확인하기 전 재실행·연결을 중단합니다.').classes('text-xs text-amber-200')
+        elif stop:
+            ui.label(stop[1]).classes('text-sm text-slate-300 break-words')
         if 'budget_error' in data:
             ui.label(f'회차 비용 확인 필요: {data["budget_error"]}').classes('text-xs text-amber-200 break-all')
         if data.get('planned_script_error'):
@@ -383,6 +386,9 @@ def render_operator_panel(state, manager, schedule, on_attached):
     with ui.expansion('현재 회차 상태·연결', on_value_change=opened).classes('w-full') as panel:
         details()
         ui.button('회차 상태 새로고침', on_click=refresh).props('flat icon=refresh').bind_enabled_from(loading, 'value', lambda value: not value)
+        if (schedule.get('review_operator') == 'agent' and not schedule.get('enabled')
+                and schedule.get('last_result') == 'music_selection_required'):
+            render_episode_writer_draft(state, manager, schedule)
         if (schedule.get('review_operator') == 'agent' and not schedule.get('enabled')
                 and (schedule.get('last_result') == 'music_selection_required' or can_reassess)):
             ui.button('수정 대본 재평가' if reassessment else '확인한 수정 대본으로 검증 요청 준비',

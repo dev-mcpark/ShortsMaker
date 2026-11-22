@@ -15,6 +15,7 @@ from shorts_maker.gui.components.review_continuation import (
     render_archived_review_browser, render_review_acceptance, render_review_continuation,
 )
 from shorts_maker.gui.components.queue_host_panel import render_queue_host_panel
+from shorts_maker.gui.components.scheduled_run_view import STOP_GUIDANCE
 from shorts_maker.gui.components.scheduled_script_history import render_script_history_browser
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.utils.scheduler import INTERVAL_WEEKS, ScheduleManager
@@ -405,16 +406,11 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                     ui.button('검토할 각본 불러오기', on_click=load_pending_script).props(
                                                         'flat dense color=amber').bind_enabled_from(
                                                             state, 'is_busy', backward=lambda busy: not busy)
-                                            elif not enabled and schedule.get('last_result') == 'music_selection_required':
-                                                ui.label('배경음악 선택 필요 · 일정 일시정지').classes('text-xs text-amber-300')
-                                                ui.label('저장된 초안을 열어 수정·확인하고 음성·음악 설정을 저장하세요. '
-                                                         '현재 회차 상태·연결에서 원문을 대조해 검증 요청을 준비할 수 있습니다.').classes('text-xs text-gray-300')
-                                            elif not enabled and schedule.get('last_result') == 'run_in_progress':
-                                                ui.label('제작 완료 미확인 · 출력과 청구 내역 확인 후 일정 재개').classes('text-xs text-amber-300')
-                                            elif not enabled and schedule.get('last_result') == 'model_migration_required':
-                                                ui.label('모델 지원 종료 · 대체 모델 검증 후 제작 재개').classes('text-xs text-amber-300')
-                                            elif enabled and schedule.get('last_result') == 'source_unavailable':
-                                                ui.label('RSS 피드 읽기 실패 · 다음 예약에 다시 확인').classes('text-xs text-amber-300')
+                                            elif stop := STOP_GUIDANCE.get(schedule.get('last_result')):
+                                                ui.label(stop[0]).classes('text-xs text-amber-300')
+                                                if (schedule.get('review_operator') != 'agent'
+                                                        or schedule.get('last_result') == 'music_selection_required'):
+                                                    ui.label(stop[1]).classes('text-xs text-slate-300 break-words')
                                             elif schedule.get('last_result') == 'private_review_deferred':
                                                 ui.label('완성본 미채택 보존 · 다음 기준 회차 예약' if enabled else
                                                          '완성본 미채택 보존 · 일정 일시정지').classes('text-xs text-amber-300')
@@ -584,7 +580,9 @@ def render_scheduling_tab(state: 'AppState') -> None:
 
                                         with ui.row().classes('items-center gap-2'):
                                             ui.badge(f'#{run_count}').props('color=blue-grey-8 text-color=white').classes('text-xs')
-                                            ui.badge('배경음악 선택 필요' if last_result == 'music_selection_required' else last_result).props(f'color={color}-9 text-color=white').classes('text-xs')
+                                            stop = STOP_GUIDANCE.get(last_result)
+                                            ui.badge(stop[0] if stop else last_result).props(
+                                                f'color={color}-9 text-color=white').classes('text-xs')
 
                 history_list()
 

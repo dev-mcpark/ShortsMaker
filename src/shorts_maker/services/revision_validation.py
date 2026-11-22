@@ -39,6 +39,41 @@ def _stopped_episode(schedule):
     return load_episode(schedule.get('last_episode_id'), schedule)
 
 
+def _episode_writer_draft(episode_id):
+    originals = []
+    for path in snapshot_paths('studio_drafts'):
+        try:
+            original, digest = read_work_draft(path.name)
+        except (OSError, ValueError):
+            continue
+        if original.writer_source and original.writer_source.episode_id == episode_id:
+            originals.append((path.name, original, digest))
+    if len(originals) != 1:
+        raise ValueError('이 회차에 정확히 연결된 작성 원문 사본 하나가 필요합니다.')
+    name, original, digest = originals[0]
+    try:
+        data = json.loads(original.editor_text)
+    except (ValueError, RecursionError) as error:
+        raise ValueError('저장된 작성 초안의 내용을 확인할 수 없습니다.') from error
+    source = original.writer_source
+    if (not isinstance(data, dict) or data.get('source_url') != source.source_url
+            or not SourceManager.is_allowed_url(source.source_url)):
+        raise ValueError('저장된 작성 초안과 원문 주소가 일치해야 합니다.')
+    title = data.get('title')
+    return {'name': name, 'sha256': digest, 'source_url': source.source_url,
+            'source_excerpt': source.excerpt,
+            'title': title.strip()[:100] if isinstance(title, str) and title.strip() else '저장된 작성 초안'}
+
+
+def read_stopped_writer_draft(manager, expected):
+    """Find the exact music-stopped episode's retained draft without a paid quote."""
+    schedule = manager.get_schedule(expected['id'])
+    if schedule != expected:
+        raise ValueError('회차 상태가 바뀌었습니다. 일정을 새로고침하세요.')
+    record = _stopped_episode(schedule)
+    return _episode_writer_draft(record['id'])
+
+
 def _validate_candidate(script, excerpt):
     if (not SourceManager.is_allowed_url(script.source_url)
             or not isinstance(excerpt, str) or not 0 < len(excerpt.strip()) <= 5000
@@ -75,25 +110,12 @@ def preview_recovery(manager, expected, script):
             request, request.with_suffix('.started'), base.with_suffix('.operation.pending.json'),
             base.with_suffix('.script.json'))):
         raise ValueError('기존 검증 요청 또는 이전 실행 결과를 먼저 확인하세요.')
-    originals = []
-    for path in snapshot_paths('studio_drafts'):
-        try:
-            original, digest = read_work_draft(path.name)
-        except (OSError, ValueError):
-            continue
-        if original.writer_source and original.writer_source.episode_id == record['id']:
-            originals.append((path.name, original, digest))
-    if len(originals) != 1:
-        raise ValueError('이 회차에 정확히 연결된 작성 원문 사본 하나가 필요합니다.')
-    name, original, original_sha256 = originals[0]
-    source = original.writer_source
-    original_text = json.loads(original.editor_text)
-    if (not isinstance(original_text, dict) or original_text.get('source_url') != script.source_url
-            or source.source_url != script.source_url):
+    original = _episode_writer_draft(record['id'])
+    if original['source_url'] != script.source_url:
         raise ValueError('원래 회차와 같은 출처의 수정 대본을 확인하세요.')
-    messages_sha256, amount, _ = _quote(script, source.excerpt, record)
-    return {'original': name, 'original_sha256': original_sha256, 'source_url': source.source_url,
-            'source_excerpt': source.excerpt, 'episode_id': record['id'],
+    messages_sha256, amount, _ = _quote(script, original['source_excerpt'], record)
+    return {'original': original['name'], 'original_sha256': original['sha256'], 'source_url': original['source_url'],
+            'source_excerpt': original['source_excerpt'], 'episode_id': record['id'],
             'schedule_sha256': schedule_sha256(schedule), 'model': PRIMARY_CHAT_MODEL,
             'reservation_estimate_usd': str(amount), 'request_messages_sha256': messages_sha256}
 

@@ -1,9 +1,84 @@
 """Explicit save/reopen controls for unfinished script and first-frame text work."""
 
+import asyncio
+import json
+
 from nicegui import ui
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
+from shorts_maker.services.revision_validation import read_stopped_writer_draft
 from shorts_maker.services.work_drafts import read_work_draft, saved_work_drafts
+
+
+def render_episode_writer_draft(state, manager, schedule):
+    """Open the exact stopped episode's writer snapshot through normal draft recovery."""
+    working = {'value': False}
+    with ui.column().classes('w-full gap-1') as panel:
+        notice = ui.label().classes('text-sm text-amber-200 break-words').props('role=alert')
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-2xl'):
+            content = ui.column().classes('w-full')
+
+        def work_identity():
+            return json.dumps([state.script_editor_key(), state.script_editor_text(), state.first_frame_drafts,
+                               state.execution_key(), state.reviewed_script_sha256, state.final_video_path,
+                               state.prepared_narration_manifest, state._editor_options(),
+                               state.manual_video_mode, state.manual_script_id], sort_keys=True)
+
+        def current():
+            return (not panel.is_deleted and not dialog.is_deleted and not state.is_busy
+                    and (not state.operating_scope
+                         or state.operating_scope.get('episode_id') == schedule.get('last_episode_id')))
+
+        async def preview_writer_draft():
+            if panel.is_deleted or working['value'] or dialog.value:
+                return
+            if not current():
+                notice.set_text('현재 작업 또는 회차 연결을 확인한 뒤 저장된 초안을 여세요.')
+                return
+            opened_work = work_identity()
+            working['value'] = True
+            notice.set_text('')
+            try:
+                original = await asyncio.to_thread(read_stopped_writer_draft, manager, schedule)
+            except (OSError, ValueError, RuntimeError) as error:
+                if not panel.is_deleted:
+                    notice.set_text(f'작성 초안 확인 중단: {error}')
+                return
+            finally:
+                working['value'] = False
+            if not current() or work_identity() != opened_work:
+                return
+            content.clear()
+            with content:
+                ui.label(original['title']).classes('text-lg font-bold break-words')
+                ui.label(original['source_url']).classes('text-sm break-all')
+                ui.label('작성 당시 원문 발췌').classes('font-semibold')
+                with ui.scroll_area().classes('w-full h-48'):
+                    ui.label(original['source_excerpt']).classes('text-sm whitespace-pre-wrap break-words')
+                ui.label('초안을 열면 현재 대본과 입력을 사본으로 보관하고 편집 중인 완성본 선택을 해제합니다. '
+                         '제작 작업실에서 음악 분위기를 수정하고 곡이나 무음 설정을 저장하세요.').classes('text-sm')
+                error_label = ui.label().classes('text-sm text-amber-200 break-words').props('role=alert')
+
+                def restore():
+                    if (panel.is_deleted or error_label.is_deleted or not dialog.value):
+                        return
+                    try:
+                        if not current() or work_identity() != opened_work or manager.get_schedule(schedule['id']) != schedule:
+                            raise ValueError('현재 작업이나 회차 상태가 바뀌었습니다. 작성 초안을 다시 확인하세요.')
+                        state.restore_work_draft(original['name'], original['sha256'])
+                    except (ValueError, OSError, RuntimeError) as error:
+                        error_label.set_text(f'작성 초안 열기 중단: {error}')
+                        return
+                    dialog.close()
+                    safe_notify('작성 초안을 열었습니다. 제작 작업실의 대본·장면 편집에서 이어서 수정하세요.', type='positive')
+
+                with ui.row().classes('flex-wrap'):
+                    ui.button('닫기', on_click=dialog.close).props('flat').classes('min-h-[44px]')
+                    ui.button('작성 초안을 작업실에서 열기', on_click=restore).props('color=teal').classes('min-h-[44px]')
+            dialog.open()
+
+        ui.button('이 회차의 작성 초안 확인', on_click=preview_writer_draft).props('outline').classes(
+            'min-h-[44px]').bind_enabled_from(state, 'is_busy', lambda busy: not busy and not working['value'])
 
 
 def render_work_drafts_panel(state, on_restored):

@@ -55,6 +55,84 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.assertIn('배경음악 선택 필요', self.text(root))
         self.assertNotIn('지난 기획 시도', self.text(root))
 
+    async def test_saved_stop_reason_and_matching_next_action_survive_reopening(self):
+        for reason, title, next_step in (
+            ('source_unavailable', 'RSS 피드를 읽지 못함', '무료 RSS 기사 조회'),
+            ('openai_budget_exceeded', 'OpenAI 예산 확인 필요', '이번 달 기준과 잔여액'),
+            ('analysis_failed', '기사 본문 분석 결과 확인 필요', '보관된 분석 응답'),
+            ('veo_result_unverified', 'Veo 원본 결과 확인 필요', '공급자 결과와 저장된 장면 파일'),
+        ):
+            with self.subTest(reason=reason):
+                self.schedule = self.manager.update_schedule(self.schedule['id'], {'last_result': reason})
+                before = self.manager.filename.read_bytes()
+                root, refresh = self.render()
+                with self.client:
+                    await refresh()
+                await asyncio.sleep(0)
+                self.assertIn(title, self.text(root))
+                self.assertIn(next_step, self.text(root))
+                self.assertEqual(before, self.manager.filename.read_bytes())
+                root.clear()
+
+    async def test_bound_music_draft_opens_existing_text_after_explicit_confirmation(self):
+        from shorts_maker.services.work_drafts import WriterSource, read_work_draft, saved_work_drafts, save_work_draft
+
+        self.schedule = self.manager.update_schedule(self.schedule['id'], {
+            'last_result': 'music_selection_required', 'last_script': None})
+        original_script = script('같은 회차의 편집 전 작성 초안')
+        original_text = original_script.model_copy(update={'mood': None}).model_dump_json()
+        excerpt = '이 예약 회차에서 작성 모델에 넘긴 발췌입니다.'
+        original = save_work_draft(None, original_text, {}, writer_source=WriterSource(
+            source_url=original_script.source_url, excerpt=excerpt, episode_id=self.episode['id']))
+        save_work_draft(None, original_text, {}, writer_source=WriterSource(
+            source_url=original_script.source_url, excerpt='다른 회차', episode_id='1' * 32))
+        self.state.load_saved_script(script('기존 작업'))
+        key = self.state.script_editor_key()
+        self.state.remember_script_draft(key, '{아직 고치는 입력')
+        self.state.final_video_path = '/current.mp4'
+        protected = [self.manager.filename, original, episode_path(self.episode['id']),
+                     google_budget._database_path(), openai_budget._database_path()]
+        before = [path.read_bytes() for path in protected]
+        self.render()
+        with self.client, patch('subprocess.run') as child:
+            await self.click_and_wait('이 회차의 작성 초안 확인', 'preview_writer_draft')
+            self.assertIn(excerpt, [getattr(e, 'text', '') for e in self.client.elements.values()])
+            self.assertEqual(self.state.final_video_path, '/current.mp4')
+            self.click('닫기')
+            self.click('작성 초안을 작업실에서 열기')
+            self.assertEqual(self.state.script.title, '기존 작업')
+            await self.click_and_wait('이 회차의 작성 초안 확인', 'preview_writer_draft')
+            self.state.remember_script_draft(key, '{그 사이 추가로 고친 입력')
+            self.click('작성 초안을 작업실에서 열기')
+            self.assertEqual(self.state.script.title, '기존 작업')
+            self.click('닫기')
+            await self.click_and_wait('이 회차의 작성 초안 확인', 'preview_writer_draft')
+            self.click('작성 초안을 작업실에서 열기')
+            self.assertIsNone(self.state.script)
+            self.assertEqual(self.state.script_editor_text(), original_text)
+            self.assertIsNone(self.state.reviewed_script_sha256)
+            self.assertIsNone(self.state.operating_scope)
+            child.assert_not_called()
+        self.assertEqual([path.read_bytes() for path in protected], before)
+        self.assertTrue(any(read_work_draft(name)[0].editor_text == '{그 사이 추가로 고친 입력'
+                            for name in saved_work_drafts()[0]))
+
+    async def test_music_draft_lookup_rejects_duplicate_exact_episode_sources(self):
+        from shorts_maker.services.work_drafts import WriterSource, save_work_draft
+
+        self.schedule = self.manager.update_schedule(self.schedule['id'], {
+            'last_result': 'music_selection_required', 'last_script': None})
+        model = script()
+        for text in ('발췌 판본 1', '발췌 판본 2'):
+            save_work_draft(None, model.model_dump_json(), {}, writer_source=WriterSource(
+                source_url=model.source_url, excerpt=text, episode_id=self.episode['id']))
+        root, _ = self.render()
+        with self.client:
+            await self.click_and_wait('이 회차의 작성 초안 확인', 'preview_writer_draft')
+        self.assertIn('정확히 연결된 작성 원문 사본 하나가 필요합니다', self.text(root))
+        self.assertFalse(any(getattr(e, 'text', '') == '작성 초안을 작업실에서 열기'
+                             for e in self.client.elements.values()))
+
     async def test_history_distinguishes_due_slot_handoff_and_later_music_stop(self):
         self.manager.update_schedule(self.schedule['id'], {
             'last_result': 'music_selection_required', 'last_script': None,
