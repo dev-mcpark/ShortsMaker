@@ -15,7 +15,9 @@ from nicegui import core, ui
 from nicegui.client import Client
 from nicegui.page import page
 
-from shorts_maker.gui.components.review_continuation import render_review_acceptance, render_review_continuation
+from shorts_maker.gui.components.review_continuation import (
+    render_archived_review_browser, render_review_acceptance, render_review_continuation,
+)
 from shorts_maker.gui.state.app_state import AppState
 from shorts_maker.services import google_budget,openai_budget
 from shorts_maker.services.operating_budget import begin_episode,episode_path
@@ -56,6 +58,131 @@ class ReviewContinuationTests(unittest.TestCase):
     def resume(self,**kw):
         return self.manager.resume_after_video_review(self.schedule['id'],str(self.video),
             expected_schedule_sha256=kw.get('expected',schedule_sha256(self.schedule)),note=kw.get('note','완성본 미채택 유지, 다음 회차 개선 진행'))
+
+    def archive_review(self):
+        self.resume()
+        future = self.first + timedelta(days=14, seconds=1)
+
+        class Frozen(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return future.replace(tzinfo=ZoneInfo('Asia/Seoul')) if tz else future
+
+        with patch('shorts_maker.utils.scheduler.datetime', Frozen):
+            asyncio.run(self.manager.queue_overdue())
+        return self.manager.get_schedule(self.schedule['id'])['run_history'][0]
+
+    def test_archived_review_preserves_new_pending_run_and_all_cost_records(self):
+        run = self.archive_review()
+        sid = self.schedule['id']
+        new_episode = begin_episode(sid, 2)
+        current = self.manager.update_schedule(sid, {'last_episode_id': new_episode['id']})
+        marker = episode_path(new_episode['id']).with_suffix('.operation.pending.json')
+        marker.write_text('{}')
+        protected = (self.video, self.report, self.episode, marker, episode_path(new_episode['id']),
+                     google_budget._database_path(), openai_budget._database_path())
+        before = [path.read_bytes() for path in protected]
+        expected = schedule_sha256(run)
+        visible = next(row for row in self.manager.get_execution_history() if row.get('archived_review_sha256'))
+        self.assertEqual(visible['archived_review_sha256'], expected)
+        self.assertEqual(self.manager.archived_video_info(sid, 1, expected_run_sha256=expected)['youtube_id'],
+                         'fixture_private')
+        self.assertEqual(current, self.manager.get_schedule(sid))
+
+        accepted = self.manager.accept_archived_video(sid, 1, expected_run_sha256=expected)
+        self.assertEqual(accepted['last_result'], 'private_review_accepted')
+        self.assertIn('accepted_at', accepted)
+        self.assertEqual(accepted['review_continuation'], run['review_continuation'])
+        self.assertEqual(self.manager.get_schedule(sid), {**current, 'run_history': [accepted]})
+        self.assertEqual([path.read_bytes() for path in protected], before)
+        with self.assertRaises(ValueError):
+            self.manager.accept_archived_video(sid, 1, expected_run_sha256=expected)
+
+    def test_archived_review_rejects_unverified_media_markers_and_ambiguous_or_replaced_rows(self):
+        run = self.archive_review()
+        sid = self.schedule['id']
+        expected = schedule_sha256(run)
+        baseline = self.manager.filename.read_bytes()
+        protected = [
+            self.episode.with_suffix('.operation.pending.json'),
+            self.video.with_suffix('.upload-pending.json'),
+        ]
+        for marker in protected:
+            marker.symlink_to(self.root/'missing')
+            with self.assertRaisesRegex(ValueError, '대조'):
+                self.manager.accept_archived_video(sid, 1, expected_run_sha256=expected)
+            marker.unlink()
+        self.video.write_bytes(b'wrong bytes')
+        with self.assertRaisesRegex(ValueError, '해시'):
+            self.manager.accept_archived_video(sid, 1, expected_run_sha256=expected)
+        self.assertEqual(self.manager.filename.read_bytes(), baseline)
+        self.video.write_bytes(b'fixture video')
+        self.manager.update_schedule(sid, {'run_history': [run, run]})
+        with self.assertRaisesRegex(ValueError, '변경'):
+            self.manager.archived_video_info(sid, 1, expected_run_sha256=expected)
+        self.manager.update_schedule(sid, {'run_history': [{
+            **run, 'review_continuation': {**run['review_continuation'], 'youtube_id': 'another_id'},
+        }]})
+        with self.assertRaisesRegex(ValueError, '변경'):
+            self.manager.accept_archived_video(sid, 1, expected_run_sha256=expected)
+        modified = self.manager.get_schedule(sid)['run_history'][0]
+        with self.assertRaisesRegex(ValueError, '채택 보류 기록'):
+            self.manager.accept_archived_video(sid, 1, expected_run_sha256=schedule_sha256(modified))
+
+    def test_native_archived_review_preview_cancel_and_confirm_keep_the_current_workspace(self):
+        self.archive_review()
+        sid = self.schedule['id']
+        before = self.manager.get_schedule(sid)
+
+        async def exercise():
+            refresh = Mock()
+            state = AppState(script=script('새 회차에서 편집 중인 대본'), final_video_path='/current.mp4')
+            with patch.object(core, 'loop', asyncio.get_running_loop()):
+                client = Client(page('/archived-review'))
+                with client, ui.column() as root:
+                    try:
+                        def render():
+                            root.clear()
+                            render_archived_review_browser(state, self.manager, self.manager.get_execution_history(), refresh)
+
+                        def select_run():
+                            choice = next(e for e in root.descendants() if isinstance(e, ui.select))
+                            self.assertEqual(len(choice.options), 1)
+                            choice.value = next(iter(choice.options))
+
+                        async def click(label):
+                            button = next(e for e in root.descendants() if getattr(e, 'text', '') == label)
+                            handler = next(e.handler for e in button._event_listeners.values() if e.type == 'click')
+                            tasks = asyncio.all_tasks()
+                            handler(None)
+                            await asyncio.sleep(0)
+                            await asyncio.gather(*(asyncio.all_tasks() - tasks))
+
+                        render()
+                        select_run()
+                        await click('선택한 지난 회차 검토본 보기')
+                        self.assertTrue(any(isinstance(e, ui.video) for e in root.descendants()))
+                        self.assertEqual(self.manager.get_schedule(sid), before)
+                        await click('닫기')
+                        await click('지난 회차 완성본 채택')
+                        self.assertEqual(self.manager.get_schedule(sid), before)
+                        await click('선택한 지난 회차 검토본 보기')
+                        await click('지난 회차 완성본 채택')
+                        current = self.manager.get_schedule(sid)
+                        self.assertEqual(current['last_result'], 'operator_pending')
+                        self.assertEqual(current['run_history'][0]['last_result'], 'private_review_accepted')
+                        self.assertEqual(state.script.title, '새 회차에서 편집 중인 대본')
+                        self.assertEqual(state.final_video_path, '/current.mp4')
+                        refresh.assert_called_once()
+
+                        render()
+                        select_run()
+                        await click('선택한 지난 회차 검토본 보기')
+                        self.assertFalse(any(getattr(e, 'text', '') == '지난 회차 완성본 채택' for e in root.descendants()))
+                    finally:
+                        client.delete()
+
+        asyncio.run(exercise())
 
     def test_resume_preserves_attachment_episode_budget_anchor_and_restart_trigger(self):
         paths=[self.video,self.report,self.episode,google_budget._database_path(),openai_budget._database_path()]

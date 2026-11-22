@@ -11,7 +11,9 @@ from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.gui.components.common.source_access import load_source_catalog
 from shorts_maker.gui.components.operator_panel import render_operator_panel
-from shorts_maker.gui.components.review_continuation import render_review_acceptance, render_review_continuation
+from shorts_maker.gui.components.review_continuation import (
+    render_archived_review_browser, render_review_acceptance, render_review_continuation,
+)
 from shorts_maker.gui.components.queue_host_panel import render_queue_host_panel
 from shorts_maker.gui.components.scheduled_script_history import render_script_history_browser
 from shorts_maker.planner.models import ShortsScript
@@ -548,6 +550,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                         return
 
                     render_script_history_browser(state, schedule_manager, run_schedules)
+                    render_archived_review_browser(state, schedule_manager, run_schedules,
+                                                   lambda: (safe_refresh(schedule_list), safe_refresh(history_list)))
                     with ui.scroll_area().classes('h-[25vh]'):
                         with ui.element('div').classes('p-4 space-y-2'):
                             for schedule in run_schedules[:10]:

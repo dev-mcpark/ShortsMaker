@@ -4,6 +4,7 @@ from pathlib import Path
 
 from nicegui import ui
 
+from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.gui.components.common.safe_ui import safe_notify
 from shorts_maker.services.operating_status import schedule_sha256
 from shorts_maker.utils.scheduler import INTERVAL_WEEKS
@@ -93,3 +94,87 @@ def render_review_continuation(state, manager, schedule, refresh):
             dialog.open()
         ui.button('채택 보류·다음 회차 예약', on_click=open_dialog).props('flat color=amber').classes('min-h-[44px]').bind_enabled_from(
             state, 'is_busy', lambda busy: not busy)
+
+
+def render_archived_review_browser(state, manager, runs, refresh):
+    available = {str(index): run for index, run in enumerate(runs) if run.get('archived_review_sha256')
+                 and type(run.get('run_count')) is int and isinstance(run.get('last_script'), dict)}
+    if not available:
+        return
+    working = {'value': False}
+    media_source = media_sources()
+    with ui.column().classes('w-full px-4 gap-2') as panel:
+        choice = ui.select(
+            {key: f'{run["name"]} · 회차 {run["run_count"]} · {run["last_script"].get("title", "완성본")}'
+             for key, run in available.items()},
+            label='지난 회차 검토본 검색', with_input=True,
+        ).props('outlined dark clearable').classes('w-full').bind_enabled_from(working, 'value', lambda value: not value)
+        notice = ui.label().classes('text-sm text-amber-200 break-words').props('role=alert')
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
+            preview_panel = ui.column().classes('w-full')
+
+        async def preview():
+            key = choice.value
+            if panel.is_deleted or working['value'] or dialog.value or key not in available:
+                return
+            run = available[key]
+            identity = (run['schedule_id'], run['run_count'])
+            expected = run['archived_review_sha256']
+            working['value'] = True
+            notice.set_text('')
+            try:
+                info = await asyncio.to_thread(manager.archived_video_info, *identity, expected_run_sha256=expected)
+            except (OSError, ValueError, RuntimeError) as error:
+                if not panel.is_deleted and choice.value == key:
+                    notice.set_text(f'지난 회차 검토본을 열 수 없습니다: {error}')
+                return
+            finally:
+                working['value'] = False
+            if panel.is_deleted or dialog.is_deleted or choice.value != key:
+                return
+            preview_panel.clear()
+            with preview_panel:
+                deferred = run['last_result'] == 'private_review_deferred'
+                ui.label(f'{run["last_script"].get("title", run["name"])} · 회차 {run["run_count"]}').classes(
+                    'text-lg font-bold break-words')
+                ui.label('채택 보류' if deferred else '채택 완료').classes('text-sm')
+                ui.video(media_source(info['video_path'])).props('controls playsinline').classes(
+                    'w-full max-w-[220px] max-h-[340px] bg-black')
+                youtube_id = info['youtube_id']
+                ui.link('YouTube에서 보기', f'https://www.youtube.com/shorts/{youtube_id}', new_tab=True)
+                receipt = run.get('review_continuation')
+                if isinstance(receipt, dict) and isinstance(receipt.get('note'), str):
+                    ui.label(f'당시 검토 메모 · {receipt["note"]}').classes('text-sm break-words')
+                if deferred:
+                    ui.label('채택하면 지난 회차에만 게시 후보로 기록합니다. 공개는 YouTube Studio에서 결정합니다.').classes('text-sm')
+                error_label = ui.label().classes('text-sm text-amber-200 break-words').props('role=alert')
+
+                async def accept():
+                    if (panel.is_deleted or error_label.is_deleted or dialog.is_deleted or not dialog.value
+                            or choice.value != key or state.is_busy or working['value']):
+                        return
+                    working['value'] = True
+                    error_label.set_text('')
+                    try:
+                        await asyncio.to_thread(manager.accept_archived_video, *identity, expected_run_sha256=expected)
+                    except (OSError, ValueError, RuntimeError) as error:
+                        if not error_label.is_deleted:
+                            error_label.set_text(f'채택 중단: {error}')
+                        return
+                    finally:
+                        working['value'] = False
+                    if not panel.is_deleted:
+                        dialog.close()
+                        refresh()
+                        safe_notify('지난 회차의 완성본 채택을 기록했습니다.', type='positive')
+
+                with ui.row().classes('flex-wrap'):
+                    ui.button('닫기', on_click=dialog.close).props('flat').classes('min-h-[44px]').bind_enabled_from(
+                        working, 'value', lambda value: not value)
+                    if deferred:
+                        ui.button('지난 회차 완성본 채택', on_click=accept).props('color=teal').classes(
+                            'min-h-[44px]').bind_enabled_from(state, 'is_busy', lambda busy: not busy and not working['value'])
+            dialog.open()
+
+        ui.button('선택한 지난 회차 검토본 보기', on_click=preview).props('flat icon=play_circle').classes(
+            'min-h-[44px]').bind_enabled_from(working, 'value', lambda value: not value and choice.value in available)

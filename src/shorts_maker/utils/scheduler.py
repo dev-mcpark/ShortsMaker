@@ -564,6 +564,52 @@ class ScheduleManager:
         _, video, video_hash, video_id = self._verified_pending_video(schedule_id, video_path)
         return {'video_path': str(video), 'video_sha256': video_hash, 'youtube_id': video_id}
 
+    @staticmethod
+    def _archived_review(schedule, run_count: int, expected_run_sha256: str) -> tuple[int, dict]:
+        from shorts_maker.services.operating_status import schedule_sha256
+
+        if (not schedule or type(run_count) is not int or type(schedule.get('run_count')) is not int
+                or not 0 < run_count < schedule['run_count']):
+            raise ValueError('보관된 지난 회차를 선택하세요.')
+        matches = [(i, run) for i, run in enumerate(schedule.get('run_history', []))
+                   if type(run.get('run_count')) is int and run['run_count'] == run_count]
+        if len(matches) != 1 or schedule_sha256(matches[0][1]) != expected_run_sha256:
+            raise ValueError('이전 회차 기록이 변경됐습니다. 실행 이력을 다시 열어 주세요.')
+        index, run = matches[0]
+        if (run.get('last_result') not in {'private_review_deferred', 'private_review_accepted'}
+                or not all(isinstance(run.get(key), str) and run[key]
+                           for key in ('last_video_path', 'last_video_sha256', 'last_youtube_id'))):
+            raise ValueError('이전 회차에 연결된 완성본 기록을 확인할 수 없습니다.')
+        if run['last_result'] == 'private_review_deferred':
+            receipt = run.get('review_continuation')
+            if (not isinstance(receipt, dict) or receipt.get('without_acceptance') is not True
+                    or run.get('accepted_at')
+                    or any(receipt.get(key) != run[field] for key, field in (
+                        ('video_path', 'last_video_path'), ('video_sha256', 'last_video_sha256'),
+                        ('youtube_id', 'last_youtube_id')))):
+                raise ValueError('첨부된 검토본과 당시 채택 보류 기록이 일치하지 않습니다.')
+        return index, run
+
+    def archived_video_info(self, schedule_id: str, run_count: int, *, expected_run_sha256: str) -> Dict[str, str]:
+        _, run = self._archived_review(self.get_schedule(schedule_id), run_count, expected_run_sha256)
+        video, video_hash, video_id = self._verified_review_media(run, run['last_video_path'])
+        return {'video_path': str(video), 'video_sha256': video_hash, 'youtube_id': video_id}
+
+    def accept_archived_video(self, schedule_id: str, run_count: int, *, expected_run_sha256: str) -> Dict[str, Any]:
+        """Record owner acceptance on the retained run alone."""
+        with self._review_transition_lock():
+            _, run = self._archived_review(self.get_schedule(schedule_id), run_count, expected_run_sha256)
+            if run['last_result'] != 'private_review_deferred':
+                raise ValueError('채택 보류 상태인 이전 회차를 선택하세요.')
+            self._verified_review_media(run, run['last_video_path'])
+            current = self.get_schedule(schedule_id)
+            index, run = self._archived_review(current, run_count, expected_run_sha256)
+            history = list(current['run_history'])
+            history[index] = {**run, 'last_result': 'private_review_accepted', 'accepted_at': datetime.now().isoformat()}
+            if self.update_schedule(schedule_id, {'run_history': history}) is None:
+                raise ValueError('일정이 사라졌습니다. 실행 이력을 다시 열어 주세요.')
+            return history[index]
+
     def record_private_review_copy(self, schedule_id: str, video_path: str) -> Dict[str, Any]:
         """Attach a matching upload without claiming owner acceptance or re-enabling the next slot."""
         with self._review_transition_lock():
@@ -576,14 +622,18 @@ class ScheduleManager:
             return updated
 
     def _verified_pending_video(self, schedule_id: str, video_path: str, *, allow_deferred: bool = False) -> tuple:
-        from shorts_maker.services.production_service import script_sha256
-        from shorts_maker.utils.config import settings
-
         schedule = self.get_schedule(schedule_id)
         if schedule is None or not (
                 (schedule.get('last_result') == 'script_review_pending' and not schedule.get('enabled'))
                 or (allow_deferred and schedule.get('last_result') == 'private_review_deferred')):
             raise ValueError("검토 대기 중인 각본 일정이 없습니다.")
+        return (schedule, *self._verified_review_media(schedule, video_path))
+
+    @staticmethod
+    def _verified_review_media(schedule: dict, video_path: str) -> tuple[Path, str, str]:
+        from shorts_maker.services.production_service import script_sha256
+        from shorts_maker.utils.config import settings
+
         if schedule.get('last_episode_id'):
             from shorts_maker.services.operating_budget import episode_path
             pending = episode_path(schedule['last_episode_id']).with_suffix('.operation.pending.json')
@@ -628,13 +678,20 @@ class ScheduleManager:
                 or schedule.get('last_video_sha256') != video_sha256
                 or schedule['last_youtube_id'] != video_id):
             raise ValueError("이미 연결된 비공개 검토본의 경로·영상 해시·YouTube ID와 일치해야 합니다.")
-        return schedule, video, video_sha256, video_id
+        return video, video_sha256, video_id
 
     def get_execution_history(self) -> List[Dict[str, Any]]:
         """Return retained attempts and the current review state, newest first."""
+        from shorts_maker.services.operating_status import schedule_sha256
+
         history = []
         for schedule in self.load_schedules():
-            runs = list(schedule.get('run_history', []))
+            runs = [
+                {**run, 'archived_review_sha256': schedule_sha256(run)}
+                if run.get('last_result') in {'private_review_deferred', 'private_review_accepted'}
+                and run.get('last_youtube_id') and run.get('last_video_path') else run
+                for run in schedule.get('run_history', [])
+            ]
             if schedule.get('last_run'):
                 runs.append({key: schedule[key] for key in _RUN_FIELDS if key in schedule})
             history.extend({**run, 'schedule_id': schedule['id'], 'name': schedule['name']}

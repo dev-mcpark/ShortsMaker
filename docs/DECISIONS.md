@@ -1277,3 +1277,7 @@ The Namdaemun edit used two approved frames after the generated movement failed 
 ## 2026-11-22 — Keep a deferred review's cadence decision separate from adoption
 
 At initial RSS review, owner adoption advances the schedule to its next slot. After explicit continuation with adoption deferred, later adoption changes the editorial state and preserves the schedule's current pause or enabled state. Share the SQLite transition lock with manual pause/resume. Bind the adoption confirmation to the attached file and saved schedule, then recheck the snapshot around file verification. Display the real saved cadence in the separate continuation confirmation.
+
+## 2026-11-22 — Record later editorial decisions on the archived run
+
+After the queue advances, the owner may play and adopt a deferred attached review from execution history. Bind the action to one archived run and its exact stored digest, original continuation receipt and verified review media. Write the editorial status and timestamp to that run under the existing transition lock. Keep the original receipt, current run, next slot and cost records intact. An archived decision carries no production or publishing authority.
