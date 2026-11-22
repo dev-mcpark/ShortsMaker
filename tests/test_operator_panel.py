@@ -373,6 +373,21 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             self.manager.pending_video_info(self.schedule['id'], str(self.video))
 
+    async def test_broken_operation_marker_is_reported_and_blocks_attachment(self):
+        marker = episode_path(self.episode['id']).with_suffix('.operation.pending.json')
+        marker.symlink_to(self.root / 'unavailable-operation-record.json')
+        before = self.manager.filename.read_bytes()
+        self.assertTrue(operator_status(self.schedule)['operation_pending_unverified'])
+        root, refresh = self.render()
+        with self.client:
+            await refresh()
+        await asyncio.sleep(0)
+        self.assertIn('실행 결과 대조 필요', self.text(root))
+        with self.assertRaisesRegex(ValueError, '미확인 실행'):
+            self.manager.pending_video_info(self.schedule['id'], str(self.video))
+        self.assertTrue(marker.is_symlink())
+        self.assertEqual(before, self.manager.filename.read_bytes())
+
     async def test_failed_status_does_not_invent_budget_and_attached_episode_has_no_replace_control(self):
         operation = episode_path(self.episode['id']).with_suffix('.operation.pending.json')
         operation.write_text('{}')

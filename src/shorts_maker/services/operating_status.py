@@ -23,7 +23,8 @@ def operator_status(schedule: dict) -> dict:
     if schedule.get('last_episode_id'):
         try:
             path = episode_path(schedule['last_episode_id'])
-            result['operation_pending_unverified'] = path.with_suffix('.operation.pending.json').exists()
+            pending = path.with_suffix('.operation.pending.json')
+            result['operation_pending_unverified'] = pending.exists() or pending.is_symlink()
             script = path.with_suffix('.script.json')
             result['planned_script_path'] = str(script) if script.is_file() else None
             if schedule.get('review_operator') == 'agent':
