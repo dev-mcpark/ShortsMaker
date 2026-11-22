@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import tempfile
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from shorts_maker.planner.models import ShortsScript
@@ -17,8 +18,10 @@ from shorts_maker.services.openai_budget import budget_status, chat_reservation_
 from shorts_maker.services.openai_models import PRIMARY_CHAT_MODEL
 from shorts_maker.services.operating_budget import episode_environment, episode_path, load_episode
 from shorts_maker.services.operating_status import schedule_sha256
+from shorts_maker.services.production_service import script_sha256
 from shorts_maker.services.script_reviews import read_script_reviews
-from shorts_maker.services.work_drafts import read_work_draft, save_work_draft
+from shorts_maker.services.script_store import save_script_copy
+from shorts_maker.services.work_drafts import read_work_draft, save_work_draft, script_draft_key
 from shorts_maker.utils.config import PROJECT_ROOT, settings
 from shorts_maker.utils.source_manager import SourceManager
 
@@ -36,7 +39,7 @@ def _stopped_episode(schedule):
     return load_episode(schedule.get('last_episode_id'), schedule)
 
 
-def _quote(script, excerpt, record):
+def _validate_candidate(script, excerpt):
     if (not SourceManager.is_allowed_url(script.source_url)
             or not isinstance(excerpt, str) or not 0 < len(excerpt.strip()) <= 5000
             or script.mood not in ScriptPlanner.SUPPORTED_MOODS
@@ -45,6 +48,10 @@ def _quote(script, excerpt, record):
     choices = load_audio_choices(script)
     if not choices or (choices['bgm_volume'] > 0 and not choices['bgm_track']):
         raise ValueError('수정본에 검토한 곡이나 무음 설정을 먼저 저장하세요.')
+
+
+def _quote(script, excerpt, record):
+    _validate_candidate(script, excerpt)
     existing = read_script_reviews(script)
     if existing['records'] or existing['unreadable']:
         raise ValueError('동일한 수정본의 검증 기록을 먼저 대조하세요.')
@@ -121,6 +128,15 @@ def preflight(manager, schedule_id, digest):
     request = json.loads(raw)
     if request['schedule_sha256'] != schedule_sha256(schedule) or request['episode_id'] != record['id']:
         raise ValueError('요청을 준비한 회차가 변경되었습니다.')
+    script, excerpt = _request_candidate(request, record)
+    messages_sha256, price, env = _quote(script, excerpt, record)
+    if (messages_sha256 != request['request_messages_sha256'] or request['model'] != PRIMARY_CHAT_MODEL
+            or price != Decimal(request['reservation_estimate_usd'])):
+        raise ValueError('검증 요청 내용·모델·예약액을 다시 확인하세요.')
+    return schedule, record, path, script, excerpt, env
+
+
+def _request_candidate(request, record):
     draft, actual = read_work_draft(request['candidate'])
     original, original_sha = read_work_draft(request['original'])
     script = ShortsScript.model_validate_json(draft.editor_text)
@@ -131,11 +147,7 @@ def preflight(manager, schedule_id, digest):
                 or original.writer_source.source_url != script.source_url
                 or original.writer_source.excerpt != excerpt))):
         raise ValueError('회차의 원본·수정 대본·출처·음악 선택을 확인하세요.')
-    messages_sha256, price, env = _quote(script, excerpt, record)
-    if (messages_sha256 != request['request_messages_sha256'] or request['model'] != PRIMARY_CHAT_MODEL
-            or price != Decimal(request['reservation_estimate_usd'])):
-        raise ValueError('검증 요청 내용·모델·예약액을 다시 확인하세요.')
-    return schedule, record, path, script, excerpt, env
+    return script, excerpt
 
 
 def execute(manager, schedule_id, digest):
@@ -179,3 +191,64 @@ def prepared_revision(manager, expected):
     digest = hashlib.sha256(content).hexdigest()
     _, _, _, script, _, _ = preflight(manager, schedule['id'], digest)
     return digest, script, json.loads(content)['reservation_estimate_usd']
+
+
+def preview_reassessment(manager, expected, candidate):
+    """Read the completed rejection and exact source for the owner's explicit reassessment."""
+    schedule = manager.get_schedule(expected['id'])
+    if schedule != expected or schedule.get('last_result') != 'planning_failed':
+        raise ValueError('검증이 끝난 현재 회차를 다시 확인하세요.')
+    stopped = {**schedule, 'last_result': 'music_selection_required'}
+    record = _stopped_episode(stopped)
+    base = episode_path(record['id'])
+    request_path = base.with_suffix('.revision-request.json')
+    started = request_path.with_suffix('.started')
+    if any(os.path.lexists(path) for path in (base.with_suffix('.operation.pending.json'), base.with_suffix('.script.json'))):
+        raise ValueError('이전 실행 또는 대본 기록을 먼저 대조하세요.')
+    if (request_path.is_symlink() or not request_path.is_file() or request_path.stat().st_size > 100000
+            or started.is_symlink() or not started.is_file() or started.stat().st_size != 64):
+        raise ValueError('이 회차의 수정 대본 검증 요청·실행 기록을 확인하세요.')
+    raw = request_path.read_bytes()
+    request_sha256 = hashlib.sha256(raw).hexdigest()
+    request = json.loads(raw)
+    if (started.read_text() != request_sha256 or request['episode_id'] != record['id']
+            or request['schedule_sha256'] != schedule_sha256(stopped)):
+        raise ValueError('검증 요청과 현재 회차 기록이 일치하지 않습니다.')
+    rejected, excerpt = _request_candidate(request, record)
+    if (candidate.source_url != rejected.source_url
+            or script_draft_key(candidate) == script_draft_key(rejected)):
+        raise ValueError('같은 출처의 수정된 대본을 먼저 확인하세요.')
+    _validate_candidate(candidate, excerpt)
+    evidence = read_script_reviews(rejected)
+    if (evidence['unreadable'] or len(evidence['records']) != 1
+            or evidence['records'][0]['state'] != 'completed'
+            or evidence['records'][0]['verdict']['is_valid']
+            or evidence['records'][0]['source_excerpt'] != excerpt
+            or evidence['records'][0]['model'] != request['model']):
+        raise ValueError('완료된 모델 미통과 판정과 원문을 대조해야 합니다.')
+    return {'request_sha256': request_sha256, 'review': evidence['records'][0],
+            'candidate_sha256': script_draft_key(candidate)}
+
+
+def save_reassessment(manager, expected, candidate, preview, note):
+    if not isinstance(note, str) or not note.strip() or len(note) > 500:
+        raise ValueError('원문 대조 후 수정 대본을 채택하는 이유를 500자 이내로 입력하세요.')
+    with manager._review_transition_lock():
+        current = preview_reassessment(manager, expected, candidate)
+        if current != preview:
+            raise ValueError('검토한 대본이나 모델 판정이 바뀌었습니다. 다시 확인하세요.')
+        stored = save_script_copy(candidate, settings.output_dir / 'evaluation' / 'scheduled_script_revisions')
+        review = current['review']
+        selected = candidate.model_dump(mode='json')
+        reviewed_at = datetime.now(timezone.utc).isoformat()
+        return manager.update_schedule(expected['id'], {
+            'last_result': 'script_review_pending',
+            'last_script': selected, 'last_script_path': str(stored.resolve()),
+            'last_planned_url': candidate.source_url,
+            'script_revisions': [{'script': review['script'], 'script_sha256': script_sha256(review['script']),
+                'script_path': None, 'replacement_sha256': script_sha256(selected),
+                'review_receipt_sha256': current['candidate_sha256'], 'replaced_at': reviewed_at,
+                'reassessment': {'note': note.strip(), 'request_sha256': current['request_sha256'],
+                    'model_review_name': review['name'], 'model_review_sha256': review['request_sha256'],
+                    'model_verdict': review['verdict']}}],
+        })

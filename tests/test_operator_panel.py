@@ -257,6 +257,77 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.assertEqual(request.read_bytes(), saved)
         self.assertFalse(request.with_suffix('.started').exists())
 
+    async def test_studio_reassessment_blocks_unknown_results_and_requires_explicit_confirmation(self):
+        from shorts_maker.services.audio_choices import save_audio_choices
+        from shorts_maker.services import revision_validation as recovery
+        from shorts_maker.services.work_drafts import WriterSource, save_work_draft
+        from shorts_maker.services.scheduled_script_history import validated_revisions
+        self.enterContext(patch.object(settings, 'scripts_dir', self.root / 'scripts'))
+
+        self.schedule = self.manager.update_schedule(self.schedule['id'], {
+            'last_result': 'music_selection_required', 'last_script': None})
+        rejected = script('처음 검증한 대본')
+        rejected.scenes = [rejected.scenes[0].model_copy(update={'scene_number': n})
+                           for n in range(1, 6)]
+        excerpt = '원문에서는 손님이 지붕 아래에서 식사했다고 설명했습니다.'
+        save_work_draft(None, rejected.model_dump_json(), {},
+                        writer_source=WriterSource(source_url=rejected.source_url, excerpt=excerpt,
+                                                   episode_id=self.episode['id']))
+        choices = {'tts_voice': 'nova', 'bgm_mood': 'auto', 'bgm_track': '', 'bgm_volume': 0}
+        save_audio_choices(rejected, choices)
+        recovery.prepare_recovery(self.manager, self.schedule, rejected,
+                                  recovery.preview_recovery(self.manager, self.schedule, rejected))
+        base = episode_path(self.episode['id'])
+        request = base.with_suffix('.revision-request.json')
+        request.with_suffix('.started').write_text(hashlib.sha256(request.read_bytes()).hexdigest())
+        reviews = settings.scripts_dir / 'reviews'
+        reviews.mkdir(parents=True)
+        model_request, verdict = reviews / 'review_fixture.request.json', reviews / 'review_fixture.verdict.json'
+        model_request.write_text(json.dumps({'script': rejected.model_dump(),
+            'script_json_sha256': script_sha256(rejected.model_dump()), 'source_excerpt': excerpt,
+            'source_sha256': hashlib.sha256(excerpt.encode()).hexdigest(),
+            'validator_model': recovery.PRIMARY_CHAT_MODEL}))
+        verdict.write_text(json.dumps({'is_valid': False, 'reason': 'unsupported_claim', 'score': 62,
+                                       'feedback': '원문 표현을 확인하세요.'}))
+        self.schedule = self.manager.update_schedule(self.schedule['id'], {'last_result': 'planning_failed'})
+        corrected = rejected.model_copy(update={'title': '원문에 맞게 고친 대본'})
+        save_audio_choices(corrected, choices)
+        self.state.load_saved_script(corrected)
+        self.state.confirm_script_review()
+        self.render()
+        protected = [base, request, model_request, verdict,
+                     google_budget._database_path(), openai_budget._database_path()]
+        before = [path.read_bytes() for path in protected]
+        with self.client, patch('subprocess.run') as child, patch.object(operator_panel, 'safe_notify') as notify:
+            await self.click_and_wait('수정 대본 재평가', 'recovery_preview')
+            visible = [getattr(e, 'text', '') for e in self.client.elements.values()]
+            self.assertIn('이전 모델 미통과 · 62점', visible)
+            self.assertIn(excerpt, visible)
+            note = next(e for e in self.client.elements.values() if
+                        getattr(e, 'label', '') == '원문을 대조한 뒤 이 수정 대본을 채택하는 이유')
+            await self.click_and_wait('재평가한 수정 대본 채택', 'save')
+            self.assertIn('채택하는 이유', notify.call_args.args[0])
+            note.set_value('기사 내용과 수정 대본을 대조했습니다.')
+            pending = base.with_suffix('.operation.pending.json')
+            pending.symlink_to(self.root / 'missing.json')
+            await self.click_and_wait('재평가한 수정 대본 채택', 'save')
+            self.assertIn('대조', notify.call_args.args[0])
+            self.assertEqual(self.manager.get_schedule(self.schedule['id']), self.schedule)
+            pending.unlink()
+            await self.click_and_wait('재평가한 수정 대본 채택', 'save')
+            child.assert_not_called()
+        result = self.manager.get_schedule(self.schedule['id'])
+        self.assertFalse(result['enabled'])
+        self.assertEqual(result['last_result'], 'script_review_pending')
+        self.assertEqual(result['last_episode_id'], self.episode['id'])
+        self.assertIsNone(result.get('last_youtube_id'))
+        self.assertTrue(operator_status(result)['script_reassessment'])
+        self.assertEqual(result['script_revisions'][0]['reassessment']['model_verdict']['score'], 62)
+        validated_revisions(result['last_script'], result['script_revisions'])
+        self.state.load_scheduled_script(self.manager, self.schedule['id'])
+        self.assertEqual(self.state.script, corrected)
+        self.assertEqual(before, [path.read_bytes() for path in protected])
+
     async def test_planning_runs_once_through_navigation_without_replacing_user_work(self):
         self.pending()
         original_script = self.state.script.model_dump_json()

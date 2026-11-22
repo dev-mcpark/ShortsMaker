@@ -1265,3 +1265,7 @@ The owner approved weekly production from Wednesday December 2 at 10:06 Asia/Seo
 ## 2026-11-22 — Define success through the operator's Studio workflow
 
 Use the next eligible scheduled episode to observe the actual operator path from planning to private review upload, including a saved handoff or recovery where needed. Prioritize the first missing app action or unclear blocker along that path before adding another feature. Count a cycle toward the baseline when it uses the app, the owner accepts the cut, and attributable costs have been reconciled. Document the next testable editorial change from the completed cut or the observed failure.
+
+## 2026-11-22 — Retain model rejection when an owner adopts a correction
+
+The owner can explicitly adopt a newly reviewed correction after a completed same-episode revision rejection. Show the original verdict, its saved source excerpt and both script versions. Recheck the consumed request, same-source correction, explicit note and unresolved attempt gate under the scheduler lock. Store the decision in the existing script-revision history and move the same episode to script review. The saved record keeps the rejection and the operator's reason. Script adoption authorizes continued scene review under the episode's existing limits. Video acceptance and publication remain separate owner decisions.

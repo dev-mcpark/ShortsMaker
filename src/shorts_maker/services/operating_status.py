@@ -18,6 +18,9 @@ def operator_status(schedule: dict) -> dict:
         'last_video_path', 'last_youtube_id')}
     if schedule.get('review_continuation'):
         result['review_continuation'] = schedule['review_continuation']
+    revisions = schedule.get('script_revisions')
+    if isinstance(revisions, list) and any(isinstance(row, dict) and row.get('reassessment') for row in revisions):
+        result['script_reassessment'] = True
     if schedule.get('planning_auth_required'):
         result['planning_auth_required'] = True
     if schedule.get('last_episode_id'):
