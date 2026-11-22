@@ -11,11 +11,11 @@ from datetime import datetime,timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock,Mock,patch
 from zoneinfo import ZoneInfo
-from nicegui import ui
+from nicegui import core, ui
 from nicegui.client import Client
 from nicegui.page import page
 
-from shorts_maker.gui.components.review_continuation import render_review_continuation
+from shorts_maker.gui.components.review_continuation import render_review_acceptance, render_review_continuation
 from shorts_maker.gui.state.app_state import AppState
 from shorts_maker.services import google_budget,openai_budget
 from shorts_maker.services.operating_budget import begin_episode,episode_path
@@ -154,6 +154,33 @@ class ReviewContinuationTests(unittest.TestCase):
         self.assertEqual(accepted['scheduled_for'],resumed['scheduled_for'])
         self.assertEqual(accepted['review_continuation'],resumed['review_continuation'])
 
+    def test_accepting_a_deferred_copy_preserves_explicit_schedule_pause(self):
+        resumed = self.resume()
+        self.manager.toggle_schedule(resumed['id'])
+        paused = self.manager.get_schedule(resumed['id'])
+        self.assertFalse(paused['enabled'])
+        accepted = self.manager.accept_pending_video(resumed['id'], str(self.video))
+        self.assertEqual(accepted['last_result'], 'private_review_accepted')
+        self.assertFalse(accepted['enabled'])
+        self.assertEqual(accepted['last_youtube_id'], paused['last_youtube_id'])
+
+    def test_old_adoption_confirmation_cannot_overwrite_schedule_change_during_media_check(self):
+        original = self.manager._verified_pending_video
+
+        def concurrent_change(*args, **kwargs):
+            result = original(*args, **kwargs)
+            self.manager.update_schedule(self.schedule['id'], {'name': '검토 중 이름 변경'})
+            return result
+
+        with patch.object(self.manager, '_verified_pending_video', side_effect=concurrent_change):
+            with self.assertRaisesRegex(ValueError, '변경'):
+                self.manager.accept_pending_video(
+                    self.schedule['id'], str(self.video), expected_schedule_sha256=schedule_sha256(self.schedule),
+                )
+        current = self.manager.get_schedule(self.schedule['id'])
+        self.assertEqual(current['name'], '검토 중 이름 변경')
+        self.assertNotIn('accepted_at', current)
+
     def test_stale_pending_changed_media_direct_url_and_no_attachment_fail_without_writes(self):
         original=self.manager.filename.read_bytes()
         with self.assertRaises(ValueError):self.resume(expected='0'*64)
@@ -203,6 +230,8 @@ class ReviewContinuationTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError,'다른 회차'):
                         method(self.schedule['id'],str(self.video))
                     self.assertEqual(self.manager.filename.read_bytes(),before)
+            with self.assertRaisesRegex(ValueError, '다른 회차'):
+                self.manager.toggle_schedule(self.schedule['id'])
             with self.assertRaisesRegex(ValueError,'다른 회차'):self.resume()
         finally:
             child.communicate('x',timeout=5)
@@ -263,3 +292,59 @@ class ReviewContinuationTests(unittest.TestCase):
         self.assertTrue(self.manager.get_schedule(self.schedule['id'])['enabled'])
         self.assertNotIn('accepted_at',self.manager.get_schedule(self.schedule['id']))
         refresh.assert_called_once()
+
+    def test_weekly_review_confirmation_shows_the_saved_frequency(self):
+        schedule = self.manager.update_schedule(self.schedule['id'], {'frequency': 'Every Week'})
+        client = Client(page('/weekly-review'));self.addCleanup(client.delete)
+        with client:
+            render_review_continuation(AppState(), self.manager, schedule, Mock())
+            button = next(e for e in client.elements.values() if getattr(e, 'text', '') == '채택 보류·다음 회차 예약')
+            next(e.handler for e in button._event_listeners.values() if e.type == 'click')(None)
+            labels = [getattr(e, 'text', '') for e in client.elements.values()]
+        self.assertTrue(any('7일마다' in label for label in labels))
+        self.assertFalse(any('14일/28일' in label for label in labels))
+
+    def test_native_adoption_shows_bound_video_and_requires_a_current_explicit_decision(self):
+        async def exercise():
+            refresh = Mock()
+            state = AppState(final_video_path='/not-the-attached-video.mp4')
+            with patch.object(core, 'loop', asyncio.get_running_loop()):
+                client = Client(page('/review-adopt'))
+                with client, ui.column() as root:
+                    try:
+                        render_review_acceptance(state, self.manager, self.schedule, refresh)
+
+                        async def click(label):
+                            button = next(e for e in client.elements.values() if getattr(e, 'text', '') == label)
+                            handler = next(e.handler for e in button._event_listeners.values() if e.type == 'click')
+                            before = asyncio.all_tasks()
+                            handler(None)
+                            await asyncio.sleep(0)
+                            await asyncio.gather(*(asyncio.all_tasks() - before))
+
+                        await click('완성본 채택')
+                        self.assertIn('YouTube ID · fixture_private',
+                                      [getattr(e, 'text', '') for e in client.elements.values()])
+                        self.assertFalse(any(isinstance(e, ui.input) for e in client.elements.values()))
+                        await click('취소')
+                        await click('이 완성본 채택')
+                        self.assertEqual(self.manager.get_schedule(self.schedule['id']), self.schedule)
+                        await click('완성본 채택')
+                        current = self.manager.update_schedule(self.schedule['id'], {'name': '변경된 일정'})
+                        await click('이 완성본 채택')
+                        self.assertTrue(any('일정이 변경됐습니다' in getattr(e, 'text', '')
+                                            for e in client.elements.values()))
+                        self.assertEqual(self.manager.get_schedule(self.schedule['id']), current)
+                        root.clear()
+                        render_review_acceptance(state, self.manager, current, refresh)
+                        await click('완성본 채택')
+                        await click('이 완성본 채택')
+                    finally:
+                        client.delete()
+            accepted = self.manager.get_schedule(self.schedule['id'])
+            self.assertEqual(accepted['last_result'], 'private_review_accepted')
+            self.assertEqual(accepted['last_video_path'], str(self.video))
+            self.assertEqual(state.final_video_path, '/not-the-attached-video.mp4')
+            refresh.assert_called_once()
+
+        asyncio.run(exercise())

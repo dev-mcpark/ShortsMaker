@@ -1273,3 +1273,7 @@ The owner can explicitly adopt a newly reviewed correction after a completed sam
 ## 2026-11-22 — Connect an approved frame when a scene needs a still
 
 The Namdaemun edit used two approved frames after the generated movement failed review. Offer this choice in the current scene's manual material picker. Preview the exact saved approval and convert it locally only when the user connects it. Recheck approval and byte identity around the conversion, then store the silent clip through the existing validated manual import. The editor holds the frame for the scene's duration. Preserve the native clip and its verdict and keep the automatic path's motion-review gate.
+
+## 2026-11-22 — Keep a deferred review's cadence decision separate from adoption
+
+At initial RSS review, owner adoption advances the schedule to its next slot. After explicit continuation with adoption deferred, later adoption changes the editorial state and preserves the schedule's current pause or enabled state. Share the SQLite transition lock with manual pause/resume. Bind the adoption confirmation to the attached file and saved schedule, then recheck the snapshot around file verification. Display the real saved cadence in the separate continuation confirmation.

@@ -11,7 +11,7 @@ from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.gui.components.common.source_access import load_source_catalog
 from shorts_maker.gui.components.operator_panel import render_operator_panel
-from shorts_maker.gui.components.review_continuation import render_review_continuation
+from shorts_maker.gui.components.review_continuation import render_review_acceptance, render_review_continuation
 from shorts_maker.gui.components.queue_host_panel import render_queue_host_panel
 from shorts_maker.gui.components.scheduled_script_history import render_script_history_browser
 from shorts_maker.planner.models import ShortsScript
@@ -479,34 +479,6 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                         ui.button('각본 제외', on_click=confirm_rejection).props('color=amber')
                                                 dialog.open()
 
-                                            def accept_pending_video(sid=schedule['id'], name=schedule['name'],
-                                                                     video_path=schedule.get('last_video_path')):
-                                                with ui.dialog() as dialog, ui.card():
-                                                    ui.label('비공개 영상 검토 완료').classes('text-lg font-medium')
-                                                    ui.label(f'일정: {name}')
-                                                    ui.label('전체 영상과 출처·음악·자막을 확인했다면 완성 MP4 경로를 입력하세요.').classes(
-                                                        'text-xs text-gray-400')
-                                                    ui.label('유료 제작 스위치와 월 장부가 활성화돼 있으면 다음 예약에서 기획 비용이 발생할 수 있습니다.').classes(
-                                                        'text-xs text-amber-300')
-                                                    path_input = ui.input('완성 MP4 경로', value=video_path or state.final_video_path or '').classes(
-                                                        'w-full min-w-[320px]')
-                                                    with ui.row():
-                                                        ui.button('취소', on_click=dialog.close)
-
-                                                        def confirm_acceptance():
-                                                            try:
-                                                                schedule_manager.accept_pending_video(sid, path_input.value)
-                                                                dialog.close()
-                                                                safe_notify('비공개 영상 검토 완료가 기록됐습니다.', type='positive')
-                                                                safe_refresh(schedule_list)
-                                                                safe_refresh(history_list)
-                                                            except Exception as error:
-                                                                safe_notify(f'완료 기록 실패: {error}', type='negative')
-
-                                                        ui.button('검토 완료·다음 소재 예약', on_click=confirm_acceptance).props(
-                                                            'color=teal')
-                                                dialog.open()
-
                                             def delete_schedule(sid=schedule['id'], sname=schedule['name']):
                                                 with ui.dialog() as dialog, ui.card():
                                                     ui.label(f'{sname} 일정을 삭제할까요?')
@@ -531,8 +503,8 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                             toggle_tip = '일시정지' if enabled else '재개'
                                             if not enabled and schedule.get('last_result') == 'script_review_pending':
                                                 if schedule.get('last_youtube_id') and review_path:
-                                                    ui.button('비공개 영상 검토 완료', on_click=accept_pending_video).props(
-                                                        'flat dense color=teal')
+                                                    render_review_acceptance(state, schedule_manager, schedule,
+                                                        lambda: (safe_refresh(schedule_list), safe_refresh(history_list)))
                                                     if not schedule.get('direct_url') and schedule.get('frequency') in INTERVAL_WEEKS:
                                                         render_review_continuation(state, schedule_manager, schedule,
                                                             lambda: (safe_refresh(schedule_list), safe_refresh(history_list)))
@@ -540,8 +512,10 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                     ui.button('각본 제외', on_click=reject_pending_script).props(
                                                         'flat dense color=amber')
                                             else:
-                                                if schedule.get('last_result') == 'private_review_deferred' and review_path:
-                                                    ui.button('미채택 검토본 채택', on_click=accept_pending_video).props('flat color=teal').classes('min-h-[44px]')
+                                                if (schedule.get('last_result') == 'private_review_deferred'
+                                                        and schedule.get('last_youtube_id') and review_path):
+                                                    render_review_acceptance(state, schedule_manager, schedule,
+                                                        lambda: (safe_refresh(schedule_list), safe_refresh(history_list)))
                                                 ui.button(
                                                     icon=toggle_icon,
                                                     on_click=toggle_schedule

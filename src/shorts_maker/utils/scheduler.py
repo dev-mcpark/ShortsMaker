@@ -380,18 +380,17 @@ class ScheduleManager:
         Returns:
             새로운 활성화 상태 또는 None
         """
-        schedules = self.load_schedules()
-        for schedule in schedules:
-            if schedule['id'] == schedule_id:
-                if (schedule.get('review_operator') == 'agent' and not schedule.get('enabled')
-                        and schedule.get('last_result') in {'operator_pending', 'run_in_progress'}):
-                    raise ValueError('제작 인계·실행 결과를 먼저 확인하세요. 새 회차로 건너뛸 수 없습니다.')
-                if not schedule.get('enabled', True) and schedule.get('last_result') == 'script_review_pending':
-                    raise ValueError("검토 대기 각본은 바로 재개할 수 없습니다. 다음 소재를 찾으려면 각본을 제외하세요.")
-                new_state = not schedule.get('enabled', True)
-                return self.update_schedule(schedule_id, {'enabled': new_state}) is not None and new_state
-
-        return None
+        with self._review_transition_lock():
+            schedule = self.get_schedule(schedule_id)
+            if schedule is None:
+                return None
+            if (schedule.get('review_operator') == 'agent' and not schedule.get('enabled')
+                    and schedule.get('last_result') in {'operator_pending', 'run_in_progress'}):
+                raise ValueError('제작 인계·실행 결과를 먼저 확인하세요. 새 회차로 건너뛸 수 없습니다.')
+            if not schedule.get('enabled', True) and schedule.get('last_result') == 'script_review_pending':
+                raise ValueError("검토 대기 각본은 바로 재개할 수 없습니다. 다음 소재를 찾으려면 각본을 제외하세요.")
+            new_state = not schedule.get('enabled', True)
+            return self.update_schedule(schedule_id, {'enabled': new_state}) is not None and new_state
 
     def reject_pending_script(self, schedule_id: str) -> Optional[Dict[str, Any]]:
         """Leave a reviewed-out script in history and resume only RSS discovery."""
@@ -421,17 +420,29 @@ class ScheduleManager:
             if db:
                 db.close()
 
-    def accept_pending_video(self, schedule_id: str, video_path: str) -> Dict[str, Any]:
-        """Resume RSS discovery only after a reviewed private upload is bound to its saved source."""
+    def accept_pending_video(self, schedule_id: str, video_path: str, *,
+                             expected_schedule_sha256: Optional[str] = None) -> Dict[str, Any]:
+        """Adopt the verified review copy and respect any pause set after deferral."""
+        from shorts_maker.services.operating_status import schedule_sha256
+
         with self._review_transition_lock():
+            current_digest = schedule_sha256(self.get_schedule(schedule_id) or {})
+            if expected_schedule_sha256 is not None and expected_schedule_sha256 != current_digest:
+                raise ValueError('일정이 변경됐습니다. 현재 검토본과 예약 상태를 다시 확인하세요.')
             schedule, video, video_sha256, video_id = self._verified_pending_video(schedule_id, video_path, allow_deferred=True)
+            if schedule_sha256(self.get_schedule(schedule_id) or {}) != current_digest:
+                raise ValueError('검토 중 일정이 변경됐습니다. 현재 검토본과 예약 상태를 다시 확인하세요.')
+            # Deferred reviews already made the cadence decision. Preserve subsequent pauses.
+            enabled = not bool(schedule.get('direct_url'))
+            if schedule.get('last_result') == 'private_review_deferred':
+                enabled = bool(schedule.get('enabled'))
             updated = self.update_schedule(schedule_id, {
                 'last_result': 'private_review_accepted',
                 'last_video_path': str(video),
                 'last_video_sha256': video_sha256,
                 'last_youtube_id': video_id,
                 'accepted_at': datetime.now().isoformat(),
-                'enabled': not bool(schedule.get('direct_url')),
+                'enabled': enabled,
             })
             if updated is None:
                 raise ValueError('일정이 사라져 완료 기록을 저장하지 못했습니다.')
