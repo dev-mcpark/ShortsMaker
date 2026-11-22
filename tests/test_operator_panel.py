@@ -160,6 +160,35 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
             plan.assert_not_awaited()
         self.assertFalse(self.state.is_busy)
 
+    async def test_rapid_planning_clicks_open_one_confirmation_and_allow_new_check_after_cancel(self):
+        self.pending()
+        self.render()
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        async def delayed_check(*args):
+            entered.set()
+            await release.wait()
+            return {'google_remaining_krw': 3000, 'openai_remaining_usd': .3}
+
+        with self.client, patch.object(operator_panel.run, 'io_bound', side_effect=delayed_check) as check:
+            before = asyncio.all_tasks()
+            self.click('예약 회차 기획 시작')
+            await asyncio.wait_for(entered.wait(), 3)
+            self.click('예약 회차 기획 시작')
+            await asyncio.sleep(0)
+            release.set()
+            await asyncio.wait_for(asyncio.gather(*(
+                task for task in asyncio.all_tasks() - before if 'plan_preview' in task.get_name()
+            )), 3)
+            self.assertEqual(check.await_count, 1)
+            await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
+            self.assertEqual(check.await_count, 1)
+            self.click('취소')
+            await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
+            self.assertEqual(check.await_count, 2)
+            buttons = [e for e in self.client.elements.values() if getattr(e, 'text', '') == '이 회차 기획 실행']
+            self.assertEqual(len(buttons), 1)
+
     async def test_stale_month_explains_provider_at_planning_button_and_clears_on_recheck(self):
         self.pending()
         root, _ = self.render()

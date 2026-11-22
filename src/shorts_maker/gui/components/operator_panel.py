@@ -19,6 +19,8 @@ def render_operator_panel(state, manager, schedule, on_attached):
         return json.dumps({key: current.get(key) for key in keys}, sort_keys=True, ensure_ascii=False)
     expected = identity(schedule)
     readout, loading = {}, {'value': False}
+    planning_preview = {'checking': False}
+    planning_dialog = None
 
     def revision_preview():
         def current():
@@ -63,10 +65,16 @@ def render_operator_panel(state, manager, schedule, on_attached):
         dialog.open()
 
     async def plan_preview():
+        nonlocal planning_dialog
+        if (panel.is_deleted or planning_preview['checking']
+                or (planning_dialog is not None and not planning_dialog.is_deleted and planning_dialog.value)):
+            return
+
         def current():
             if (state.is_busy or getattr(panel, 'is_deleted', False) is True
                     or schedule_sha256(manager.get_schedule(schedule['id']) or {}) != schedule_sha256(schedule)):
                 raise ValueError('작업 중이거나 일정이 바뀌었습니다. 현재 회차를 다시 확인하세요.')
+        planning_preview['checking'] = True
         try:
             current()
             room = await run.io_bound(planning_preflight, manager, schedule)
@@ -76,8 +84,13 @@ def render_operator_panel(state, manager, schedule, on_attached):
                 planning_check.set_text(f'기획을 시작할 수 없습니다: {error}')
                 planning_check.set_visibility(True)
             return
+        finally:
+            planning_preview['checking'] = False
+
         planning_check.set_visibility(False)
         planning_check.set_text('')
+        if planning_dialog is not None and not planning_dialog.is_deleted:
+            planning_dialog.delete()
         with ui.dialog() as dialog, ui.card().classes('w-full max-w-xl bg-slate-900 text-white'):
             ui.label(f'{schedule["name"]} · 예약 회차 기획').classes('text-lg font-bold')
             ui.label('소재 분석·각본·검증에 OpenAI 비용이 발생합니다. 음성·이미지·영상 제작과 업로드는 실행하지 않습니다.').classes('text-sm text-slate-300')
@@ -107,6 +120,7 @@ def render_operator_panel(state, manager, schedule, on_attached):
             with ui.row().classes('w-full flex-wrap'):
                 ui.button('취소', on_click=dialog.close).props('flat')
                 ui.button('이 회차 기획 실행', on_click=confirm).props('color=teal').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+        planning_dialog = dialog
         dialog.open()
 
     async def revision_validation_preview():
@@ -271,7 +285,9 @@ def render_operator_panel(state, manager, schedule, on_attached):
         if (schedule.get('review_operator') == 'agent' and schedule.get('last_result') == 'operator_pending'
                 and not schedule.get('enabled') and not schedule.get('last_video_path') and not schedule.get('last_youtube_id')):
             ui.button('계정 연결 후 기획 재개' if schedule.get('planning_auth_required') else '예약 회차 기획 시작', on_click=plan_preview).props('outline color=teal').bind_enabled_from(
-                state, 'is_busy', lambda busy: not busy)
+                state, 'is_busy', lambda busy: not busy and not planning_preview['checking'])
+            ui.label('예약 기획 예산 확인 중…').classes('text-sm text-slate-300').props('role=status').bind_visibility_from(
+                planning_preview, 'checking')
             planning_check = ui.label().classes('text-sm text-amber-200 break-words').props('role=alert')
             planning_check.set_visibility(False)
         if schedule.get('last_result') == 'script_review_pending' and not schedule.get('last_youtube_id') and not schedule.get('enabled'):

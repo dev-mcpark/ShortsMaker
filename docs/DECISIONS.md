@@ -1261,3 +1261,7 @@ A real due episode stopped before planning but only a transient toast explained 
 ## 2026-11-22 — Use an anchored weekly queue from December 2
 
 The owner approved weekly production from Wednesday December 2 at 10:06 Asia/Seoul at existing budget limits. The queue and overdue recovery use the same anchored seven-day interval. Count recovered milestones from the new anchor so the gap between the old and new cadences cannot create a skipped slot. Preserve old run and budget records, the attached Namdaemun copy, and separate owner adoption. Use the existing review-continuation transition to schedule the next slot. Studio's existing weekday cron options remain available for direct schedules.
+
+## 2026-11-22 — Define success through the operator's Studio workflow
+
+Use the next eligible scheduled episode to observe the actual operator path from planning to private review upload, including a saved handoff or recovery where needed. Prioritize the first missing app action or unclear blocker along that path before adding another feature. Count a cycle toward the baseline when it uses the app, the owner accepts the cut, and attributable costs have been reconciled. Document the next testable editorial change from the completed cut or the observed failure.
