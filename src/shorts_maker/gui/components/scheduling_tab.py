@@ -15,7 +15,7 @@ from shorts_maker.gui.components.review_continuation import render_review_contin
 from shorts_maker.gui.components.queue_host_panel import render_queue_host_panel
 from shorts_maker.gui.components.scheduled_script_history import render_script_history_browser
 from shorts_maker.planner.models import ShortsScript
-from shorts_maker.utils.scheduler import ScheduleManager
+from shorts_maker.utils.scheduler import INTERVAL_WEEKS, ScheduleManager
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.utils.logger import get_logger
@@ -171,8 +171,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                             frequency_select = ui.select(
                                 options={
                                     'Daily': '매일',
-                                    'Every 2 Weeks': '14일마다',
-                                    'Every 4 Weeks': '28일마다',
+                                    **{frequency: f'{weeks * 7}일마다' for frequency, weeks in INTERVAL_WEEKS.items()},
                                     'Weekly (Mon)': '매주 월요일',
                                     'Weekly (Tue)': '매주 화요일',
                                     'Weekly (Wed)': '매주 수요일',
@@ -533,7 +532,7 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                 if schedule.get('last_youtube_id') and review_path:
                                                     ui.button('비공개 영상 검토 완료', on_click=accept_pending_video).props(
                                                         'flat dense color=teal')
-                                                    if not schedule.get('direct_url') and schedule.get('frequency') in {'Every 2 Weeks', 'Every 4 Weeks'}:
+                                                    if not schedule.get('direct_url') and schedule.get('frequency') in INTERVAL_WEEKS:
                                                         render_review_continuation(state, schedule_manager, schedule,
                                                             lambda: (safe_refresh(schedule_list), safe_refresh(history_list)))
                                                 if not schedule.get('last_youtube_id'):

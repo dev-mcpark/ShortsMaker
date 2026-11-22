@@ -20,7 +20,7 @@ from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.source_manager import SourceManager
 
 
-_INTERVAL_WEEKS = {"Every 2 Weeks": 2, "Every 4 Weeks": 4}
+INTERVAL_WEEKS = {"Every Week": 1, "Every 2 Weeks": 2, "Every 4 Weeks": 4}
 TRIGGER_FIELDS = ('time', 'frequency', 'interval_anchor_at', 'first_run_at', 'review_operator')
 
 
@@ -141,12 +141,14 @@ class ScheduleManager:
         first = cls._interval_start(schedule)
         if now < first:
             return None
-        interval = timedelta(weeks=_INTERVAL_WEEKS[schedule["frequency"]])
+        interval = timedelta(weeks=INTERVAL_WEEKS[schedule["frequency"]])
         slot = first + ((now - first) // interval) * interval
-        previous = schedule.get('scheduled_for')
-        if previous and slot <= datetime.fromisoformat(previous):
+        previous = datetime.fromisoformat(schedule['scheduled_for']) if schedule.get('scheduled_for') else None
+        if previous and slot <= previous:
             return None
-        missed_start = datetime.fromisoformat(previous) + interval if previous else first
+        missed_start = first
+        if previous and previous >= first:
+            missed_start += ((previous - first) // interval + 1) * interval
         count = max(0, (slot - missed_start) // interval)
         return {'scheduled_for': slot.isoformat(), 'late_by_seconds': round((now - slot).total_seconds(), 3),
                 'skipped_slots': [(missed_start + i * interval).isoformat() for i in range(count)]}
@@ -248,7 +250,7 @@ class ScheduleManager:
             'last_run': None,
             'run_count': 0
         }
-        if frequency in _INTERVAL_WEEKS and enabled:
+        if frequency in INTERVAL_WEEKS and enabled:
             schedule['interval_anchor_at'] = created_at
 
         # 저장
@@ -293,14 +295,14 @@ class ScheduleManager:
                             updated.pop(key, None)
                 self._validate_schedule(updated['name'], updated['time'], updated['frequency'],
                                         updated['mode'], updated.get('direct_url'))
-                if updated.get('review_operator') == 'agent' and updated['frequency'] not in _INTERVAL_WEEKS:
-                    raise ValueError('에이전트 운영 일정은 2주 또는 4주 주기를 사용하세요.')
+                if updated.get('review_operator') == 'agent' and updated['frequency'] not in INTERVAL_WEEKS:
+                    raise ValueError('에이전트 운영 일정은 1주, 2주 또는 4주 주기를 사용하세요.')
                 if updated.get('first_run_at'):
                     first = datetime.fromisoformat(updated['first_run_at'])
-                    if updated['frequency'] not in _INTERVAL_WEEKS or first.tzinfo is not None:
-                        raise ValueError('첫 회차 시작은 2주 또는 4주 일정의 로컬 날짜·시간이어야 합니다.')
-                if (updated['frequency'] in _INTERVAL_WEEKS and updated.get('enabled')
-                        and (schedule['frequency'] not in _INTERVAL_WEEKS
+                    if updated['frequency'] not in INTERVAL_WEEKS or first.tzinfo is not None:
+                        raise ValueError('첫 회차 시작은 1주, 2주 또는 4주 일정의 로컬 날짜·시간이어야 합니다.')
+                if (updated['frequency'] in INTERVAL_WEEKS and updated.get('enabled')
+                        and (schedule['frequency'] not in INTERVAL_WEEKS
                              or not updated.get('interval_anchor_at'))):
                     updated['interval_anchor_at'] = datetime.now().isoformat()
                 reschedule = any(schedule.get(key) != updated.get(key)
@@ -334,7 +336,7 @@ class ScheduleManager:
         if not isinstance(time, str) or not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', time):
             raise ValueError("시간은 HH:MM 형식이어야 합니다.")
         days = {'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'}
-        if frequency != 'Daily' and frequency not in _INTERVAL_WEEKS and frequency not in {f'Weekly ({day})' for day in days}:
+        if frequency != 'Daily' and frequency not in INTERVAL_WEEKS and frequency not in {f'Weekly ({day})' for day in days}:
             raise ValueError("지원하지 않는 반복 주기입니다.")
         if mode not in {'hybrid', 'image', 'video'}:
             raise ValueError("지원하지 않는 생성 모드입니다.")
@@ -447,7 +449,7 @@ class ScheduleManager:
             current = self.get_schedule(schedule_id)
             if not current or schedule_sha256(current) != expected_schedule_sha256:
                 raise ValueError('일정이 변경됐습니다. 현재 완성본과 예약을 다시 확인하세요.')
-            if (current.get('direct_url') or current.get('frequency') not in _INTERVAL_WEEKS
+            if (current.get('direct_url') or current.get('frequency') not in INTERVAL_WEEKS
                     or not current.get('last_youtube_id') or not current.get('scheduled_for')):
                 raise ValueError('확인된 검토본과 기준 회차가 있는 반복 RSS 일정만 재개할 수 있습니다.')
             if current.get('last_episode_id'):
@@ -653,9 +655,9 @@ class ScheduleManager:
             hour, minute = map(int, schedule['time'].split(':'))
             frequency = schedule.get('frequency', 'Daily')
 
-            if frequency in _INTERVAL_WEEKS:
+            if frequency in INTERVAL_WEEKS:
                 first_run = self._interval_start(schedule)
-                trigger, trigger_kwargs = 'interval', {'weeks': _INTERVAL_WEEKS[frequency], 'start_date': first_run}
+                trigger, trigger_kwargs = 'interval', {'weeks': INTERVAL_WEEKS[frequency], 'start_date': first_run}
             else:
                 trigger, trigger_kwargs = 'cron', {'hour': hour, 'minute': minute}
             if frequency.startswith('Weekly'):

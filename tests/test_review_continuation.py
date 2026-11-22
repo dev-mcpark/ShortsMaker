@@ -80,6 +80,48 @@ class ReviewContinuationTests(unittest.TestCase):
         with patch('shorts_maker.services.production_service.ProductionService.full_pipeline',new_callable=AsyncMock) as paid:
             asyncio.run(clock());paid.assert_not_awaited()
 
+    def test_weekly_transition_starts_at_new_anchor_and_keeps_previous_review(self):
+        first = self.first + timedelta(days=14)
+        existing = self.schedule
+        staged = self.manager.update_schedule(existing['id'], {
+            'frequency': 'Every Week', 'first_run_at': first.isoformat(),
+        })
+        resumed = self.resume(expected=schedule_sha256(staged))
+        self.assertEqual(resumed['scheduled_for'], existing['scheduled_for'])
+        self.assertEqual(resumed['last_youtube_id'], existing['last_youtube_id'])
+        self.assertEqual(resumed['last_episode_id'], existing['last_episode_id'])
+        self.assertEqual(resumed['last_result'], 'private_review_deferred')
+
+        async def check_clock():
+            host = ScheduleManager(str(self.manager.filename), queue_only=True)
+            host.start_scheduler()
+            try:
+                job, = host.get_next_run_times()
+                self.assertEqual(datetime.fromisoformat(job['next_run']).replace(tzinfo=None), first)
+                self.assertEqual(host._scheduler.get_job(existing['id']).trigger.interval, timedelta(weeks=1))
+                await host.queue_overdue()
+                self.assertEqual(host.get_schedule(existing['id']), resumed)
+            finally:
+                host.stop_scheduler()
+                await asyncio.sleep(0)
+
+        class Frozen(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return first.replace(tzinfo=tz)
+
+        with patch('shorts_maker.services.production_service.ProductionService.full_pipeline', new_callable=AsyncMock) as paid:
+            asyncio.run(check_clock())
+            with patch('shorts_maker.utils.scheduler.datetime', Frozen):
+                asyncio.run(self.manager.queue_overdue())
+                asyncio.run(self.manager.queue_overdue())
+            paid.assert_not_awaited()
+        queued = self.manager.get_schedule(existing['id'])
+        self.assertEqual(queued['scheduled_for'], first.isoformat())
+        self.assertEqual(queued['skipped_slots'], [])
+        self.assertEqual(queued['run_count'], existing['run_count'] + 1)
+        self.assertEqual(queued['run_history'][-1]['last_youtube_id'], existing['last_youtube_id'])
+
     def test_due_new_slot_archives_unaccepted_copy_once_and_does_not_inherit_spend_scope(self):
         self.manager.update_schedule(self.schedule['id'], {'planning_auth_required': False})
         self.schedule = self.manager.get_schedule(self.schedule['id'])
