@@ -72,8 +72,12 @@ def render_operator_panel(state, manager, schedule, on_attached):
             room = await run.io_bound(planning_preflight, manager, schedule)
             current()
         except (ValueError, RuntimeError, OSError) as error:
-            safe_notify(f'기획을 시작할 수 없습니다: {error}', type='warning')
+            if not panel.is_deleted and not planning_check.is_deleted:
+                planning_check.set_text(f'기획을 시작할 수 없습니다: {error}')
+                planning_check.set_visibility(True)
             return
+        planning_check.set_visibility(False)
+        planning_check.set_text('')
         with ui.dialog() as dialog, ui.card().classes('w-full max-w-xl bg-slate-900 text-white'):
             ui.label(f'{schedule["name"]} · 예약 회차 기획').classes('text-lg font-bold')
             ui.label('소재 분석·각본·검증에 OpenAI 비용이 발생합니다. 음성·이미지·영상 제작과 업로드는 실행하지 않습니다.').classes('text-sm text-slate-300')
@@ -268,6 +272,8 @@ def render_operator_panel(state, manager, schedule, on_attached):
                 and not schedule.get('enabled') and not schedule.get('last_video_path') and not schedule.get('last_youtube_id')):
             ui.button('계정 연결 후 기획 재개' if schedule.get('planning_auth_required') else '예약 회차 기획 시작', on_click=plan_preview).props('outline color=teal').bind_enabled_from(
                 state, 'is_busy', lambda busy: not busy)
+            planning_check = ui.label().classes('text-sm text-amber-200 break-words').props('role=alert')
+            planning_check.set_visibility(False)
         if schedule.get('last_result') == 'script_review_pending' and not schedule.get('last_youtube_id') and not schedule.get('enabled'):
             if not schedule.get('last_video_path'):
                 ui.label('작업실에서 대본을 수정·적용·확인했다면 이 회차에도 수정본을 저장하세요.').classes('text-xs text-slate-300')

@@ -24,16 +24,19 @@ def planning_preflight(manager, expected: dict) -> dict:
             or current.get('last_video_path') or current.get('last_youtube_id')):
         raise ValueError('변경되지 않은 에이전트 제작 대기 회차만 기획할 수 있습니다.')
     status = operator_status(current)
-    if status.get('operation_pending_unverified') or status.get('budget_error'):
-        raise ValueError('회차의 비용 또는 이전 실행 결과를 먼저 대조하세요.')
+    if status.get('operation_pending_unverified'):
+        raise ValueError('이전 실행 결과를 먼저 대조하세요.')
+    if status.get('budget_error'):
+        raise ValueError(status['budget_error'])
     caps = status.get('budget') or default_episode_caps()
     room = {}
-    for provider, snapshot, amount in (
-        ('google', google_budget.budget_status(), 'remaining_krw'),
-        ('openai', openai_budget.budget_status(), 'remaining_usd'),
+    for provider, label, budget_status, amount in (
+        ('google', 'Google', google_budget.budget_status, 'remaining_krw'),
+        ('openai', 'OpenAI', openai_budget.budget_status, 'remaining_usd'),
     ):
+        snapshot = budget_status()
         if not snapshot.get('enabled') or snapshot.get(amount, 0) <= 0:
-            raise ValueError('두 공급자의 검증된 현재 월 잔여 예산이 필요합니다.')
+            raise ValueError(f'{label}의 검증된 현재 월 잔여 예산이 필요합니다.')
         room[f'{provider}_{amount}'] = min(snapshot[amount], caps[f'{provider}_{amount}'])
     if room['google_remaining_krw'] <= 0 or room['openai_remaining_usd'] <= 0:
         raise ValueError('이 회차의 남은 제작 예산을 확인하세요.')

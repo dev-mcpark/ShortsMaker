@@ -160,6 +160,25 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
             plan.assert_not_awaited()
         self.assertFalse(self.state.is_busy)
 
+    async def test_stale_month_explains_provider_at_planning_button_and_clears_on_recheck(self):
+        self.pending()
+        root, _ = self.render()
+        before = self.manager.filename.read_bytes()
+        ledgers = [google_budget._database_path(), openai_budget._database_path()]
+        ledger_bytes = [path.read_bytes() for path in ledgers]
+        with self.client, patch.object(operator_panel, 'plan_pending_schedule', new_callable=AsyncMock) as plan:
+            with patch.object(settings, 'google_budget_month', '2020-01'):
+                await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
+                self.assertIn('이번 달 Google 사용액 기준을 다시 설정하세요', self.text(root))
+                self.assertFalse(any(getattr(e, 'text', '') == '이 회차 기획 실행'
+                                     for e in self.client.elements.values()))
+            await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
+            self.assertNotIn('이번 달 Google 사용액 기준을 다시 설정하세요', self.text(root))
+            self.click('취소')
+            plan.assert_not_awaited()
+        self.assertEqual(before, self.manager.filename.read_bytes())
+        self.assertEqual(ledger_bytes, [path.read_bytes() for path in ledgers])
+
     async def test_planning_runs_once_through_navigation_without_replacing_user_work(self):
         self.pending()
         original_script = self.state.script.model_dump_json()
