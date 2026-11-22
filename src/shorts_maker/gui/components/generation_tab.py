@@ -585,7 +585,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
             with ui.row().classes('w-full items-center justify-between mb-3'):
                 with ui.row().classes('items-center gap-3'):
                     ui.icon('video_library', size='sm').classes('text-violet-400')
-                    ui.label('수동 소스 매핑 및 영상 수집').classes('text-base font-bold text-white')
+                    ui.label('장면에 사용할 재료 연결').classes('text-base font-bold text-white')
 
                 # 진행도 표시 뱃지
                 progress_badge_cls = 'bg-violet-600 text-white font-bold px-3 py-1 rounded-full text-xs' \
@@ -602,7 +602,7 @@ def render_manual_panel(state: 'AppState', exporter: VeoPromptExporter,
             with ui.row().classes('w-full items-stretch gap-4'):
                 with ui.element('div').classes('flex-grow rounded-lg bg-violet-950/20 border border-violet-500/20 p-3 flex items-start gap-2'):
                     ui.icon('info', size='xs').classes('text-violet-400 mt-0.5 shrink-0')
-                    ui.label('기존 장면 영상 찾기에서 저장된 작업이나 승인 원본을 재사용하거나, 장면 카드에서 보유 파일을 선택하세요. 모든 장면을 연결한 뒤 내레이션·음악·자막을 편집합니다.').classes('text-xs text-slate-300 leading-relaxed')
+                    ui.label('기존 장면 영상 찾기에서 보유 영상이나 승인한 첫 프레임을 선택하세요. 모든 장면을 연결하면 내레이션·음악·자막을 편집할 수 있습니다.').classes('text-xs text-slate-300 leading-relaxed')
 
                 with ui.column().classes('justify-center gap-2 w-full sm:w-auto sm:min-w-[240px] sm:border-l border-slate-800 sm:pl-4'):
                     def copy_all_json():

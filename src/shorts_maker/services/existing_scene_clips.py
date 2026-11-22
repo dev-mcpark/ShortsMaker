@@ -1,13 +1,44 @@
 """Read exact-scene manual work and approved native sources without spending."""
 
 import hashlib
+import subprocess
+from io import BytesIO
 from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from moviepy.config import FFMPEG_BINARY
+from PIL import Image, ImageOps
 
 from shorts_maker.services.asset_library import AssetLibrary
 from shorts_maker.services.raw_review import raw_review_status
+from shorts_maker.services.visual_review import verified_first_frame
 from shorts_maker.utils.config import settings
-from shorts_maker.utils.media_validation import is_playable_video
+from shorts_maker.utils.media_validation import MAX_FRAME_BYTES, is_playable_video
 from shorts_maker.utils.veo_prompt_exporter import MAX_MANUAL_CLIP_BYTES, VeoPromptExporter
+
+APPROVED_FIRST_FRAME = 'approved-first-frame'
+
+
+def _render_still(content: bytes) -> bytes:
+    """Encode just the previewed image, without audio or generated motion."""
+    frame = BytesIO()
+    with Image.open(BytesIO(content)) as image:
+        resized = ImageOps.pad(image.convert('RGBA'), (720, 1280), color='black')
+        background = Image.new('RGBA', resized.size, 'black')
+        Image.alpha_composite(background, resized).convert('RGB').save(frame, format='PNG')
+    with TemporaryDirectory(prefix='shortsmaker-still-') as folder:
+        output = Path(folder) / 'still.mp4'
+        try:
+            subprocess.run(
+                [FFMPEG_BINARY, '-hide_banner', '-loglevel', 'error',
+                 '-f', 'image2pipe', '-framerate', '24', '-c:v', 'png', '-i', 'pipe:0',
+                 '-vf', 'tpad=stop_mode=clone:stop_duration=2', '-t', '2', '-an',
+                 '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(output)],
+                input=frame.getvalue(), capture_output=True, timeout=30, check=True,
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            raise ValueError('첫 프레임을 정지 영상으로 변환하지 못했습니다. 기존 장면 파일은 그대로입니다.') from error
+        return output.read_bytes()
 
 
 class ExistingSceneClips:
@@ -30,6 +61,10 @@ class ExistingSceneClips:
             raise ValueError('현재 대본·장면의 승인된 Veo 원본이 없습니다.')
         return path
 
+    def _approved_frame(self):
+        path, digest = verified_first_frame(self.script, self.scene)
+        return {'path': path, 'sha256': digest}
+
     def candidates(self):
         result = {}
         for workspace, label in self.exporter.list_workspaces(self.script).items():
@@ -49,6 +84,12 @@ class ExistingSceneClips:
             result[key] = {'label': f'승인된 Veo 원본 · 장면 {self.scene.scene_number}', 'workspace': None}
         except (OSError, ValueError):
             pass  # Missing/unverified/rejected native work is not a reusable candidate.
+        try:
+            self._approved_frame()
+        except (OSError, ValueError):
+            pass
+        else:
+            result[APPROVED_FIRST_FRAME] = {'label': '승인한 첫 프레임 · 정지 영상으로 사용', 'workspace': None}
         return result
 
     def _path(self, key, candidate):
@@ -65,6 +106,9 @@ class ExistingSceneClips:
         return path
 
     def preview(self, key, candidate):
+        if key == APPROVED_FIRST_FRAME:
+            identity = self._approved_frame()
+            return identity['path'], identity
         path = self._path(key, candidate)
         identity = self.library._identity(path)
         if not is_playable_video(path):
@@ -72,6 +116,18 @@ class ExistingSceneClips:
         return str(path), identity
 
     def read(self, key, candidate, identity):
+        if key == APPROVED_FIRST_FRAME:
+            frame = self._approved_frame()
+            if frame != identity:
+                raise ValueError('미리보기 이후 승인한 첫 프레임이 변경됐습니다. 다시 선택하세요.')
+            with Path(frame['path']).open('rb') as file:
+                content = file.read(MAX_FRAME_BYTES + 1)
+            if len(content) > MAX_FRAME_BYTES or hashlib.sha256(content).hexdigest() != frame['sha256']:
+                raise ValueError('읽는 동안 첫 프레임이 변경됐습니다. 다시 선택하세요.')
+            clip = _render_still(content)
+            if self._approved_frame() != frame:
+                raise ValueError('변환하는 동안 첫 프레임 또는 승인이 변경됐습니다. 다시 선택하세요.')
+            return clip
         path = self._path(key, candidate)
         if self.library._identity(path) != identity:
             raise ValueError('미리보기 이후 파일이 변경됐습니다. 다시 선택하세요.')

@@ -8,14 +8,18 @@ from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, Mock, patch
 
-from moviepy import ColorClip
+from moviepy import ColorClip, VideoFileClip
 from nicegui import binding, core, ui
 from nicegui.client import Client
 from nicegui.page import page
+from PIL import Image
 
+from shorts_maker.editor.video_editor import VideoEditor
 from shorts_maker.gui.components import existing_scene_picker, generation_tab
 from shorts_maker.gui.state.app_state import AppState
-from shorts_maker.services.existing_scene_clips import ExistingSceneClips
+from shorts_maker.services.existing_scene_clips import APPROVED_FIRST_FRAME, ExistingSceneClips
+from shorts_maker.services.raw_review import save_raw_verdict
+from shorts_maker.services.visual_review import approve_first_frame, inspect_frame
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.veo_prompt_exporter import VeoPromptExporter
 from test_gui_creation_flows import script, callback as creation_callback
@@ -26,7 +30,7 @@ class ExistingSceneClipsTests(IsolatedAsyncioTestCase):
     def setUpClass(cls):
         with TemporaryDirectory() as folder:
             path = Path(folder) / 'test.mp4'
-            with ColorClip((32, 48), (70, 110, 150), duration=.4) as clip:
+            with ColorClip((360, 640), (70, 110, 150), duration=.4) as clip:
                 clip.write_videofile(str(path), fps=5, codec='libx264', audio=False, logger=None)
             cls.video = path.read_bytes()
 
@@ -104,6 +108,34 @@ class ExistingSceneClipsTests(IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             self.reader.preview(key, candidate)
 
+    def approve_image(self, name, color, scene_number=1):
+        image = self.root / name
+        Image.new('RGB', (360, 640), color).save(image)
+        scene = self.script.scenes[0].model_copy(update={'scene_number': scene_number})
+        approval = approve_first_frame(
+            self.script, scene, str(image), ['대상'], ['왜곡'], '검토 완료', inspect_frame(str(image)),
+        )
+        return image, approval
+
+    async def test_still_follows_exact_scene_approval_and_rechecks_after_preview_and_encoding(self):
+        self.approve_image('other-scene.png', 'blue', scene_number=2)
+        self.assertNotIn(APPROVED_FIRST_FRAME, self.reader.candidates())
+        image, approval = self.approve_image('first.png', 'red')
+        candidate = self.reader.candidates()[APPROVED_FIRST_FRAME]
+        _, identity = self.reader.preview(APPROVED_FIRST_FRAME, candidate)
+        with patch('shorts_maker.services.existing_scene_clips._render_still') as render:
+            render.side_effect = lambda _: approval.unlink()
+            with self.assertRaisesRegex(ValueError, 'FIRST_FRAME_REVIEW_REQUIRED'):
+                self.reader.read(APPROVED_FIRST_FRAME, candidate, identity)
+            render.assert_called_once()
+            self.approve_image('replacement.png', 'blue')
+            render.reset_mock()
+            with self.assertRaisesRegex(ValueError, '미리보기 이후'):
+                self.reader.read(APPROVED_FIRST_FRAME, candidate, identity)
+            render.assert_not_called()
+        self.assertTrue(image.is_file())
+        self.assertFalse(self.exporter.get_clip_path(self.current, 1).exists())
+
     async def test_preview_connect_feeds_original_callback_and_copy_preserves_source_and_authority(self):
         state = AppState(script=self.script, manual_video_mode=True, manual_script_id=self.current, final_video_path='old.mp4')
         state.confirm_script_review();receipt = state.reviewed_script_sha256
@@ -122,11 +154,68 @@ class ExistingSceneClipsTests(IsolatedAsyncioTestCase):
                 next(e.handler for e in button._event_listeners.values() if e.type == 'click')(None)
                 await asyncio.sleep(0)
                 await asyncio.gather(*(asyncio.all_tasks() - before))
-            await click('선택 영상 미리보기')
+            await click('선택 재료 미리보기')
             binding._refresh_step()
             await click('이 장면에 영상 연결')
         self.assertEqual(self.source.read_bytes(), self.video)
         self.assertEqual(self.exporter.get_clip_path(self.current, 1).read_bytes(), self.video)
+        self.assertEqual(state.reviewed_script_sha256, receipt)
+        self.assertIsNone(state.final_video_path)
+
+    async def test_approved_still_preview_and_connect_creates_silent_clip_without_changing_verdict(self):
+        image, approval = self.approve_image('approved.png', 'red')
+        native = settings.clips_dir / 'scenes' / 'clip.mp4'
+        native.parent.mkdir()
+        native.write_bytes(self.video)
+        digest = inspect_frame(str(image))
+        verdict = save_raw_verdict(self.script, self.script.scenes[0], str(native), digest, 'rejected', '움직임 오류')
+        self.service.review_clip_path.side_effect = None
+        self.service.review_clip_path.return_value = (str(native), digest)
+        protected = (image, approval, native, verdict)
+        before = [path.read_bytes() for path in protected]
+        state = AppState(script=self.script, manual_video_mode=True, manual_script_id=self.current,
+                         final_video_path='old.mp4')
+        state.confirm_script_review()
+        receipt = state.reviewed_script_sha256
+        connect = creation_callback('generation_tab.py', 'make_upload_handler', {
+            'state': state, 'scene_num': 1, 'exporter': self.exporter, 'safe_notify': Mock(), 'logger': Mock(),
+            'render_manual_panel': Mock(), 'start_edit_btn': Mock(), 'scene_cards_container': None})()
+
+        async def direct(function, *args):
+            return function(*args)
+
+        async def click(label):
+            button = next(e for e in self.client.elements.values() if getattr(e, 'text', '') == label)
+            tasks = asyncio.all_tasks()
+            next(e.handler for e in button._event_listeners.values() if e.type == 'click')(None)
+            await asyncio.sleep(0)
+            await asyncio.gather(*(asyncio.all_tasks() - tasks))
+
+        with self.client, patch.object(existing_scene_picker.run, 'io_bound', side_effect=direct):
+            await existing_scene_picker.open_existing_scene_picker(
+                self.script, 1, self.service, self.current, connect, lambda: True)
+            choice = next(e for e in self.client.elements.values() if e._props.get('label') == '기존 장면 영상 검색')
+            self.assertFalse(any('Veo' in option['label'] for option in choice._props['options']))
+            choice.value = APPROVED_FIRST_FRAME
+            await click('선택 재료 미리보기')
+            self.assertTrue(any(isinstance(element, ui.image) for element in self.client.elements.values()))
+            self.assertFalse(self.exporter.get_clip_path(self.current, 1).exists())
+            self.assertEqual(state.final_video_path, 'old.mp4')
+            binding._refresh_step()
+            await click('이 장면에 영상 연결')
+        saved = self.exporter.get_clip_path(self.current, 1)
+        with VideoFileClip(str(saved)) as clip:
+            self.assertEqual(tuple(clip.size), (720, 1280))
+            self.assertIsNone(clip.audio)
+            self.assertEqual(clip.duration, 2)
+        editor = VideoEditor(bgm_volume=0)
+        with editor._create_visual_clip(str(saved), duration=5) as visual:
+            self.assertEqual(visual.duration, 5)
+            for moment in (0, 4.9):
+                red, green, blue = visual.get_frame(moment)[960, 540]
+                self.assertGreater(red, 240)
+                self.assertLess(max(green, blue), 10)
+        self.assertEqual([path.read_bytes() for path in protected], before)
         self.assertEqual(state.reviewed_script_sha256, receipt)
         self.assertIsNone(state.final_video_path)
 
@@ -139,7 +228,7 @@ class ExistingSceneClipsTests(IsolatedAsyncioTestCase):
             await existing_scene_picker.open_existing_scene_picker(self.script, 1, self.service, self.current, callback, lambda: allowed['value'])
             choice = next(e for e in self.client.elements.values() if e._props.get('label') == '기존 장면 영상 검색')
             choice.value = next(iter(choice.options))
-            button = next(e for e in self.client.elements.values() if getattr(e, 'text', '') == '선택 영상 미리보기')
+            button = next(e for e in self.client.elements.values() if getattr(e, 'text', '') == '선택 재료 미리보기')
             before = asyncio.all_tasks()
             next(e.handler for e in button._event_listeners.values() if e.type == 'click')(None)
             await asyncio.sleep(0)

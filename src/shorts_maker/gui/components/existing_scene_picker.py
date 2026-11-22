@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from nicegui import run, ui
 
 from shorts_maker.gui.components.common.media_preview import media_sources
-from shorts_maker.services.existing_scene_clips import ExistingSceneClips
+from shorts_maker.services.existing_scene_clips import APPROVED_FIRST_FRAME, ExistingSceneClips
 
 
 async def open_existing_scene_picker(script, scene_number, service, current_workspace, on_import, can_select):
@@ -16,7 +16,7 @@ async def open_existing_scene_picker(script, scene_number, service, current_work
     loading = {'value': True}
     with ui.dialog() as dialog, ui.card().classes('w-full max-w-xl bg-slate-900 text-white'):
         ui.label(f'장면 {scene_number} · 기존 영상 찾기').classes('font-bold text-lg')
-        ui.label('같은 대본·장면의 보유 영상 작업과 승인된 Veo 원본을 표시합니다. 재생 후 연결하면 원본을 보존하고 현재 작업에 사본을 만듭니다.').classes('text-xs text-slate-300')
+        ui.label('영상의 움직임이 장면에 맞지 않으면 승인한 첫 프레임을 정지 영상으로 사용할 수 있습니다. 새로 연결하면 현재 작업의 장면 파일이 교체됩니다.').classes('text-xs text-slate-300')
         notice = ui.label('재사용할 장면을 찾는 중…').classes('text-xs text-amber-200 break-all')
         choice = ui.select({}, label='기존 장면 영상 검색', with_input=True).props('outlined dark clearable').classes('w-full')
         choice.bind_enabled_from(loading, 'value', backward=lambda value: not value)
@@ -37,8 +37,13 @@ async def open_existing_scene_picker(script, scene_number, service, current_work
                 selected.update(key=key, identity=identity)
                 with preview:
                     ui.label(candidates[key]['label']).classes('text-xs text-slate-300')
-                    ui.video(media(path)).props('controls muted').classes('w-full max-w-[220px] max-h-[360px] bg-black')
-                notice.text = '영상을 끝까지 확인하고 내레이션과 맞으면 이 장면에 연결하세요.'
+                    if key == APPROVED_FIRST_FRAME:
+                        ui.image(media(path)).props('fit=contain').classes('w-full max-w-[180px] aspect-[9/16] bg-black')
+                    else:
+                        ui.video(media(path)).props('controls muted').classes('w-full max-w-[220px] max-h-[360px] bg-black')
+                notice.text = ('이 장면은 편집에서 움직임 없이 표시됩니다. 이미지가 내레이션과 맞으면 연결하세요.'
+                               if key == APPROVED_FIRST_FRAME else
+                               '영상을 끝까지 확인하고 내레이션과 맞으면 이 장면에 연결하세요.')
             except (OSError, ValueError, RuntimeError) as error:
                 if current():
                     notice.text = str(error)
@@ -66,7 +71,7 @@ async def open_existing_scene_picker(script, scene_number, service, current_work
 
         with ui.row().classes('w-full flex-wrap'):
             ui.button('닫기', on_click=dialog.close).props('flat').classes('min-h-[44px]')
-            ui.button('선택 영상 미리보기', on_click=audition).classes('min-h-[44px]').bind_enabled_from(
+            ui.button('선택 재료 미리보기', on_click=audition).classes('min-h-[44px]').bind_enabled_from(
                 loading, 'value', lambda value: not value and choice.value in candidates)
             ui.button('이 장면에 영상 연결', on_click=connect).props('color=teal').classes('min-h-[44px]').bind_enabled_from(
                 loading, 'value', lambda value: not value and choice.value in candidates and selected.get('key') == choice.value)
@@ -77,7 +82,7 @@ async def open_existing_scene_picker(script, scene_number, service, current_work
             dialog.close();return
         choice.set_options({key: item['label'] for key, item in candidates.items()})
         notice.text = ('파일을 골라 미리 본 뒤 연결하세요. API 호출·원본 판정 변경은 없습니다.' if candidates else
-                       '이 장면에 재사용할 저장 영상이 없습니다. 새 파일은 기존 비디오 선택으로 연결하세요.')
+                       '이 장면에 연결할 보유 영상이나 승인한 첫 프레임이 없습니다. 파일을 직접 연결하려면 비디오 선택을 사용하세요.')
     except (OSError, ValueError, RuntimeError) as error:
         if current():
             notice.text = str(error)

@@ -1269,3 +1269,7 @@ Use the next eligible scheduled episode to observe the actual operator path from
 ## 2026-11-22 — Retain model rejection when an owner adopts a correction
 
 The owner can explicitly adopt a newly reviewed correction after a completed same-episode revision rejection. Show the original verdict, its saved source excerpt and both script versions. Recheck the consumed request, same-source correction, explicit note and unresolved attempt gate under the scheduler lock. Store the decision in the existing script-revision history and move the same episode to script review. The saved record keeps the rejection and the operator's reason. Script adoption authorizes continued scene review under the episode's existing limits. Video acceptance and publication remain separate owner decisions.
+
+## 2026-11-22 — Connect an approved frame when a scene needs a still
+
+The Namdaemun edit used two approved frames after the generated movement failed review. Offer this choice in the current scene's manual material picker. Preview the exact saved approval and convert it locally only when the user connects it. Recheck approval and byte identity around the conversion, then store the silent clip through the existing validated manual import. The editor holds the frame for the scene's duration. Preserve the native clip and its verdict and keep the automatic path's motion-review gate.
