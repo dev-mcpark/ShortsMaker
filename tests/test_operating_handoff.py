@@ -270,6 +270,66 @@ class OperatingHandoffTests(unittest.TestCase):
             child.assert_not_called()
         self.assertEqual(before, self.manager.filename.read_bytes())
 
+    def test_selected_source_reaches_scoped_planner_and_archives_with_its_own_run(self):
+        record = self.queued_episode()
+        sid = self.schedule['id']
+        current = self.manager.get_schedule(sid)
+        selected = 'https://example.com/owner-selected'
+        episode_before = episode_path(record['id']).read_bytes()
+        schedule = self.manager.set_pending_episode_source(sid, selected,
+                                                          expected_schedule_sha256=schedule_sha256(current))
+        self.assertEqual(schedule, {**current, 'episode_source_url': selected,
+                                    'episode_source_run_count': current['run_count']})
+        story = ShortsScript(title='Source story', description='Facts', tags=[], mood='calm',
+            style='documentary', generation_mode='video', source_name='Source', source_url=selected,
+            scenes=[VideoScene(scene_number=1, visual_description='Model', script_text='사실')])
+        with patch.dict(os.environ, {'SHORTSMAKER_EPISODE_ID': record['id']}), patch.object(
+                settings, 'paid_production_enabled', True), patch(
+                'shorts_maker.utils.bgm_manager.BGMManager.has_documented_track', return_value=True), patch(
+                'shorts_maker.uploader.youtube_uploader.YouTubeUploader.get_authenticated_service') as auth, patch(
+                'shorts_maker.services.production_service.ProductionService.full_pipeline', new_callable=AsyncMock,
+                return_value=ProductionResult(success=True, review_pending=True, script=story)) as pipeline:
+            asyncio.run(self.manager._execute_pipeline(schedule, operator=True))
+            auth.assert_called_once_with(interactive=False)
+            self.assertEqual(pipeline.await_args.kwargs['direct_url'], selected)
+        result = self.manager.get_schedule(sid)
+        self.assertEqual(result['last_script']['source_url'], selected)
+        self.assertEqual(result['last_episode_id'], record['id'])
+        self.assertEqual(episode_path(record['id']).read_bytes(), episode_before)
+        self.assertIsNone(result.get('direct_url'))
+        following = self.manager.update_schedule(sid, {'run_count': result['run_count'] + 1,
+            'last_result': 'operator_pending', 'last_run': '2026-12-09T10:06:00'})
+        self.assertEqual(following['run_history'][-1]['episode_source_url'], selected)
+        self.assertIsNone(self.manager.pending_planning_source(following))
+        carried_by_old_clock = {**following, 'episode_source_url': selected,
+                                'episode_source_run_count': result['run_count']}
+        self.assertIsNone(self.manager.pending_planning_source(carried_by_old_clock))
+        with self.assertRaisesRegex(ValueError, '이미 제작 이력'):
+            self.manager.set_pending_episode_source(sid, selected,
+                                                   expected_schedule_sha256=schedule_sha256(following))
+
+    def test_pending_source_rejects_local_stale_and_unresolved_requests_then_can_restore_rss(self):
+        record = self.queued_episode()
+        sid = self.schedule['id']
+        current = self.manager.get_schedule(sid)
+        expected = schedule_sha256(current)
+        before = self.manager.filename.read_bytes()
+        for url, digest in (('http://127.0.0.1/story', expected), ('https://example.com/story', 'stale')):
+            with self.assertRaises(ValueError):
+                self.manager.set_pending_episode_source(sid, url, expected_schedule_sha256=digest)
+        pending = episode_path(record['id']).with_suffix('.operation.pending.json')
+        pending.symlink_to(pending.with_name('missing'))
+        with self.assertRaisesRegex(ValueError, '미확인'):
+            self.manager.set_pending_episode_source(sid, 'https://example.com/story', expected_schedule_sha256=expected)
+        self.assertEqual(self.manager.filename.read_bytes(), before)
+        pending.unlink()
+        saved = self.manager.set_pending_episode_source(sid, 'https://example.com/story',
+                                                       expected_schedule_sha256=expected)
+        restored = self.manager.set_pending_episode_source(sid, '',
+                                                         expected_schedule_sha256=schedule_sha256(saved))
+        self.assertIsNone(self.manager.pending_planning_source(restored))
+        self.assertEqual(restored['last_episode_id'], record['id'])
+
     def test_studio_planning_preflight_reads_current_room_without_creating_episode(self):
         expected = self.pending_schedule()
         before = self.manager.filename.read_bytes()

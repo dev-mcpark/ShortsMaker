@@ -40,6 +40,7 @@ def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedu
                     or schedule.get('last_result') != 'operator_pending'
                     or (expected_schedule_sha256 and schedule_sha256(schedule) != expected_schedule_sha256)):
                 raise ValueError('실제 일정이 남긴 동일한 제작 대기 항목이 필요합니다.')
+            manager.pending_planning_source(schedule)
             if not schedule.get('last_episode_id'):
                 episode = begin_episode(schedule['id'], schedule['run_count'])
                 manager.update_schedule(schedule['id'], {'last_episode_id': episode['id']})

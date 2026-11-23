@@ -1281,3 +1281,7 @@ At initial RSS review, owner adoption advances the schedule to its next slot. Af
 ## 2026-11-22 — Record later editorial decisions on the archived run
 
 After the queue advances, the owner may play and adopt a deferred attached review from execution history. Bind the action to one archived run and its exact stored digest, original continuation receipt and verified review media. Write the editorial status and timestamp to that run under the existing transition lock. Keep the original receipt, current run, next slot and cost records intact. An archived decision carries no production or publishing authority.
+
+## 2026-11-23 — Let one queued RSS episode use an explicitly selected source
+
+Keep the recurring RSS configuration as the default. Allow the owner to save an article URL on a queued agent run before planning, including from the free article preview. Bind the choice to the run number so even an older queue process cannot apply it to subsequent runs. Check retained source history, the current schedule hash and the unresolved-operation marker. Display the choice in the existing paid planning confirmation and reuse direct-article analysis, budget and upload-auth checks.

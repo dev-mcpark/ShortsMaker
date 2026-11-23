@@ -10,7 +10,7 @@ from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.scheduled_run_view import STOP_GUIDANCE
 from shorts_maker.gui.components.work_drafts_panel import render_episode_writer_draft
 from shorts_maker.services.operating_budget import episode_path, load_episode
-from shorts_maker.services.operating_status import operator_status, schedule_sha256
+from shorts_maker.services.operating_status import episode_source_url, operator_status, schedule_sha256
 from shorts_maker.services.scheduled_planning import planning_preflight, plan_pending_schedule
 from shorts_maker.services.revision_validation import (
     prepare_recovery, preview_reassessment, preview_recovery, save_reassessment,
@@ -26,6 +26,36 @@ def render_operator_panel(state, manager, schedule, on_attached):
     readout, loading = {}, {'value': False}
     planning_preview = {'checking': False}
     planning_dialog = None
+
+    def choose_episode_source():
+        if panel.is_deleted or state.is_busy:
+            return
+        prefill = state.planning_url if state.planning_source_mode == '직접 URL 입력' else ''
+        initial = episode_source_url(schedule) or prefill
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-xl'):
+            ui.label('이번 회차 기사 지정').classes('text-lg font-bold')
+            ui.label('원문을 읽고 확인한 공개 기사 주소를 입력하세요. 빈칸으로 저장하면 이번 회차에서 RSS로 소재를 찾습니다.').classes('text-sm')
+            ui.label('이 선택은 이번 회차에 저장됩니다. 기획은 별도의 비용 확인을 거쳐 시작합니다.').classes('text-sm')
+            url = ui.input('이번 회차 기사 URL', value=initial).props('maxlength=4096').classes('w-full')
+            notice = ui.label().classes('text-sm text-amber-200 break-words').props('role=alert')
+
+            def save():
+                if panel.is_deleted or dialog.is_deleted or state.is_busy or not dialog.value:
+                    return
+                try:
+                    manager.set_pending_episode_source(schedule['id'], url.value,
+                                                       expected_schedule_sha256=schedule_sha256(schedule))
+                except (OSError, ValueError, RuntimeError) as error:
+                    notice.set_text(f'출처 저장 중단: {error}')
+                    return
+                dialog.close()
+                on_attached()
+                safe_notify('이번 회차의 소재 선택을 저장했습니다.', type='positive')
+
+            with ui.row().classes('w-full flex-wrap'):
+                ui.button('취소', on_click=dialog.close).props('flat').classes('min-h-[44px]')
+                ui.button('이번 회차 출처 저장', on_click=save).props('color=teal').classes('min-h-[44px]')
+        dialog.open()
 
     def revision_preview():
         def current():
@@ -98,6 +128,8 @@ def render_operator_panel(state, manager, schedule, on_attached):
             planning_dialog.delete()
         with ui.dialog() as dialog, ui.card().classes('w-full max-w-xl bg-slate-900 text-white'):
             ui.label(f'{schedule["name"]} · 예약 회차 기획').classes('text-lg font-bold')
+            source = episode_source_url(schedule) or schedule.get('direct_url')
+            ui.label(f'선택 기사 · {source}' if source else '소재 선택 · RSS 자동 발견').classes('text-sm break-all')
             ui.label('소재 분석·각본·검증에 OpenAI 비용이 발생합니다. 음성·이미지·영상 제작과 업로드는 실행하지 않습니다.').classes('text-sm text-slate-300')
             ui.label(f'월·회차 중 작은 잔여 상한: Google ₩{room["google_remaining_krw"]:,} · OpenAI ${room["openai_remaining_usd"]:.6f}').classes('text-sm text-teal-200')
             ui.label('이 금액은 요청 예상가가 아닙니다. 기존 회차 기준·예약을 보존하고 각 요청 전 예약 추정액을 검사합니다. 서버에 저장된 API 설정으로 실행합니다.').classes('text-xs text-slate-400')
@@ -401,6 +433,12 @@ def render_operator_panel(state, manager, schedule, on_attached):
         ui.label('예약 회차를 기획 중입니다. 메뉴를 이동해도 실행은 계속되며 저장된 회차에서 결과를 확인합니다.').classes('text-xs text-teal-200').bind_visibility_from(state, 'scheduled_planning_in_progress')
         if (schedule.get('review_operator') == 'agent' and schedule.get('last_result') == 'operator_pending'
                 and not schedule.get('enabled') and not schedule.get('last_video_path') and not schedule.get('last_youtube_id')):
+            if not schedule.get('direct_url'):
+                url = episode_source_url(schedule)
+                ui.label(f'이번 회차의 선택 기사 · {url}' if url else '이번 회차 소재 · RSS 자동 발견').classes(
+                    'text-sm text-slate-300 break-all')
+                ui.button('이번 회차 기사 지정', on_click=choose_episode_source).props('outline').classes(
+                    'min-h-[44px]').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
             ui.button('계정 연결 후 기획 재개' if schedule.get('planning_auth_required') else '예약 회차 기획 시작', on_click=plan_preview).props('outline color=teal').bind_enabled_from(
                 state, 'is_busy', lambda busy: not busy and not planning_preview['checking'])
             ui.label('예약 기획 예산 확인 중…').classes('text-sm text-slate-300').props('role=status').bind_visibility_from(

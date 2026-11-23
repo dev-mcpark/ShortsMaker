@@ -39,7 +39,7 @@ _RUN_FIELDS = (
     'last_rendered_url', 'last_video_path', 'last_video_sha256', 'last_youtube_id', 'accepted_at',
     'queued_at', 'last_episode_id',
     'scheduled_for', 'late_by_seconds', 'skipped_slots', 'script_revisions', 'last_script_path', 'review_continuation',
-    'planning_auth_required',
+    'planning_auth_required', 'episode_source_url', 'episode_source_run_count',
 )
 
 
@@ -420,6 +420,57 @@ class ScheduleManager:
             if db:
                 db.close()
 
+    def pending_planning_source(self, schedule: dict) -> str | None:
+        """Resolve a scheduled source, checking a one-episode choice against retained work."""
+        url = schedule.get('episode_source_url')
+        if url is None:
+            return schedule.get('direct_url')
+        bound_run, current_run = schedule.get('episode_source_run_count'), schedule.get('run_count')
+        if type(bound_run) is not int or type(current_run) is not int or not 0 < bound_run <= current_run:
+            raise ValueError('저장한 기사 주소의 회차 번호를 확인하세요.')
+        if bound_run < current_run:
+            return schedule.get('direct_url')
+        if (schedule.get('direct_url') or not isinstance(url, str) or len(url) > 4096
+                or not SourceManager.is_allowed_url(url)):
+            raise ValueError('이번 회차에 저장된 공개 기사 주소를 확인하세요.')
+        for stored in self.load_schedules():
+            for run in (stored, *stored.get('run_history', [])):
+                script = run.get('last_script')
+                if (url in (run.get('last_planned_url'), run.get('last_rendered_url'))
+                        or (isinstance(script, dict) and script.get('source_url') == url)):
+                    raise ValueError('이미 제작 이력에 있는 출처입니다. 이번 회차에는 다른 기사를 선택하세요.')
+        return url
+
+    def set_pending_episode_source(self, schedule_id: str, url: str, *, expected_schedule_sha256: str) -> Dict[str, Any]:
+        """Save an editorial choice on an existing, unstarted agent slot."""
+        from shorts_maker.services.operating_budget import episode_path
+        from shorts_maker.services.operating_status import episode_source_url, schedule_sha256
+
+        with self._review_transition_lock():
+            schedule = self.get_schedule(schedule_id)
+            if (not schedule or schedule_sha256(schedule) != expected_schedule_sha256
+                    or schedule.get('review_operator') != 'agent' or schedule.get('enabled')
+                    or schedule.get('last_result') != 'operator_pending'
+                    or type(schedule.get('run_count')) is not int or schedule['run_count'] < 1
+                    or schedule.get('direct_url') or schedule.get('last_script')
+                    or schedule.get('last_video_path') or schedule.get('last_youtube_id')):
+                raise ValueError('현재 제작 대기 중인 RSS 회차에서만 이번 출처를 변경할 수 있습니다.')
+            if schedule.get('last_episode_id'):
+                pending = episode_path(schedule['last_episode_id']).with_suffix('.operation.pending.json')
+                if pending.exists() or pending.is_symlink():
+                    raise ValueError('미확인 회차 실행 결과를 먼저 대조하세요.')
+            if not isinstance(url, str):
+                raise ValueError('공개 기사 주소를 입력하세요.')
+            source = url.strip() or None
+            fields = {'episode_source_url': source, 'episode_source_run_count': schedule['run_count']}
+            self.pending_planning_source({**schedule, **fields})
+            if source == episode_source_url(schedule):
+                return schedule
+            updated = self.update_schedule(schedule_id, fields)
+            if updated is None:
+                raise ValueError('일정이 사라졌습니다. 목록을 다시 확인하세요.')
+            return updated
+
     def accept_pending_video(self, schedule_id: str, video_path: str, *,
                              expected_schedule_sha256: Optional[str] = None) -> Dict[str, Any]:
         """Adopt the verified review copy and respect any pause set after deferral."""
@@ -789,6 +840,7 @@ class ScheduleManager:
         from shorts_maker.services.production_service import ProductionService
         from shorts_maker.services.google_budget import budget_status as google_budget_status
         from shorts_maker.services.openai_budget import budget_status as openai_budget_status
+        from shorts_maker.services.operating_status import episode_source_url
         from shorts_maker.utils.bgm_manager import BGMManager
         from shorts_maker.utils.config import settings
 
@@ -801,6 +853,7 @@ class ScheduleManager:
                     or not schedule.get('last_episode_id')
                     or os.getenv('SHORTSMAKER_EPISODE_ID') != schedule['last_episode_id']):
                 raise ValueError('저장된 에이전트 회차와 제작 대기가 일치하지 않습니다.')
+            article_url = self.pending_planning_source(schedule)
             if settings.paid_production_enabled:
                 from shorts_maker.uploader.youtube_uploader import YouTubeAuthRequired, YouTubeUploader
                 try:
@@ -836,7 +889,8 @@ class ScheduleManager:
 
         try:
             # A fixed article URL is one story; use topic discovery for a repeating source.
-            article_url = schedule.get('direct_url')
+            if not operator:
+                article_url = schedule.get('direct_url')
             prior_article_run = article_url and any(
                 other.get('id') != schedule['id']
                 and (other.get('last_rendered_url') == article_url
@@ -908,16 +962,18 @@ class ScheduleManager:
 
             result = await service.full_pipeline(
                 topic=schedule.get('topic'),
-                direct_url=schedule.get('direct_url'),
+                direct_url=article_url,
                 auto_upload=schedule.get('auto_upload', False)
             )
 
             if getattr(result, 'review_pending', False):
+                if episode_source_url(schedule) and result.script.source_url != article_url:
+                    raise ValueError(f'{_PLANNING_UNVERIFIED}: 결과 대본과 이번 회차에 지정한 출처가 다릅니다.')
                 self.update_schedule(schedule['id'], {
                     'last_run': datetime.now().isoformat(),
                     'run_count': run_count,
                     'last_result': 'script_review_pending',
-                    'last_planned_url': schedule.get('direct_url') or result.script.source_url,
+                    'last_planned_url': article_url or result.script.source_url,
                     'last_script': result.script.model_dump(),
                     'enabled': False,
                 })
@@ -936,7 +992,7 @@ class ScheduleManager:
             scoring_unverified = not result.success and _TOPIC_SCORING_UNVERIFIED in (result.error or "")
             planning_unverified = not result.success and _PLANNING_UNVERIFIED in (result.error or "")
             # This exact collector error occurs before the paid topic-scoring request.
-            source_unavailable = (not schedule.get('direct_url') and not result.success
+            source_unavailable = (not article_url and not result.success
                                   and not result.video_path
                                   and (result.error or "").startswith(
                                       "PLANNING_UNVERIFIED: RSS_SOURCE_UNVERIFIED:"))

@@ -23,6 +23,7 @@ def planning_preflight(manager, expected: dict) -> dict:
             or current.get('last_result') != 'operator_pending'
             or current.get('last_video_path') or current.get('last_youtube_id')):
         raise ValueError('변경되지 않은 에이전트 제작 대기 회차만 기획할 수 있습니다.')
+    manager.pending_planning_source(current)
     status = operator_status(current)
     if status.get('operation_pending_unverified'):
         raise ValueError('이전 실행 결과를 먼저 대조하세요.')

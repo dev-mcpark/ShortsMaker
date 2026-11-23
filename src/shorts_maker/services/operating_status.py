@@ -11,6 +11,13 @@ def schedule_sha256(schedule: dict) -> str:
     return hashlib.sha256(json.dumps(schedule, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+def episode_source_url(schedule: dict) -> str | None:
+    """A choice carried by an older queue host is inert outside its original run."""
+    run = schedule.get('episode_source_run_count')
+    url = schedule.get('episode_source_url')
+    return url if isinstance(url, str) and type(run) is int and run == schedule.get('run_count') else None
+
+
 def operator_status(schedule: dict) -> dict:
     result = {key: schedule.get(key) for key in (
         'id', 'name', 'enabled', 'first_run_at', 'frequency', 'last_result',
@@ -23,6 +30,8 @@ def operator_status(schedule: dict) -> dict:
         result['script_reassessment'] = True
     if schedule.get('planning_auth_required'):
         result['planning_auth_required'] = True
+    if source := episode_source_url(schedule):
+        result['episode_source_url'] = source
     if schedule.get('last_episode_id'):
         try:
             path = episode_path(schedule['last_episode_id'])

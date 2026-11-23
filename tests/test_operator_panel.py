@@ -238,6 +238,38 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
             plan.assert_not_awaited()
         self.assertFalse(self.state.is_busy)
 
+    async def test_selecting_a_workroom_url_for_this_episode_is_explicit_and_shown_before_paid_dispatch(self):
+        self.pending()
+        before = self.manager.filename.read_bytes()
+        ledgers = [google_budget._database_path(), openai_budget._database_path()]
+        ledger_bytes = [path.read_bytes() for path in ledgers]
+        self.state.planning_source_mode = '직접 URL 입력'
+        self.state.planning_url = 'https://example.com/read-in-workroom'
+        self.render()
+        with self.client, patch.object(operator_panel, 'plan_pending_schedule', new_callable=AsyncMock) as plan:
+            self.click('이번 회차 기사 지정')
+            field = next(e for e in self.client.elements.values() if e._props.get('label') == '이번 회차 기사 URL')
+            self.assertEqual(field.value, self.state.planning_url)
+            self.click('취소')
+            self.assertEqual(self.manager.filename.read_bytes(), before)
+            self.click('이번 회차 기사 지정')
+            confirm = [e for e in self.client.elements.values() if getattr(e, 'text', '') == '이번 회차 출처 저장'][-1]
+            next(e.handler for e in confirm._event_listeners.values() if e.type == 'click')(None)
+            plan.assert_not_awaited()
+            self.schedule = self.manager.get_schedule(self.schedule['id'])
+            self.assertEqual(self.schedule['episode_source_url'], self.state.planning_url)
+            self.assertEqual(self.schedule['last_result'], 'operator_pending')
+            self.assertIsNone(self.schedule.get('direct_url'))
+            self.client.content.clear()
+            self.render()
+            await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
+            self.assertIn('선택 기사 · ' + self.state.planning_url,
+                          [getattr(element, 'text', '') for element in self.client.elements.values()])
+            plan.assert_not_awaited()
+            await self.click_and_wait('이 회차 기획 실행', 'confirm')
+            plan.assert_awaited_once_with(self.manager, self.schedule)
+        self.assertEqual(ledger_bytes, [path.read_bytes() for path in ledgers])
+
     async def test_rapid_planning_clicks_open_one_confirmation_and_allow_new_check_after_cancel(self):
         self.pending()
         self.render()
