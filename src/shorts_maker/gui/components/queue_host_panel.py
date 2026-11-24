@@ -1,12 +1,16 @@
 """Read-only queue-clock status, separate from Studio's direct production scheduler."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from nicegui import run, ui
 
 from shorts_maker.gui.components.common.safe_ui import safe_refresh
+from shorts_maker.services.budget_calendar import budget_month_starts
 from shorts_maker.services.queue_host_status import read_host_status
+
+
+SEOUL = ZoneInfo('Asia/Seoul')
 
 
 def render_queue_host_panel(manager):
@@ -23,11 +27,23 @@ def render_queue_host_panel(manager):
             if state == 'healthy':
                 ui.label(f'최근 응답 확인 · 등록 {len(snapshot["jobs"])}건 · PID {snapshot["pid"]}').classes(
                     'text-sm text-teal-300')
-                when = datetime.fromisoformat(snapshot['updated_at']).astimezone(ZoneInfo('Asia/Seoul'))
+                when = datetime.fromisoformat(snapshot['updated_at']).astimezone(SEOUL)
                 ui.label(f'호스트 응답 {when:%m-%d %H:%M:%S} KST').classes('text-xs text-slate-400')
+                now = datetime.now(timezone.utc)
                 for job in snapshot['jobs']:
-                    next_run = datetime.fromisoformat(job['next_run']).astimezone(ZoneInfo('Asia/Seoul'))
+                    next_run = datetime.fromisoformat(job['next_run']).astimezone(SEOUL)
                     ui.label(f'다음 대기 생성: {next_run:%Y-%m-%d %H:%M} KST').classes('text-sm text-teal-200')
+                    starts = budget_month_starts(next_run)
+                    period_summary = ' · '.join(f'{provider} {start:%Y-%m}' for provider, start in starts.items())
+                    ui.label(f'예약 시각 기준 장부 월 · {period_summary}').classes('text-xs text-slate-300')
+                    rollover = sorted((start.astimezone(SEOUL), provider)
+                                      for provider, start in starts.items() if start > now)
+                    if rollover:
+                        ui.label('새 월이 시작된 뒤 실제 사용액과 월 장부 기준을 대조하세요.').classes(
+                            'text-xs text-amber-200')
+                        for start, provider in rollover:
+                            ui.label(f'{provider} 새 장부 월 시작 · {start:%Y-%m-%d %H:%M} KST').classes(
+                                'text-xs text-slate-300')
                 if not snapshot['jobs']:
                     ui.label('등록된 에이전트 일정이 없습니다. 검토 대기·일시정지 상태를 확인하세요.').classes('text-xs')
             else:

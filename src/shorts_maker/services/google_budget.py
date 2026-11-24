@@ -9,13 +9,12 @@ import uuid
 from contextlib import closing
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_CEILING
-from zoneinfo import ZoneInfo
 
+from shorts_maker.services.budget_calendar import GOOGLE_BUDGET_TIMEZONE
 from shorts_maker.services.visual_cost import estimated_scene_cost
 from shorts_maker.utils.config import settings
 
 
-_BUDGET_TIMEZONE = ZoneInfo("America/Los_Angeles")  # Cloud Billing calendar periods.
 # shortcut: Cloud Billing is not queried; add verified SKU reconciliation before unattended spending.
 _SCHEMA = """CREATE TABLE IF NOT EXISTS requests (
     id TEXT PRIMARY KEY, period TEXT NOT NULL, model TEXT NOT NULL,
@@ -29,7 +28,7 @@ _RECONCILIATION_SCHEMA = """CREATE TABLE IF NOT EXISTS no_charge_reconciliations
 
 
 def _period() -> str:
-    return datetime.now(_BUDGET_TIMEZONE).strftime("%Y-%m")
+    return datetime.now(GOOGLE_BUDGET_TIMEZONE).strftime("%Y-%m")
 
 
 def _reserve_krw(estimated_usd: float) -> int:

@@ -9,6 +9,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_CEILING
 
+from shorts_maker.services.budget_calendar import OPENAI_BUDGET_TIMEZONE
 from shorts_maker.utils.config import settings
 from shorts_maker.services.openai_models import require_model_active
 
@@ -34,7 +35,7 @@ class OpenAIBudgetExceeded(RuntimeError):
 
 
 def _period() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m")
+    return datetime.now(OPENAI_BUDGET_TIMEZONE).strftime("%Y-%m")
 
 
 def _configured_period() -> str | None:

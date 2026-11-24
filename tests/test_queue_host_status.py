@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
+from zoneinfo import ZoneInfo
 
 from nicegui import core, ui
 from nicegui.client import Client
@@ -18,11 +19,25 @@ from nicegui.page import page
 
 from shorts_maker.gui.components.queue_host_panel import render_queue_host_panel
 from scripts.operate_schedule import serve
+from shorts_maker.services.budget_calendar import budget_month_starts
 from shorts_maker.services.queue_host_status import read_host_status, status_path, write_host_status
 from shorts_maker.utils.scheduler import ScheduleManager, TRIGGER_FIELDS
 
 
 class QueueHostStatusTests(unittest.TestCase):
+    def test_slot_budget_months_follow_each_ledger_even_on_different_dates_in_seoul(self):
+        seoul = ZoneInfo('Asia/Seoul')
+        split = budget_month_starts(datetime.fromisoformat('2026-12-01T10:06:00+09:00'))
+        self.assertEqual({name: start.strftime('%Y-%m') for name, start in split.items()},
+                         {'Google': '2026-11', 'OpenAI': '2026-12'})
+        winter = budget_month_starts(datetime.fromisoformat('2026-12-02T10:06:00+09:00'))
+        self.assertEqual(winter['Google'].astimezone(seoul).isoformat(), '2026-12-01T17:00:00+09:00')
+        self.assertEqual(winter['OpenAI'].astimezone(seoul).isoformat(), '2026-12-01T09:00:00+09:00')
+        summer = budget_month_starts(datetime.fromisoformat('2026-07-02T10:06:00+09:00'))
+        self.assertEqual(summer['Google'].astimezone(seoul).isoformat(), '2026-07-01T16:00:00+09:00')
+        with self.assertRaises(ValueError):
+            budget_month_starts(datetime(2026, 12, 2, 10, 6))
+
     def setUp(self):
         self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -164,8 +179,8 @@ class QueueHostPanelTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_refresh_failure_clears_old_success_and_deleted_view_ignores_late_result(self):
         client = Client(page('/queue-host-native'), request=None)
-        healthy = {'state': 'healthy', 'pid': 123, 'updated_at': '2026-11-15T01:00:00+00:00',
-                   'jobs': [{'id': 'one', 'next_run': '2026-11-18T10:06:00+09:00'}]}
+        healthy = {'state': 'healthy', 'pid': 123, 'updated_at': '2026-11-24T01:10:00+00:00',
+                   'jobs': [{'id': 'one', 'next_run': '2026-12-02T10:06:00+09:00'}]}
         with client:
             root = ui.column()
             with root:
@@ -174,16 +189,28 @@ class QueueHostPanelTests(unittest.IsolatedAsyncioTestCase):
             return '\n'.join(getattr(e, 'text', '') for e in client.elements.values())
         async def io(function, *args):
             return function(*args)
-        with client, patch('shorts_maker.gui.components.queue_host_panel.run.io_bound', side_effect=io), patch(
-            'shorts_maker.gui.components.queue_host_panel.read_host_status', return_value=healthy) as read:
+        with (client,
+              patch('shorts_maker.gui.components.queue_host_panel.run.io_bound', side_effect=io),
+              patch('shorts_maker.gui.components.queue_host_panel.read_host_status', return_value=healthy) as read,
+              patch('shorts_maker.gui.components.queue_host_panel.datetime', wraps=datetime) as clock):
+            clock.now.return_value = datetime.fromisoformat(healthy['updated_at'])
             await refresh()
             await asyncio.sleep(0)
-            self.assertIn('2026-11-18 10:06 KST', text())
+            self.assertIn('2026-12-02 10:06 KST', text())
             self.assertIn('등록 1건', text())
+            self.assertIn('Google 2026-12 · OpenAI 2026-12', text())
+            self.assertIn('OpenAI 새 장부 월 시작 · 2026-12-01 09:00 KST', text())
+            self.assertIn('Google 새 장부 월 시작 · 2026-12-01 17:00 KST', text())
+            clock.now.return_value = datetime.fromisoformat('2026-12-01T10:00:00+09:00')
+            await refresh()
+            await asyncio.sleep(0)
+            self.assertNotIn('OpenAI 새 장부 월 시작', text())
+            self.assertIn('Google 새 장부 월 시작', text())
             read.return_value = {'state': 'stale'}
             await refresh()
             await asyncio.sleep(0)
             self.assertNotIn('등록 1건', text())
+            self.assertNotIn('예약 시각 기준 장부 월', text())
             self.assertIn('응답 지연', text())
             with patch('shorts_maker.gui.components.queue_host_panel.run.io_bound', side_effect=RuntimeError('read failed')):
                 await refresh()

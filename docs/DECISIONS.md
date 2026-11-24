@@ -1285,3 +1285,7 @@ After the queue advances, the owner may play and adopt a deferred attached revie
 ## 2026-11-23 — Let one queued RSS episode use an explicitly selected source
 
 Keep the recurring RSS configuration as the default. Allow the owner to save an article URL on a queued agent run before planning, including from the free article preview. Bind the choice to the run number so even an older queue process cannot apply it to subsequent runs. Check retained source history, the current schedule hash and the unresolved-operation marker. Display the choice in the existing paid planning confirmation and reuse direct-article analysis, budget and upload-auth checks.
+
+## 2026-11-24 — Preview each provider's month from a verified slot
+
+Share provider time zones between reservations and the queue panel. Display the two months at the verified slot and any upcoming month boundary in the owner's time zone. The actual budget gate continues to use the current provider month at execution and the verified opening usage.
