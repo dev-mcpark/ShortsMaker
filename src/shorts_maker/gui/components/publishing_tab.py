@@ -69,10 +69,36 @@ def _recorded_metadata(report: dict) -> dict:
     }
 
 
+def _upload_readiness(state: 'AppState', report: dict | None) -> tuple[str, str | None]:
+    if not state.final_video_path:
+        return '재생하고 검토할 완성본을 먼저 불러오세요.', None
+    if report is None:
+        return '완성본의 품질 기록을 확인할 수 없습니다. 영상을 다시 불러오세요.', None
+    marker = Path(report['video_path']).with_suffix('.upload-pending.json')
+    if marker.exists() or marker.is_symlink():
+        return '업로드 결과 대조 필요 · YouTube Studio에서 실제 결과를 먼저 확인하세요.', None
+    video_id = report.get('youtube_id')
+    if video_id is not None:
+        if isinstance(video_id, str) and re.fullmatch(r'[A-Za-z0-9_-]{6,64}', video_id):
+            return '업로드 기록이 있습니다. 검토본을 열거나 예약 운영에서 회차 연결을 이어가세요.', video_id
+        return '업로드 결과 대조 필요 · 저장된 YouTube ID를 확인하세요.', None
+    if report.get('youtube_upload_request') or report.get('uploaded_at_utc'):
+        return '업로드 결과 대조 필요 · 제작 기록의 YouTube ID가 비어 있습니다.', None
+    if state.operating_scope:
+        if not state.script or report.get('script_sha256') != script_sha256(state.script.model_dump(mode='json')):
+            return '완성본이 현재 회차 대본과 다릅니다. 해당 회차의 완성본을 불러오세요.', None
+        if state.has_unapplied_script_draft():
+            return '제작 작업실에서 미적용 대본 수정을 적용하거나 되돌린 뒤 완성본과 대본을 다시 확인하세요.', None
+        if not state.is_script_reviewed():
+            return '제작 작업실에서 현재 대본을 확인하고 각본 확인 완료를 누르세요.', None
+    return '', None
+
+
 def render_publishing_tab(state: 'AppState') -> None:
     """YouTube Publishing 탭 렌더링"""
 
-    binding = {'path': state.final_video_path, 'key': None, 'loading': False}
+    binding = {'path': state.final_video_path, 'key': None, 'loading': False, 'report': None}
+    readiness = {'message': '', 'video_id': None}
     snapshots_open = {'value': False}
     media_source = media_sources(ui.context.client)
     with ui.column().classes('w-full max-w-2xl mx-auto mt-10'):
@@ -103,7 +129,7 @@ def render_publishing_tab(state: 'AppState') -> None:
                         return
                     restore_form(report)
                     safe_refresh(publishing_snapshots)
-                    uploaded_review.refresh()
+                    update_upload_status(report)
                     safe_notify('완성본을 불러왔습니다. 영상과 게시 정보를 확인하세요.', type='positive')
 
                 with ui.row().classes('w-full gap-2 mb-4'):
@@ -135,11 +161,12 @@ def render_publishing_tab(state: 'AppState') -> None:
                         }
 
                 def restore_form(report=None):
-                    binding.update(path=state.final_video_path, key=None, loading=True)
+                    binding.update(path=state.final_video_path, key=None, loading=True, report=None)
                     try:
                         if state.final_video_path:
                             report = report or _completed_video(state.final_video_path)
                             binding['key'] = _publishing_key(report)
+                            binding['report'] = report
                             defaults = _recorded_metadata(report)
                         else:
                             binding['key'] = ''
@@ -282,10 +309,15 @@ def render_publishing_tab(state: 'AppState') -> None:
                     if not state.final_video_path:
                         safe_notify('업로드할 완성본을 먼저 불러오세요.', type='warning')
                         return
+                    if getattr(upload_btn, 'is_deleted', False) is True:
+                        return
                     try:
-                        if (binding['path'] != state.final_video_path
-                                or binding['key'] != _publishing_key(_completed_video(state.final_video_path))):
+                        report = _completed_video(state.final_video_path)
+                        if (binding['path'] != state.final_video_path or binding['key'] != _publishing_key(report)):
                             raise ValueError('선택된 영상이 바뀌었습니다. 완성본과 게시 정보를 다시 확인하세요.')
+                        message = update_upload_status(report)
+                        if message:
+                            raise ValueError(message)
                     except (OSError, ValueError, TypeError) as error:
                         safe_notify(str(error), type='warning')
                         return
@@ -314,7 +346,6 @@ def render_publishing_tab(state: 'AppState') -> None:
                         if vid_id:
                             safe_notify(f"{service.progress.message} (ID: {vid_id})", type='positive')
                             logger.info(f"Upload success: https://youtube.com/shorts/{vid_id}")
-                            uploaded_review.refresh()
                         else:
                             safe_notify(f"업로드 실패: {result.error or '결과를 확인할 수 없습니다'}", type='negative')
 
@@ -323,6 +354,7 @@ def render_publishing_tab(state: 'AppState') -> None:
                         logger.error(f"Upload error: {e}")
                     finally:
                         state.youtube_upload_in_progress = False
+                        refresh_upload_status()
 
                 # 영상 경로 표시
                 with ui.row().classes('w-full items-center gap-2 mb-4 p-3 rounded-lg bg-slate-900/60 border border-slate-700'):
@@ -343,24 +375,41 @@ def render_publishing_tab(state: 'AppState') -> None:
                 upload_btn = ui.button(
                     'YouTube에 비공개 업로드',
                     on_click=upload_video
-                ).classes('w-full').props('color=red unelevated size=lg icon=cloud_upload')
-                upload_btn.bind_enabled_from(state, 'is_busy', backward=lambda busy: bool(state.final_video_path) and not busy)
+                ).classes('w-full min-h-[44px]').props('color=red unelevated size=lg icon=cloud_upload')
 
                 @ui.refreshable
                 def uploaded_review():
-                    if not state.final_video_path:
-                        return
-                    try:
-                        report = _completed_video(state.final_video_path)
-                    except (OSError, ValueError, TypeError):
-                        return
-                    video_id = report.get('youtube_id')
-                    if isinstance(video_id, str) and re.fullmatch(r'[A-Za-z0-9_-]{6,64}', video_id):
-                        ui.label('이미 업로드된 완성본입니다. 다시 누르면 기존 업로드를 재사용합니다.').classes('text-xs text-teal-300 mt-3')
-                        ui.label('기존 업로드의 제목·설명 변경은 YouTube Studio에서 진행하세요.').classes('text-xs text-gray-400')
+                    if readiness['message']:
+                        ui.label(readiness['message']).classes('text-sm text-slate-300 break-words mt-3').props('role=status')
+                    if video_id := readiness['video_id']:
                         ui.link('YouTube 검토본 열기', f'https://www.youtube.com/shorts/{video_id}', new_tab=True)
 
+                def update_upload_status(report):
+                    message, video_id = _upload_readiness(state, report)
+                    readiness.update(message=message, video_id=video_id)
+                    safe_refresh(uploaded_review)
+                    return message
+
+                def refresh_upload_status():
+                    if getattr(upload_btn, 'is_deleted', False) is True or state.is_busy:
+                        return
+                    report = None
+                    try:
+                        if state.final_video_path and binding['path'] == state.final_video_path:
+                            candidate = _completed_video(state.final_video_path)
+                            if binding['key'] == _publishing_key(candidate):
+                                report = candidate
+                    except (OSError, ValueError, TypeError):
+                        pass
+                    update_upload_status(report)
+
+                initial_message, initial_id = _upload_readiness(state, binding['report'])
+                readiness.update(message=initial_message, video_id=initial_id)
+                upload_btn.bind_enabled_from(state, 'is_busy', backward=lambda busy: not busy
+                    and binding['path'] == state.final_video_path and not readiness['message'])
                 uploaded_review()
+                ui.button('업로드 상태 다시 확인', on_click=refresh_upload_status).props('flat icon=refresh').classes(
+                    'min-h-[44px]').bind_enabled_from(state, 'is_busy', backward=lambda busy: not busy)
 
         # 업로드 상태 정보
         with ui.card().classes('w-full p-4 bg-slate-800 border border-slate-700 mt-4'):

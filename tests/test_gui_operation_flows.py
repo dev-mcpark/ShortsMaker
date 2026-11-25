@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from shorts_maker.gui.components import generation_tab, pipeline_tab, planning_tab, publishing_tab, sources_tab, scheduling_tab
 from shorts_maker.gui.state.app_state import AppState
 from shorts_maker.planner.models import ShortsScript, VideoScene
-from shorts_maker.services.production_service import ProductionProgress, ProductionResult
+from shorts_maker.services.production_service import ProductionProgress, ProductionResult, script_sha256
 from shorts_maker.utils.scheduler import ScheduleManager
 
 
@@ -225,6 +225,73 @@ class CompletedOutputTests(TestCase):
         state.get_or_create_service = Mock()
         recorder = self.render(state)
         asyncio.run(recorder.find('button', 'YouTube에 비공개 업로드').callback())
+        state.get_or_create_service.assert_not_called()
+
+    def test_reopened_episode_video_waits_for_matching_script_review(self):
+        script = ShortsScript(title='회차 대본', description='설명', tags=[], mood='calm', style='explainer',
+                              generation_mode='video', source_name='테스트', source_url='https://example.com/story', scenes=[
+            VideoScene(scene_number=1, script_text='회차 원문입니다.', visual_description='Market')
+        ])
+        state = AppState(script=script, operating_scope={'episode_id': 'test'})
+        digest = script_sha256(script.model_dump(mode='json'))
+        for recorded_hash, reviewed, expected in (
+            (digest, False, '각본 확인 완료'),
+            ('another-script', True, '현재 회차 대본과 다릅니다'),
+        ):
+            with self.subTest(reviewed=reviewed):
+                video, _ = self.write_output(script_sha256=recorded_hash)
+                state.final_video_path = str(video)
+                state.reviewed_script_sha256 = None
+                if reviewed:
+                    state.confirm_script_review()
+                state.get_or_create_service = Mock()
+                recorder = self.render(state)
+                button = recorder.find('button', 'YouTube에 비공개 업로드')
+                self.assertFalse(button.enabled)
+                self.assertTrue(any(expected in item.text for item in recorder.elements))
+                self.set_form(recorder)
+                with patch.object(publishing_tab, 'safe_notify'):
+                    asyncio.run(button.callback())
+                state.get_or_create_service.assert_not_called()
+        video, _ = self.write_output(script_sha256=digest)
+        state.final_video_path = str(video)
+        self.assertTrue(self.render(state).find('button', 'YouTube에 비공개 업로드').enabled)
+        state.remember_script_draft(state.script_editor_key(), '{')
+        recorder = self.render(state)
+        self.assertTrue(any('미적용 대본 수정' in item.text for item in recorder.elements))
+        self.assertFalse(recorder.find('button', 'YouTube에 비공개 업로드').enabled)
+
+    def test_upload_result_controls_distinguish_pending_and_confirmed(self):
+        video, _ = self.write_output(youtube_id='already_saved')
+        state = AppState(final_video_path=str(video))
+        state.get_or_create_service = Mock()
+        pending = video.with_suffix('.upload-pending.json')
+        pending.symlink_to(pending.with_name('missing.json'))
+        recorder = self.render(state)
+        self.assertTrue(any('업로드 결과 대조' in item.text for item in recorder.elements))
+        self.assertFalse(recorder.find('button', 'YouTube에 비공개 업로드').enabled)
+        self.assertFalse(any(item.kind == 'link' and 'YouTube 검토본' in item.text for item in recorder.elements))
+        pending.unlink()
+        recorder = self.render(state)
+        self.assertFalse(recorder.find('button', 'YouTube에 비공개 업로드').enabled)
+        self.assertTrue(any('YouTube 검토본 열기' in item.text for item in recorder.elements))
+        self.set_form(recorder)
+        with patch.object(publishing_tab, 'safe_notify'):
+            asyncio.run(recorder.find('button', 'YouTube에 비공개 업로드').callback())
+        state.get_or_create_service.assert_not_called()
+
+    def test_late_pending_marker_blocks_open_upload_button_before_dispatch(self):
+        video, _ = self.write_output()
+        state = AppState(final_video_path=str(video))
+        state.get_or_create_service = Mock()
+        recorder = self.render(state)
+        self.set_form(recorder)
+        button = recorder.find('button', 'YouTube에 비공개 업로드')
+        self.assertTrue(button.enabled)
+        video.with_suffix('.upload-pending.json').write_text('{}')
+        with patch.object(publishing_tab, 'safe_notify') as notify:
+            asyncio.run(button.callback())
+        self.assertIn('업로드 결과 대조', notify.call_args.args[0])
         state.get_or_create_service.assert_not_called()
 
     def set_form(self, recorder, title='게시 초안', disclosure='no'):
