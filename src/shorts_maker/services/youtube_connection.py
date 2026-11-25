@@ -3,10 +3,41 @@
 import asyncio
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 
-from shorts_maker.uploader.youtube_uploader import AUTH_TIMEOUT_SECONDS, validate_authorization_url
+from shorts_maker.uploader.youtube_uploader import AUTH_TIMEOUT_SECONDS, YOUTUBE_UPLOAD_SCOPE, validate_authorization_url
 from shorts_maker.utils.config import PROJECT_ROOT
+
+
+def local_upload_token_status(path: Path, *, now: datetime | None = None) -> str:
+    """Inspect saved expiry and scope without authenticating or disclosing credentials."""
+    try:
+        if path.is_symlink():
+            return 'unknown'
+        if not path.exists():
+            return 'missing'
+        if not path.is_file():
+            return 'unknown'
+        with path.open('rb') as file:
+            data = file.read(64 * 1024 + 1)
+        if len(data) > 64 * 1024:
+            return 'unknown'
+        record = json.loads(data)
+        if not isinstance(record, dict):
+            return 'unknown'
+        scopes = record.get('scopes')
+        if not isinstance(scopes, list) or YOUTUBE_UPLOAD_SCOPE not in scopes:
+            return 'scope_unconfirmed'
+        expiry = datetime.fromisoformat(record['expiry'])
+        if expiry.utcoffset() is None:
+            return 'unknown'
+        if expiry > (now or datetime.now(timezone.utc)) and isinstance(record.get('token'), str) and record['token']:
+            return 'unexpired'
+        refresh = record.get('refresh_token')
+        return 'refresh_unverified' if isinstance(refresh, str) and refresh else 'connection_required'
+    except (OSError, ValueError, KeyError, TypeError):
+        return 'unknown'
 
 
 class YouTubeConnection:

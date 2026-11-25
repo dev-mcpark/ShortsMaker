@@ -1,5 +1,7 @@
 # Project map
 
+`services/youtube_connection.py` derives a local hint from the saved scope, expiry and token-field presence. `youtube_connection_panel.py` displays the hint and uses the existing auth-only/check subprocess for an explicit authorization check or reconnect.
+
 `services/monthly_opening.py` stores confirmed provider-month openings in the existing Google and OpenAI reservation databases. Both provider guards read this record within the normal budget and reservation path. `budget_panel.py` offers explicit input when a readable ledger lacks a confirmed current-month opening.
 
 `services/upload_evidence.py` distinguishes an unresolved upload claim from the same upload's later, exact private result. Publishing, recorded-ID reuse and the scheduler's private-review verifier share the read-only check. The submission code retains ownership of claim creation and removal.

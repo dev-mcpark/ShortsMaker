@@ -16,6 +16,7 @@ from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.config import settings
 
 AUTH_TIMEOUT_SECONDS = 300
+YOUTUBE_UPLOAD_SCOPE = 'https://www.googleapis.com/auth/youtube.upload'
 
 class YouTubeAuthRequired(RuntimeError):
     """Upload never started because its account could not be authenticated."""
@@ -69,7 +70,7 @@ def _save_token(token: Path, content: str):
 class YouTubeUploader:
     def __init__(self):
         self.logger = get_logger(__name__)
-        self.scopes = ["https://www.googleapis.com/auth/youtube.upload"]
+        self.scopes = [YOUTUBE_UPLOAD_SCOPE]
         self.api_service_name = "youtube"
         self.api_version = "v3"
         self.client_secrets_file = str(settings.client_secrets_path)
