@@ -1,6 +1,5 @@
 """YouTube Publishing 탭 컴포넌트"""
 
-import hashlib
 import json
 import re
 from pathlib import Path
@@ -12,6 +11,7 @@ from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.gui.components.youtube_connection_panel import render_youtube_connection_panel
+from shorts_maker.services.completed_video import completed_video as _completed_video
 from shorts_maker.services.production_service import source_credited_description, script_sha256
 from shorts_maker.services.publishing_drafts import (
     publishing_key as _publishing_key, save_publishing_draft, saved_publishing_drafts,
@@ -44,23 +44,6 @@ def _completed_outputs() -> dict[str, str]:
         except (OSError, ValueError, TypeError, KeyError):
             continue
     return {path: label for _, path, label in sorted(outputs, reverse=True)}
-
-
-def _completed_video(path: str) -> dict:
-    video = Path(path).resolve()
-    root = settings.output_dir.resolve()
-    report_path = video.with_suffix('.production.json').resolve()
-    if (not video.is_file() or video.suffix.lower() != '.mp4'
-            or not video.is_relative_to(root) or not report_path.is_relative_to(root)):
-        raise ValueError('출력 폴더 안의 완성 MP4를 선택하세요.')
-    report = json.loads(report_path.read_text(encoding='utf-8'))
-    with video.open('rb') as file:
-        digest = hashlib.file_digest(file, 'sha256').hexdigest()
-    if (not isinstance(report, dict) or report.get('schema_version') != 1
-            or report.get('video_path') != str(video)
-            or report.get('quality_passed') is not True or report.get('video_sha256') != digest):
-        raise ValueError('영상과 일치하는 품질 통과 기록·파일 해시가 필요합니다.')
-    return report
 
 
 def _load_completed_video(state: 'AppState', path: str) -> dict:

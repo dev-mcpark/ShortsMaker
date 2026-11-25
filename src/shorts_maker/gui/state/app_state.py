@@ -220,7 +220,7 @@ class AppState:
             require_paid_production_enabled()
             scope_status(EpisodeScope.model_validate(self.operating_scope), self.script)
 
-    def load_scheduled_script(self, manager, schedule_id: str) -> None:
+    def load_scheduled_script(self, manager, schedule_id: str, *, expected_schedule: dict | None = None) -> None:
         from shorts_maker.planner.models import ShortsScript
         from shorts_maker.services.studio_episode_action import EpisodeScope, scope_status
         current = manager.get_schedule(schedule_id)
@@ -229,6 +229,8 @@ class AppState:
         scope = EpisodeScope(schedules_file=str(manager.filename.resolve()), schedule_id=schedule_id,
                              episode_id=current.get('last_episode_id'))
         current, _ = scope_status(scope)
+        if expected_schedule is not None and current != expected_schedule:
+            raise ValueError('회차 상태가 변경됐습니다. 예약 화면을 다시 확인하세요.')
         script = ShortsScript.model_validate(current['last_script'])
         self.load_saved_script(script, backup_current=True)
         self.operating_scope = scope.model_dump()

@@ -1,9 +1,11 @@
-"""Recover saved private reviews from completed, exact-episode Studio uploads."""
+"""Recover completed edits and private uploads from the exact Studio episode."""
 
 import hashlib
 import json
+from pathlib import Path
 
 from shorts_maker.planner.models import ShortsScript
+from shorts_maker.services.completed_video import completed_video
 from shorts_maker.services.operating_budget import episode_path
 from shorts_maker.services.operating_status import schedule_sha256
 from shorts_maker.services.production_service import script_sha256
@@ -31,8 +33,7 @@ def _completed_commands(episode_id: str) -> set[str]:
     return hashes
 
 
-def recovered_review_copies(manager, expected_schedule: dict) -> dict[str, dict[str, str]]:
-    """List confirmed local uploads without switching the current Studio workspace."""
+def _recovered_results(manager, expected_schedule, operation, verify_media):
     scope = EpisodeScope(schedules_file=str(manager.filename.resolve()), schedule_id=expected_schedule['id'],
                          episode_id=expected_schedule.get('last_episode_id'))
     current, _ = scope_status(scope)
@@ -56,25 +57,54 @@ def recovered_review_copies(manager, expected_schedule: dict) -> dict[str, dict[
             if command_digest not in commands:
                 continue
             request = read_request(path, digest)
-            if (request.operation != 'upload' or request.scope != scope or request.schedule_sha256 != expected
-                    or request.script_sha256 != content_digest or request.review_receipt != review_digest
-                    or not request.video_path):
+            if (request.operation != operation or request.scope != scope or request.schedule_sha256 != expected
+                    or request.script_sha256 != content_digest or request.review_receipt != review_digest):
                 continue
             receipt = validate_receipt(path, digest)
             if receipt['kind'] != 'production' or receipt.get('cancelled', False):
                 continue
             result = receipt['value']
-            if (not result['success'] or result.get('video_path') != request.video_path
-                    or not result.get('youtube_id')):
-                continue
-            info = manager.pending_video_info(scope.schedule_id, request.video_path)
-            if info['youtube_id'] == result['youtube_id']:
+            if result['success'] and (info := verify_media(request, result)):
                 matches[info['video_path']] = info
         except (OSError, ValueError, RuntimeError):
             continue
     if manager.get_schedule(scope.schedule_id) != current:
         raise ValueError('조회 중 회차 상태가 변경됐습니다. 예약 화면을 다시 확인하세요.')
     return matches
+
+
+def recovered_review_copies(manager, expected_schedule: dict) -> dict[str, dict[str, str]]:
+    """List confirmed local uploads without switching the current Studio workspace."""
+    def verify_media(request, result):
+        if (not request.video_path or result.get('video_path') != request.video_path
+                or not result.get('youtube_id')):
+            return None
+        info = manager.pending_video_info(request.scope.schedule_id, request.video_path)
+        return info if info['youtube_id'] == result['youtube_id'] else None
+
+    return _recovered_results(manager, expected_schedule, 'upload', verify_media)
+
+
+def recovered_episode_edits(manager, expected_schedule: dict) -> dict[str, dict[str, str]]:
+    """List quality-passed local edits awaiting review and upload in this episode."""
+    def verify_media(request, result):
+        path = result.get('video_path')
+        if not path or not result.get('ready_for_upload') or result.get('youtube_id'):
+            return None
+        video = Path(path).resolve()
+        report_path = video.with_suffix('.production.json')
+        upload_pending = video.with_suffix('.upload-pending.json')
+        if (not result.get('report_path') or Path(result['report_path']).resolve() != report_path
+                or report_path.is_symlink() or upload_pending.exists() or upload_pending.is_symlink()):
+            return None
+        report = completed_video(path)
+        if (report.get('script_sha256') != request.script_sha256
+                or report.get('source_url') != expected_schedule['last_script'].get('source_url')
+                or report.get('youtube_id') or report.get('uploaded_at_utc') or report.get('youtube_upload_request')):
+            return None
+        return {'video_path': report['video_path'], 'video_sha256': report['video_sha256']}
+
+    return _recovered_results(manager, expected_schedule, 'edit', verify_media)
 
 
 def attach_recovered_review_copy(manager, schedule, expected: dict[str, str]):

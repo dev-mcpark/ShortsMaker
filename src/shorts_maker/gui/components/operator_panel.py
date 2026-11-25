@@ -453,6 +453,7 @@ def render_operator_panel(state, manager, schedule, on_attached):
         if schedule.get('last_result') == 'script_review_pending' and not schedule.get('last_youtube_id') and not schedule.get('enabled'):
             if not schedule.get('last_video_path'):
                 if schedule.get('review_operator') == 'agent' and schedule.get('last_episode_id'):
+                    render_episode_review_recovery(state, manager, schedule, on_attached, edit=True)
                     render_episode_review_recovery(state, manager, schedule, on_attached)
                 ui.label('작업실에서 대본을 수정·적용·확인했다면 이 회차에도 수정본을 저장하세요.').classes('text-xs text-slate-300')
                 ui.button('확인한 수정 대본을 회차에 저장', on_click=revision_preview).props('flat icon=save').style('min-height:44px').bind_enabled_from(
