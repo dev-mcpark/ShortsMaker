@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_CEILING
 
 from shorts_maker.services.budget_calendar import GOOGLE_BUDGET_TIMEZONE
+from shorts_maker.services.monthly_opening import MonthOpeningRequired, save_month_opening, saved_month_opening
 from shorts_maker.services.visual_cost import estimated_scene_cost
 from shorts_maker.utils.config import settings
 
@@ -40,12 +41,7 @@ def _reserve_krw(estimated_usd: float, *, usd_krw_rate: float | None = None) -> 
 
 
 def _budget_period() -> str | None:
-    if settings.google_monthly_budget_krw is None:
-        return None
-    period = _period()
-    if settings.google_budget_month != period:
-        raise RuntimeError("GOOGLE_BUDGET_EXCEEDED: 이번 달 Google 사용액 기준을 다시 설정하세요.")
-    return period
+    return _period() if settings.google_monthly_budget_krw is not None else None
 
 
 def _database_path():
@@ -61,6 +57,8 @@ def initialize_google_budget() -> dict:
     """Create the ledger once, after the configured opening spend is checked."""
     if _budget_period() is None:
         raise ValueError("Google 월 예산 설정을 먼저 활성화하세요.")
+    if settings.google_budget_month != _period():
+        raise ValueError("장부 최초 생성에는 현재 월의 Google 사용액 기준이 필요합니다.")
     path = _database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
@@ -78,8 +76,27 @@ def _total(db: sqlite3.Connection, period: str) -> int:
     return row[0]
 
 
+def _opening_krw(db: sqlite3.Connection, period: str) -> int:
+    opening = saved_month_opening(db, period)
+    if opening is not None:
+        return opening
+    if settings.google_budget_month == period:
+        return settings.google_budget_opening_krw
+    if settings.google_budget_month < period:
+        raise MonthOpeningRequired(period, "GOOGLE_BUDGET_EXCEEDED: 이번 달 Google 사용액 기준을 다시 설정하세요.")
+    raise ValueError("Google 장부 설정 월이 현재 월보다 앞서 있습니다. 월을 확인하세요.")
+
+
+def record_google_opening(period: str, amount_krw: int, evidence: str) -> None:
+    with closing(_connect_existing()) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        if period != _budget_period() or settings.google_budget_month >= period:
+            raise ValueError("현재 Google 월과 기존 사용액 설정을 다시 확인하세요.")
+        save_month_opening(db, period, amount_krw, evidence)
+
+
 def _check(db: sqlite3.Connection, period: str, additional_krw: int) -> int:
-    used = settings.google_budget_opening_krw + _total(db, period)
+    used = _opening_krw(db, period) + _total(db, period)
     if used + additional_krw > settings.google_monthly_budget_krw:
         raise RuntimeError(
             f"GOOGLE_BUDGET_EXCEEDED: 이번 달 예약액 {used + additional_krw:,}원이 "
@@ -169,6 +186,7 @@ def reconcile_google_no_charge(request_ids: list[str], evidence: str) -> int:
     try:
         with closing(_connect_existing()) as db, db:
             db.execute("BEGIN IMMEDIATE")
+            _opening_krw(db, period)
             rows = db.execute(
                 f"SELECT id, period, status, reserved_krw FROM requests "
                 f"WHERE id IN ({','.join('?' for _ in request_ids)})", request_ids,
@@ -203,6 +221,7 @@ def budget_status() -> dict:
     try:
         with closing(_connect_existing()) as db:
             local = _total(db, period)
+            opening = _opening_krw(db, period)
             by_model = dict(db.execute(
                 "SELECT model, SUM(reserved_krw) FROM requests WHERE period = ? GROUP BY model", (period,),
             ).fetchall())
@@ -223,10 +242,10 @@ def budget_status() -> dict:
             ).fetchone() else 0
     except (OSError, sqlite3.Error) as error:
         raise RuntimeError("GOOGLE_BUDGET_EXCEEDED: 비용 장부에 접근할 수 없습니다. 기존 장부와 월 사용 기준을 확인·복구하세요.") from error
-    used = settings.google_budget_opening_krw + local
+    used = opening + local
     return {"enabled": True, "period": period,
             "budget_krw": settings.google_monthly_budget_krw,
-            "opening_krw": settings.google_budget_opening_krw,
+            "opening_krw": opening,
             "local_reserved_krw": local,
             "reserved_by_model_krw": by_model,
             "reserved_by_source_krw": by_source,

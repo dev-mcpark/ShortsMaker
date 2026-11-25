@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_CEILING
 
 from shorts_maker.services.budget_calendar import OPENAI_BUDGET_TIMEZONE
+from shorts_maker.services.monthly_opening import MonthOpeningRequired, save_month_opening, saved_month_opening
 from shorts_maker.utils.config import settings
 from shorts_maker.services.openai_models import require_model_active
 
@@ -34,17 +35,16 @@ class OpenAIBudgetExceeded(RuntimeError):
     """A request cannot be reserved against the configured monthly limit."""
 
 
+class OpenAIMonthOpeningRequired(OpenAIBudgetExceeded, MonthOpeningRequired):
+    """The existing ledger has no opening for this provider month."""
+
+
 def _period() -> str:
     return datetime.now(OPENAI_BUDGET_TIMEZONE).strftime("%Y-%m")
 
 
 def _configured_period() -> str | None:
-    if settings.openai_monthly_budget_usd is None:
-        return None
-    period = _period()
-    if settings.openai_budget_month != period:
-        raise OpenAIBudgetExceeded("OPENAI_BUDGET_EXCEEDED: 이번 달 OpenAI 사용액 기준을 다시 설정하세요.")
-    return period
+    return _period() if settings.openai_monthly_budget_usd is not None else None
 
 
 def _micro_usd(amount: Decimal) -> int:
@@ -63,6 +63,8 @@ def initialize_openai_budget() -> dict:
     """Create a new ledger after checking the configured opening usage."""
     if _configured_period() is None:
         raise ValueError("OpenAI 월 예산 설정을 먼저 활성화하세요.")
+    if settings.openai_budget_month != _period():
+        raise ValueError("장부 최초 생성에는 현재 월의 OpenAI 사용액 기준이 필요합니다.")
     path = _database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
@@ -75,6 +77,28 @@ def initialize_openai_budget() -> dict:
     return budget_status()
 
 
+def _opening_micro_usd(db: sqlite3.Connection, period: str) -> int:
+    opening = saved_month_opening(db, period)
+    if opening is not None:
+        return opening
+    if settings.openai_budget_month == period:
+        return _micro_usd(Decimal(str(settings.openai_budget_opening_usd)))
+    if settings.openai_budget_month < period:
+        raise OpenAIMonthOpeningRequired(
+            period, "OPENAI_BUDGET_EXCEEDED: 이번 달 OpenAI 사용액 기준을 다시 설정하세요.")
+    raise OpenAIBudgetExceeded("OpenAI 장부 설정 월이 현재 월보다 앞서 있습니다. 월을 확인하세요.")
+
+
+def record_openai_opening(period: str, amount_usd: Decimal, evidence: str) -> None:
+    if not isinstance(amount_usd, Decimal) or not amount_usd.is_finite() or not 0 <= amount_usd <= Decimal('9223372036854'):
+        raise ValueError("0 이상의 유효한 달러 금액을 입력하세요.")
+    with closing(_connect_existing()) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        if period != _configured_period() or settings.openai_budget_month >= period:
+            raise ValueError("현재 OpenAI 월과 기존 사용액 설정을 다시 확인하세요.")
+        save_month_opening(db, period, _micro_usd(amount_usd), evidence)
+
+
 def _reserve(model: str, amount: Decimal, source_url: str | None = None) -> str | None:
     period = _configured_period()
     if period is None:
@@ -85,11 +109,11 @@ def _reserve(model: str, amount: Decimal, source_url: str | None = None) -> str 
         source_url = source_url.strip() or None
     reserve = _micro_usd(amount)
     ceiling = int(Decimal(str(settings.openai_monthly_budget_usd)) * 1_000_000)
-    opening = _micro_usd(Decimal(str(settings.openai_budget_opening_usd)))
     request_id = uuid.uuid4().hex
     try:
         with closing(_connect_existing()) as db, db:
             db.execute("BEGIN IMMEDIATE")
+            opening = _opening_micro_usd(db, period)
             used = db.execute(
                 "SELECT COALESCE(SUM(reserved_micro_usd), 0) FROM requests WHERE period = ?", (period,)
             ).fetchone()[0]
@@ -179,6 +203,7 @@ def budget_status() -> dict:
             local = db.execute(
                 "SELECT COALESCE(SUM(reserved_micro_usd), 0) FROM requests WHERE period = ?", (period,)
             ).fetchone()[0]
+            opening = _opening_micro_usd(db, period)
             by_model = dict(db.execute(
                 "SELECT model, SUM(reserved_micro_usd) FROM requests "
                 "WHERE period = ? GROUP BY model", (period,)
@@ -189,7 +214,6 @@ def budget_status() -> dict:
             )) if "source_url" in {column[1] for column in db.execute("PRAGMA table_info(requests)")} else {}
     except (OSError, sqlite3.Error) as error:
         raise OpenAIBudgetExceeded("OPENAI_BUDGET_EXCEEDED: 비용 장부에 접근할 수 없습니다. 기존 장부와 월 사용 기준을 확인·복구하세요.") from error
-    opening = _micro_usd(Decimal(str(settings.openai_budget_opening_usd)))
     ceiling = int(Decimal(str(settings.openai_monthly_budget_usd)) * 1_000_000)
     return {"enabled": True, "period": period,
             "budget_usd": ceiling / 1_000_000,
