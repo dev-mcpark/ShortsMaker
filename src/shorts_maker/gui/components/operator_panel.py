@@ -1,6 +1,5 @@
 """Inspect a scheduled review and attach an existing verified private upload from Studio."""
 
-import json
 from datetime import datetime
 from pathlib import Path
 
@@ -19,14 +18,11 @@ from shorts_maker.services.revision_validation import (
 
 
 def render_operator_panel(state, manager, schedule, on_attached):
-    keys = ('id', 'review_operator', 'run_count', 'last_episode_id', 'last_result', 'enabled', 'last_script',
-            'last_video_path', 'last_youtube_id')
-    def identity(current):
-        return json.dumps({key: current.get(key) for key in keys}, sort_keys=True, ensure_ascii=False)
-    expected = identity(schedule)
     readout, loading = {}, {'value': False}
     planning_preview = {'checking': False}
     planning_dialog = None
+    attachment_checking = False
+    attachment_dialog = None
 
     def choose_episode_source():
         if panel.is_deleted or state.is_busy:
@@ -377,47 +373,71 @@ def render_operator_panel(state, manager, schedule, on_attached):
         if event.value:
             await refresh()
 
-    def attach_preview():
-        def current():
-            current_schedule = manager.get_schedule(schedule['id'])
-            if (state.is_busy or not current_schedule or identity(current_schedule) != expected
-                    or current_schedule.get('enabled') or current_schedule.get('last_result') != 'script_review_pending'
-                    or current_schedule.get('last_youtube_id')):
-                raise ValueError('작업 중이거나 회차 상태가 바뀌었습니다. 현재 회차를 다시 확인하세요.')
-            if current_schedule.get('review_operator') == 'agent':
-                load_episode(current_schedule.get('last_episode_id'), current_schedule)
+    def check_attachment_schedule():
+        if manager.get_schedule(schedule['id']) != schedule:
+            raise ValueError('회차 상태가 바뀌었습니다. 현재 회차를 다시 확인하세요.')
+        if schedule.get('review_operator') == 'agent':
+            load_episode(schedule.get('last_episode_id'), schedule)
 
-        try:
-            current()
-            selected = state.final_video_path
-            info = manager.pending_video_info(schedule['id'], selected)
-        except (ValueError, RuntimeError, OSError) as error:
-            safe_notify(f'완성본을 연결할 수 없습니다: {error}', type='warning')
+    async def attach_preview():
+        nonlocal attachment_checking, attachment_dialog
+        if (panel.is_deleted or state.is_busy or attachment_checking or not state.final_video_path
+                or (attachment_dialog is not None and not attachment_dialog.is_deleted and attachment_dialog.value)):
             return
+        selected = state.final_video_path
+
+        def read():
+            check_attachment_schedule()
+            info = manager.pending_video_info(schedule['id'], selected)
+            check_attachment_schedule()
+            return info
+
+        attachment_checking = True
+        attachment_notice.text = '선택 영상과 비공개 업로드 기록을 확인하는 중…'
+        try:
+            info = await run.io_bound(read)
+        except (ValueError, RuntimeError, OSError) as error:
+            if not panel.is_deleted:
+                attachment_notice.text = f'{error} 완성본·업로드에서 영상과 예약 회차를 확인하세요.'
+            return
+        finally:
+            attachment_checking = False
+        if panel.is_deleted:
+            return
+        if not info or state.is_busy or state.final_video_path != selected:
+            attachment_notice.text = '현재 작업이나 선택한 영상이 바뀌었습니다. 다시 확인하세요.'
+            return
+        attachment_notice.text = ''
+        if attachment_dialog is not None and not attachment_dialog.is_deleted:
+            attachment_dialog.delete()
         with ui.dialog() as dialog, ui.card().classes('w-full max-w-xl bg-slate-900 text-white'):
             ui.label(f'{schedule["name"]} · 비공개 완성본 연결').classes('text-lg font-bold')
             ui.label(Path(info['video_path']).name).classes('text-sm break-all')
             ui.link(f'YouTube {info["youtube_id"]}', f'https://www.youtube.com/shorts/{info["youtube_id"]}', new_tab=True)
             ui.label('파일·대본·출처·비공개 업로드 기록을 대조했습니다. 연결 후에도 검토 대기이며, 채택과 공개는 별도로 결정합니다.').classes('text-sm text-slate-300')
+            confirmation_notice = ui.label().classes('text-sm text-amber-200 break-words').props('role=alert')
 
             def confirm():
-                if dialog.is_deleted or not dialog.value:
+                if panel.is_deleted or dialog.is_deleted or not dialog.value:
                     return
                 try:
-                    current()
-                    if (state.final_video_path != selected
-                            or manager.pending_video_info(schedule['id'], selected) != info):
-                        raise ValueError('선택한 영상 또는 업로드 기록이 바뀌었습니다. 다시 확인하세요.')
-                    manager.record_private_review_copy(schedule['id'], selected)
+                    if state.is_busy or state.final_video_path != selected:
+                        raise ValueError('현재 작업이나 선택한 영상이 바뀌었습니다. 다시 확인하세요.')
+                    check_attachment_schedule()
+                    manager.record_private_review_copy(schedule['id'], selected,
+                        expected_schedule_sha256=schedule_sha256(schedule), expected_video_info=info)
                     dialog.close()
                     on_attached()
                     safe_notify('비공개 완성본을 회차에 연결했습니다. 채택·일정 재개는 아직 하지 않았습니다.', type='positive')
                 except (ValueError, RuntimeError, OSError) as error:
-                    safe_notify(f'연결을 중단했습니다: {error}', type='warning')
+                    confirmation_notice.text = f'연결을 중단했습니다: {error}'
+                    safe_notify(confirmation_notice.text, type='warning')
 
             with ui.row().classes('w-full flex-wrap'):
-                ui.button('취소', on_click=dialog.close).props('flat')
-                ui.button('이 비공개 완성본 연결', on_click=confirm).props('color=teal').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+                ui.button('취소', on_click=dialog.close).props('flat').classes('min-h-[44px]')
+                ui.button('이 비공개 완성본 연결', on_click=confirm).props('color=teal').classes(
+                    'min-h-[44px]').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
+        attachment_dialog = dialog
         dialog.open()
 
     with ui.expansion('현재 회차 상태·연결', on_value_change=opened).classes('w-full') as panel:
@@ -458,9 +478,11 @@ def render_operator_panel(state, manager, schedule, on_attached):
                 ui.label('작업실에서 대본을 수정·적용·확인했다면 이 회차에도 수정본을 저장하세요.').classes('text-xs text-slate-300')
                 ui.button('확인한 수정 대본을 회차에 저장', on_click=revision_preview).props('flat icon=save').style('min-height:44px').bind_enabled_from(
                     state, 'is_busy', lambda busy: not busy and state.is_script_reviewed() and not state.has_unapplied_script_draft())
-            ui.label('완성본·업로드에서 확인된 비공개 영상을 불러온 뒤 연결하세요. 이 버튼은 업로드하거나 새 영상을 만들지 않습니다.').classes('text-xs text-slate-300')
-            ui.button('선택 완성본을 이 회차에 연결', on_click=attach_preview).props('outline color=teal').bind_enabled_from(
-                state, 'is_busy', lambda busy: not busy and bool(state.final_video_path))
+            ui.label('선택한 영상의 비공개 업로드 기록을 확인한 뒤 연결 확인 창을 엽니다.').classes('text-xs text-slate-300')
+            ui.button('선택 완성본을 이 회차에 연결', on_click=attach_preview).props('outline color=teal').classes(
+                'min-h-[44px]').bind_enabled_from(state, 'is_busy',
+                    lambda busy: not busy and not attachment_checking and bool(state.final_video_path))
+            attachment_notice = ui.label().classes('text-sm text-amber-200 break-words').props('role=status')
         elif schedule.get('last_youtube_id'):
             ui.label('이미 연결된 검토본을 유지합니다. 다른 영상으로의 교체는 별도 검토가 필요합니다.').classes('text-xs text-slate-400')
     return refresh

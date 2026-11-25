@@ -1,5 +1,7 @@
 # Project map
 
+`operator_panel.py` previews attachment eligibility from the selected finished video off the UI thread. Both selected-output attachment and episode upload recovery pass the displayed schedule digest and local video/YouTube identity to the scheduler's existing locked write.
+
 `publishing_tab.py` checks upload readiness against the selected report, upload-pending marker and current episode script review. It refreshes from local records on selection, explicit recheck and upload return, then revalidates before entering the existing production service. The upload worker still owns the private upload and exclusive submission claim.
 
 `episode_review_recovery.py` locates finished edits and uploads for a pending Studio episode using the operation audit, `StudioAction` request and typed receipt. It matches scope, saved schedule and script hashes. Edit recovery uses the same `completed_video.py` quality and hash check as Publishing, verifies the matching episode production record, and excludes uncertain or already-uploaded results. `episode_review_recovery_panel.py` explicitly opens the same episode's script and video in the workspace for renewed review. Upload recovery matches the YouTube ID and `pending_video_info` evidence before explicit attachment. The scheduler's normal attachment lock rechecks the schedule and exact video evidence on write.

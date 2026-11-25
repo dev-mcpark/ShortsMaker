@@ -751,7 +751,7 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.render()
         before = self.manager.filename.read_bytes()
         with self.client:
-            self.click('선택 완성본을 이 회차에 연결')
+            await self.click_and_wait('선택 완성본을 이 회차에 연결', 'attach_preview')
             self.assertEqual(self.manager.filename.read_bytes(), before)
             self.click('이 비공개 완성본 연결')
         current = self.manager.get_schedule(self.schedule['id'])
@@ -766,7 +766,7 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.render()
         before=self.manager.filename.read_bytes()
         with self.client, patch.object(operator_panel,'safe_notify') as notify:
-            self.click('선택 완성본을 이 회차에 연결')
+            await self.click_and_wait('선택 완성본을 이 회차에 연결', 'attach_preview')
             dialog=next(e for e in self.client.elements.values() if type(e).__name__=='Dialog')
             db=sqlite3.connect(self.manager.filename.with_name(self.manager.filename.name+'.lock.sqlite3'),isolation_level=None)
             try:
@@ -786,15 +786,63 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.assertNotIn('accepted_at',current)
         self.attached.assert_called_once()
 
+    async def test_attachment_does_not_commit_a_new_upload_seen_only_inside_the_lock(self):
+        self.render()
+        before = self.manager.filename.read_bytes()
+        real_attach = self.manager.record_private_review_copy
+
+        def replace_upload_before_write(*args, **kwargs):
+            report = json.loads(self.report.read_text())
+            report['youtube_id'] = 'replacement_12'
+            self.report.write_text(json.dumps(report))
+            return real_attach(*args, **kwargs)
+
+        with self.client, patch.object(self.manager, 'record_private_review_copy',
+                                       side_effect=replace_upload_before_write):
+            await self.click_and_wait('선택 완성본을 이 회차에 연결', 'attach_preview')
+            self.click('이 비공개 완성본 연결')
+        self.assertEqual(self.manager.filename.read_bytes(), before)
+        self.attached.assert_not_called()
+
+    async def test_unuploaded_selection_explains_next_step_in_the_episode_panel(self):
+        self.saved_edit()
+        root, _ = self.render()
+        before = self.manager.filename.read_bytes()
+        with self.client:
+            await self.click_and_wait('선택 완성본을 이 회차에 연결', 'attach_preview')
+        self.assertIn('완성본·업로드에서 영상과 예약 회차를 확인하세요.', self.text(root))
+        self.assertIn('확인된 YouTube 비공개 업로드 기록이 필요합니다.', self.text(root))
+        self.assertEqual(self.manager.filename.read_bytes(), before)
+
+    async def test_deleted_panel_drops_a_late_attachment_preview(self):
+        root, _ = self.render()
+        entered, release = asyncio.Event(), asyncio.Event()
+        before = self.manager.filename.read_bytes()
+        preview = self.manager.pending_video_info(self.schedule['id'], str(self.video))
+
+        async def delayed_read(_):
+            entered.set()
+            await release.wait()
+            return preview
+
+        with self.client, patch.object(operator_panel.run, 'io_bound', side_effect=delayed_read):
+            task = asyncio.create_task(self.click_and_wait('선택 완성본을 이 회차에 연결', 'attach_preview'))
+            await asyncio.wait_for(entered.wait(), timeout=3)
+            root.clear()
+            release.set()
+            await task
+        self.assertFalse(any(isinstance(e, ui.dialog) for e in self.client.elements.values()))
+        self.assertEqual(self.manager.filename.read_bytes(), before)
+
     async def test_cancelled_or_stale_selection_and_episode_cannot_attach(self):
         self.render()
         before = self.manager.filename.read_bytes()
         with self.client:
-            self.click('선택 완성본을 이 회차에 연결')
+            await self.click_and_wait('선택 완성본을 이 회차에 연결', 'attach_preview')
             self.click('취소')
             self.click('이 비공개 완성본 연결')
             self.assertEqual(before, self.manager.filename.read_bytes())
-            self.click('선택 완성본을 이 회차에 연결')
+            await self.click_and_wait('선택 완성본을 이 회차에 연결', 'attach_preview')
             # Target the new dialog; closed prior dialogs retain widgets until client cleanup.
             confirms = [e for e in self.client.elements.values() if getattr(e, 'text', '') == '이 비공개 완성본 연결']
             confirm = next(e.handler for e in confirms[-1]._event_listeners.values() if e.type == 'click')
@@ -874,7 +922,7 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
             scheduling_tab.render_scheduling_tab(self.state)
             poll = next(call.args[1] for call in timers.call_args_list
                         if call.args[1].__name__ == 'refresh_changed_records')
-            self.click('선택 완성본을 이 회차에 연결')
+            await self.click_and_wait('선택 완성본을 이 회차에 연결', 'attach_preview')
             dialog = next(e for e in self.client.elements.values() if isinstance(e, ui.dialog))
             attach_button = next(e for e in root.descendants() if getattr(e, 'text', '') == '선택 완성본을 이 회차에 연결')
             poll()
@@ -896,7 +944,7 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         with self.client:
             await refresh()
             await asyncio.sleep(0)
-            self.click('선택 완성본을 이 회차에 연결')
+            await self.click_and_wait('선택 완성본을 이 회차에 연결', 'attach_preview')
             self.click('이 비공개 완성본 연결')
         self.assertIn('Studio 직접 실행 일정', self.text(root))
         self.assertEqual(before, set((settings.output_dir / 'evaluation/operating_episodes').iterdir()))
