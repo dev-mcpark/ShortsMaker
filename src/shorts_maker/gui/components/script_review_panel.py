@@ -9,6 +9,7 @@ from shorts_maker.gui.components.common.safe_ui import safe_refresh, safe_notify
 from shorts_maker.planner.script_validator import ScriptValidator
 from shorts_maker.services.openai_budget import chat_reservation_usd
 from shorts_maker.services.openai_models import PRIMARY_CHAT_MODEL
+from shorts_maker.services.revision_validation import read_applied_reassessment
 from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.services.script_reviews import read_script_reviews, read_review_script
 
@@ -25,8 +26,13 @@ def _verdict_label(record):
 def render_script_review_panel(state):
     script = state.script
     key = state.script_editor_key()
+    execution = state.execution_key()
+    scope = dict(state.operating_scope) if state.operating_scope else None
     loading = {'value': False}
     result = {'value': None, 'error': False}
+
+    def current():
+        return not panel.is_deleted and state.script_editor_key() == key and state.execution_key() == execution
 
     @ui.refreshable
     def body():
@@ -39,6 +45,15 @@ def render_script_review_panel(state):
         value = result['value']
         if value is None:
             return
+        if value.get('reassessment_error'):
+            ui.label('사용자 재평가의 원문 기록을 확인할 수 없습니다. 회차와 저장된 요청을 확인하세요.').classes(
+                'text-sm text-amber-200')
+        if reassessment := value.get('reassessment'):
+            with ui.expansion('사용자 재평가에서 대조한 원문', icon='article').classes('w-full min-w-0'):
+                ui.label('현재 대본을 사용자가 재평가해 채택할 때 대조한 발췌입니다.').classes('text-sm')
+                ui.label('채택 사유 · ' + reassessment['note']).classes('text-sm whitespace-pre-wrap break-words')
+                ui.label(f'이전 대본의 모델 미통과 · {reassessment["rejected_score"]}점').classes('text-xs text-slate-300')
+                ui.label(reassessment['excerpt']).classes('text-sm whitespace-pre-wrap break-words')
         if not value['records']:
             ui.label('현재 적용 대본과 정확히 일치하는 모델 검토 기록이 없습니다. 수정 전의 판정을 이어받지 않습니다.').classes(
                 'text-sm text-amber-200')
@@ -62,21 +77,26 @@ def render_script_review_panel(state):
                 ui.label(name).classes('text-xs text-slate-400 break-all')
 
     async def refresh():
-        if loading['value'] or panel.is_deleted or state.script_editor_key() != key:
+        if loading['value'] or not current():
             return
         loading['value'] = True
         result.update(value=None, error=False)
         safe_refresh(body)
         try:
             value = await asyncio.to_thread(read_script_reviews, script)
-            if not panel.is_deleted and state.script_editor_key() == key:
+            if scope and current():
+                try:
+                    value['reassessment'] = await asyncio.to_thread(read_applied_reassessment, scope, script)
+                except (OSError, ValueError, RuntimeError, KeyError, TypeError, RecursionError):
+                    value['reassessment_error'] = True
+            if current():
                 result['value'] = value
         except (OSError, ValueError):
-            if not panel.is_deleted and state.script_editor_key() == key:
+            if current():
                 result['error'] = True
         finally:
             loading['value'] = False
-            if not panel.is_deleted and state.script_editor_key() == key:
+            if current():
                 safe_refresh(body)
 
     def preview():
@@ -116,7 +136,8 @@ def render_script_review_panel(state):
 
     with ui.expansion('현재 대본의 모델 검토 기록', icon='fact_check').classes('w-full mb-4 min-w-0') as panel:
         panel.bind_visibility_from(state, 'script', backward=lambda _: state.script_editor_key() == key)
-        ui.label('현재 적용 대본과 해시가 일치하는 저장 기록만 조회합니다. 미적용 수정은 포함하지 않습니다.').classes('text-xs text-slate-400')
+        ui.label('현재 적용 대본의 모델 기록과 해당 회차의 사용자 재평가 원문을 조회합니다. '
+                 '미적용 수정은 포함하지 않습니다.').classes('text-xs text-slate-400')
         ui.label('모델 판정은 사용자 각본 확인·제외 해제·완성본 채택과 별개입니다. 조회는 무료이며 새 검증을 실행하지 않습니다.').classes('text-xs text-amber-200')
         ui.button('저장된 모델 검토 기록 조회', on_click=refresh).props('flat icon=refresh').classes('min-h-[44px]').bind_enabled_from(
             loading, 'value', backward=lambda value: not value)

@@ -464,6 +464,35 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.assertEqual(self.state.script, corrected)
         self.assertEqual(before, [path.read_bytes() for path in protected])
 
+        from shorts_maker.gui.components.script_review_panel import render_script_review_panel
+        fresh = AppState()
+        fresh.load_scheduled_script(self.manager, self.schedule['id'])
+        schedule_before = self.manager.filename.read_bytes()
+        with self.client, ui.column() as review_view, patch('subprocess.run') as process:
+            refresh = render_script_review_panel(fresh)
+            await refresh()
+            await asyncio.sleep(0)
+            rendered = self.text(review_view)
+            self.assertIn(excerpt, rendered)
+            self.assertIn('채택 사유 · 기사 내용과 수정 대본을 대조했습니다.', rendered)
+            self.assertIn('이전 대본의 모델 미통과 · 62점', rendered)
+            self.assertIn('현재 적용 대본과 정확히 일치하는 모델 검토 기록이 없습니다', rendered)
+            self.assertFalse(fresh.is_script_reviewed())
+            self.assertIsNone(recovery.read_applied_reassessment(
+                fresh.operating_scope, corrected.model_copy(update={'title': '새 편집 초안'})))
+            saved_verdict = verdict.read_bytes()
+            verdict.write_text(json.dumps({'is_valid': True, 'reason': '', 'score': 100, 'feedback': ''}))
+            try:
+                await refresh()
+                await asyncio.sleep(0)
+                self.assertIn('사용자 재평가의 원문 기록을 확인할 수 없습니다', self.text(review_view))
+                self.assertNotIn(excerpt, self.text(review_view))
+            finally:
+                verdict.write_bytes(saved_verdict)
+            process.assert_not_called()
+        self.assertEqual(self.manager.filename.read_bytes(), schedule_before)
+        self.assertEqual(before, [path.read_bytes() for path in protected])
+
     async def test_planning_runs_once_through_navigation_without_replacing_user_work(self):
         self.pending()
         original_script = self.state.script.model_dump_json()

@@ -19,11 +19,14 @@ from shorts_maker.services.openai_models import PRIMARY_CHAT_MODEL
 from shorts_maker.services.operating_budget import episode_environment, episode_path, load_episode
 from shorts_maker.services.operating_status import schedule_sha256
 from shorts_maker.services.production_service import script_sha256
-from shorts_maker.services.script_reviews import read_script_reviews
+from shorts_maker.services.scheduled_script_history import validated_revisions
+from shorts_maker.services.script_reviews import read_exact_review, read_script_reviews
 from shorts_maker.services.script_store import save_script_copy
 from shorts_maker.services.work_drafts import read_work_draft, save_work_draft, script_draft_key
 from shorts_maker.utils.config import PROJECT_ROOT, settings
 from shorts_maker.utils.source_manager import SourceManager
+from shorts_maker.utils.scheduler import ScheduleManager
+from shorts_maker.services.studio_episode_action import EpisodeScope
 
 
 def worker_command(manager, schedule_id, digest):
@@ -223,17 +226,10 @@ def preview_reassessment(manager, expected, candidate):
     stopped = {**schedule, 'last_result': 'music_selection_required'}
     record = _stopped_episode(stopped)
     base = episode_path(record['id'])
-    request_path = base.with_suffix('.revision-request.json')
-    started = request_path.with_suffix('.started')
     if any(os.path.lexists(path) for path in (base.with_suffix('.operation.pending.json'), base.with_suffix('.script.json'))):
         raise ValueError('이전 실행 또는 대본 기록을 먼저 대조하세요.')
-    if (request_path.is_symlink() or not request_path.is_file() or request_path.stat().st_size > 100000
-            or started.is_symlink() or not started.is_file() or started.stat().st_size != 64):
-        raise ValueError('이 회차의 수정 대본 검증 요청·실행 기록을 확인하세요.')
-    raw = request_path.read_bytes()
-    request_sha256 = hashlib.sha256(raw).hexdigest()
-    request = json.loads(raw)
-    if (started.read_text() != request_sha256 or request['episode_id'] != record['id']
+    request, request_sha256 = _started_revision_request(base)
+    if (request['episode_id'] != record['id']
             or request['schedule_sha256'] != schedule_sha256(stopped)):
         raise ValueError('검증 요청과 현재 회차 기록이 일치하지 않습니다.')
     rejected, excerpt = _request_candidate(request, record)
@@ -250,6 +246,55 @@ def preview_reassessment(manager, expected, candidate):
         raise ValueError('완료된 모델 미통과 판정과 원문을 대조해야 합니다.')
     return {'request_sha256': request_sha256, 'review': evidence['records'][0],
             'candidate_sha256': script_draft_key(candidate)}
+
+
+def _started_revision_request(base):
+    request_path = base.with_suffix('.revision-request.json')
+    started = request_path.with_suffix('.started')
+    if (request_path.is_symlink() or not request_path.is_file() or request_path.stat().st_size > 100000
+            or started.is_symlink() or not started.is_file() or started.stat().st_size != 64):
+        raise ValueError('이 회차의 수정 대본 검증 요청·실행 기록을 확인하세요.')
+    raw = request_path.read_bytes()
+    request_sha256 = hashlib.sha256(raw).hexdigest()
+    request = json.loads(raw)
+    if started.read_text() != request_sha256 or not isinstance(request, dict):
+        raise ValueError('저장된 검증 요청과 실행 기록이 일치하지 않습니다.')
+    return request, request_sha256
+
+
+def read_applied_reassessment(scope_data: dict, script: ShortsScript) -> dict | None:
+    """Recover the source behind the exact, owner-adopted revision in the open episode."""
+    scope = EpisodeScope.model_validate(scope_data)
+    manager = ScheduleManager(scope.schedules_file, queue_only=True)
+    schedule = manager.get_schedule(scope.schedule_id)
+    if (not schedule or schedule.get('review_operator') != 'agent'
+            or schedule.get('last_episode_id') != scope.episode_id):
+        raise ValueError('현재 작업실과 예약 회차를 다시 확인하세요.')
+    current = schedule.get('last_script')
+    if not isinstance(current, dict) or script_sha256(current) != script_sha256(script.model_dump(mode='json')):
+        return None
+    history = validated_revisions(current, schedule.get('script_revisions', []))
+    if not history or 'reassessment' not in history[-1]:
+        return None
+    load_episode(scope.episode_id, schedule)
+    decision = history[-1]
+    reassessment = decision['reassessment']
+    if not isinstance(reassessment, dict) or decision.get('review_receipt_sha256') != script_draft_key(script):
+        raise ValueError('원문 대조 이력과 현재 대본이 일치하지 않습니다.')
+    request, digest = _started_revision_request(episode_path(scope.episode_id))
+    model_review = read_exact_review(reassessment.get('model_review_name'), reassessment.get('model_review_sha256'))
+    verdict = model_review['verdict']
+    note = reassessment.get('note')
+    if (digest != reassessment.get('request_sha256') or request.get('episode_id') != scope.episode_id
+            or request.get('source_url') != script.source_url or model_review['script'] != decision['script']
+            or model_review['script'].get('source_url') != script.source_url
+            or model_review['source_excerpt'] != request.get('source_excerpt') or model_review['model'] != request.get('model')
+            or model_review['state'] != 'completed' or verdict['is_valid'] or verdict != reassessment.get('model_verdict')
+            or not isinstance(note, str) or not 1 <= len(note.strip()) <= 500):
+        raise ValueError('원문·이전 모델 판정·수정 대본 이력이 일치하지 않습니다.')
+    if manager.get_schedule(scope.schedule_id) != schedule:
+        raise ValueError('원문 조회 중 예약 회차가 바뀌었습니다.')
+    return {'excerpt': model_review['source_excerpt'], 'note': note, 'rejected_score': verdict['score']}
 
 
 def save_reassessment(manager, expected, candidate, preview, note):
