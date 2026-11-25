@@ -804,6 +804,33 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.assertEqual(self.manager.filename.read_bytes(), before)
         self.attached.assert_not_called()
 
+    async def test_completed_upload_with_retained_claim_can_be_attached_without_removing_claim(self):
+        from shorts_maker.services.episode_review_recovery import recovered_review_copies
+        from shorts_maker.services.production_service import ProductionService
+        from shorts_maker.uploader.youtube_uploader import YouTubeUploader
+
+        upload = YouTubeUploader.build_upload_body({
+            'title': '검토본', 'description': '출처: https://example.com/news', 'contains_synthetic_media': False})
+        cut = json.loads(self.report.read_text())
+        cut.update(youtube_id=None, youtube_upload_request=None, uploaded_at_utc=None)
+        self.report.write_text(json.dumps(cut))
+        marker = ProductionService._claim_upload(str(self.video), cut['video_sha256'], upload)
+        original = marker.read_bytes()
+        with self.assertRaisesRegex(ValueError, '업로드 결과를 먼저 대조'):
+            self.manager.pending_video_info(self.schedule['id'], str(self.video))
+        self.assertIsNotNone(ProductionService()._record_upload(str(self.video), 'private_test_12', upload))
+        self.saved_upload()
+        self.assertEqual(list(recovered_review_copies(self.manager, self.schedule)), [str(self.video)])
+        self.render()
+        with self.client:
+            await self.click_and_wait('선택 완성본을 이 회차에 연결', 'attach_preview')
+            self.click('이 비공개 완성본 연결')
+        current = self.manager.get_schedule(self.schedule['id'])
+        self.assertEqual(current['last_youtube_id'], 'private_test_12')
+        self.assertFalse(current['enabled'])
+        self.assertNotIn('accepted_at', current)
+        self.assertEqual(marker.read_bytes(), original)
+
     async def test_unuploaded_selection_explains_next_step_in_the_episode_panel(self):
         self.saved_edit()
         root, _ = self.render()

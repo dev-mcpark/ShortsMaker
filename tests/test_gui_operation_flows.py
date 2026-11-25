@@ -13,7 +13,8 @@ from unittest.mock import AsyncMock, Mock, patch
 from shorts_maker.gui.components import generation_tab, pipeline_tab, planning_tab, publishing_tab, sources_tab, scheduling_tab
 from shorts_maker.gui.state.app_state import AppState
 from shorts_maker.planner.models import ShortsScript, VideoScene
-from shorts_maker.services.production_service import ProductionProgress, ProductionResult, script_sha256
+from shorts_maker.services.production_service import ProductionProgress, ProductionResult, ProductionService, script_sha256
+from shorts_maker.uploader.youtube_uploader import YouTubeUploader
 from shorts_maker.utils.scheduler import ScheduleManager
 
 
@@ -293,6 +294,35 @@ class CompletedOutputTests(TestCase):
             asyncio.run(button.callback())
         self.assertIn('업로드 결과 대조', notify.call_args.args[0])
         state.get_or_create_service.assert_not_called()
+
+    def test_retained_upload_claim_requires_exact_later_result_before_reuse(self):
+        video, report = self.write_output()
+        metadata = {'title': '검토본', 'contains_synthetic_media': False}
+        upload = YouTubeUploader.build_upload_body(metadata)
+        pending = ProductionService._claim_upload(str(video), report['video_sha256'], upload)
+        marker = json.loads(pending.read_text())
+        service = ProductionService()
+        service._get_uploader = Mock()
+        self.assertIsNotNone(service._record_upload(str(video), 'already_saved', upload))
+        state = AppState(final_video_path=str(video))
+        recorder = self.render(state)
+        self.assertFalse(recorder.find('button', 'YouTube에 비공개 업로드').enabled)
+        self.assertTrue(any('YouTube 검토본 열기' in item.text for item in recorder.elements))
+        with patch('shorts_maker.services.production_service.check_video_quality'):
+            self.assertEqual(asyncio.run(service.upload_to_youtube(str(video), metadata)).youtube_id, 'already_saved')
+            for corruption in ({'video_sha256': 'wrong'}, {'video_path': 'another.mp4'},
+                               {'youtube_upload_request': {}},
+                               {'started_at_utc': '2999-01-01T00:00:00Z'},
+                               {'started_at_utc': '2000-01-01T00:00:00'}):
+                with self.subTest(corruption=corruption):
+                    pending.write_text(json.dumps({**marker, **corruption}))
+                    before = pending.read_bytes()
+                    recorder = self.render(state)
+                    self.assertFalse(recorder.find('button', 'YouTube에 비공개 업로드').enabled)
+                    self.assertFalse(any('YouTube 검토본 열기' in item.text for item in recorder.elements))
+                    self.assertFalse(asyncio.run(service.upload_to_youtube(str(video), metadata)).success)
+                    self.assertEqual(pending.read_bytes(), before)
+        service._get_uploader.assert_not_called()
 
     def set_form(self, recorder, title='게시 초안', disclosure='no'):
         recorder.find('input', '영상 제목').value = title

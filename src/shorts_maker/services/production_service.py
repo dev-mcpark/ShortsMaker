@@ -38,6 +38,7 @@ from shorts_maker.services.raw_review import (
     begin_raw_request, complete_raw_request, retained_raw_request, verified_raw_clip,
 )
 from shorts_maker.services.google_budget import check_google_budget
+from shorts_maker.services.upload_evidence import has_unresolved_upload_claim
 
 
 def _required_source_urls(source_url: str | None, supporting: list[str] | tuple[str, ...] = ()) -> list[str]:
@@ -1087,6 +1088,9 @@ class ProductionService:
                                            video_path=video_path)
 
             if existing_id:
+                if await asyncio.to_thread(has_unresolved_upload_claim, Path(video_path), report, current_hash):
+                    return self._failed_result("이전 업로드 결과가 확인되지 않았습니다. YouTube Studio에서 확인하세요.",
+                                               video_path=video_path)
                 self._update_progress(ProductionPhase.COMPLETED, 100,
                                       f"이미 비공개 업로드됨: {existing_id}")
                 return ProductionResult(

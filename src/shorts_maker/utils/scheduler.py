@@ -696,6 +696,7 @@ class ScheduleManager:
     @staticmethod
     def _verified_review_media(schedule: dict, video_path: str) -> tuple[Path, str, str]:
         from shorts_maker.services.production_service import script_sha256
+        from shorts_maker.services.upload_evidence import has_unresolved_upload_claim
         from shorts_maker.utils.config import settings
 
         if schedule.get('last_episode_id'):
@@ -718,9 +719,6 @@ class ScheduleManager:
                 video_sha256 = hashlib.file_digest(stream, 'sha256').hexdigest()
         except (OSError, TypeError, UnicodeError, ValueError) as error:
             raise ValueError("영상과 제작 기록을 확인할 수 없습니다.") from error
-        upload_pending = video.with_suffix('.upload-pending.json')
-        if upload_pending.exists() or upload_pending.is_symlink():
-            raise ValueError('업로드 결과를 먼저 대조하세요.')
         if (not isinstance(report, dict) or not isinstance(report.get('video_path'), str)
                 or Path(report['video_path']).resolve() != video
                 or not isinstance(schedule.get('last_script'), dict)
@@ -729,6 +727,8 @@ class ScheduleManager:
                 or report.get('quality_passed') is not True
                 or report.get('video_sha256') != video_sha256):
             raise ValueError("저장된 각본·출처·품질·영상 해시가 제작 기록과 일치하지 않습니다.")
+        if has_unresolved_upload_claim(video, report, video_sha256):
+            raise ValueError('업로드 결과를 먼저 대조하세요.')
         video_id = report.get('youtube_id')
         upload = report.get('youtube_upload_request')
         if (not isinstance(video_id, str) or not re.fullmatch(r'[A-Za-z0-9_-]{6,64}', video_id)

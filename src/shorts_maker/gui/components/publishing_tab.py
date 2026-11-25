@@ -12,6 +12,7 @@ from shorts_maker.gui.components.common.card_header import card_with_header
 from shorts_maker.gui.components.common.media_preview import media_sources
 from shorts_maker.gui.components.youtube_connection_panel import render_youtube_connection_panel
 from shorts_maker.services.completed_video import completed_video as _completed_video
+from shorts_maker.services.upload_evidence import has_unresolved_upload_claim
 from shorts_maker.services.production_service import source_credited_description, script_sha256
 from shorts_maker.services.publishing_drafts import (
     publishing_key as _publishing_key, save_publishing_draft, saved_publishing_drafts,
@@ -74,8 +75,7 @@ def _upload_readiness(state: 'AppState', report: dict | None) -> tuple[str, str 
         return '재생하고 검토할 완성본을 먼저 불러오세요.', None
     if report is None:
         return '완성본의 품질 기록을 확인할 수 없습니다. 영상을 다시 불러오세요.', None
-    marker = Path(report['video_path']).with_suffix('.upload-pending.json')
-    if marker.exists() or marker.is_symlink():
+    if has_unresolved_upload_claim(Path(report['video_path']), report, report['video_sha256']):
         return '업로드 결과 대조 필요 · YouTube Studio에서 실제 결과를 먼저 확인하세요.', None
     video_id = report.get('youtube_id')
     if video_id is not None:

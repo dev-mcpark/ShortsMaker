@@ -1,5 +1,7 @@
 # Project map
 
+`services/upload_evidence.py` distinguishes an unresolved upload claim from the same upload's later, exact private result. Publishing, recorded-ID reuse and the scheduler's private-review verifier share the read-only check. The submission code retains ownership of claim creation and removal.
+
 `operator_panel.py` previews attachment eligibility from the selected finished video off the UI thread. Both selected-output attachment and episode upload recovery pass the displayed schedule digest and local video/YouTube identity to the scheduler's existing locked write.
 
 `publishing_tab.py` checks upload readiness against the selected report, upload-pending marker and current episode script review. It refreshes from local records on selection, explicit recheck and upload return, then revalidates before entering the existing production service. The upload worker still owns the private upload and exclusive submission claim.
