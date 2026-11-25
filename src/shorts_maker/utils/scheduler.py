@@ -661,12 +661,25 @@ class ScheduleManager:
                 raise ValueError('일정이 사라졌습니다. 실행 이력을 다시 열어 주세요.')
             return history[index]
 
-    def record_private_review_copy(self, schedule_id: str, video_path: str) -> Dict[str, Any]:
+    def record_private_review_copy(self, schedule_id: str, video_path: str, *,
+                                   expected_schedule_sha256: str | None = None,
+                                   expected_video_info: dict[str, str] | None = None) -> Dict[str, Any]:
         """Attach a matching upload without claiming owner acceptance or re-enabling the next slot."""
+        from shorts_maker.services.operating_status import schedule_sha256
+
         with self._review_transition_lock():
-            _, video, video_hash, video_id = self._verified_pending_video(schedule_id, video_path)
+            schedule, video, video_hash, video_id = self._verified_pending_video(schedule_id, video_path)
+            if (expected_schedule_sha256 is not None
+                    and schedule_sha256(schedule) != expected_schedule_sha256):
+                raise ValueError('회차가 변경됐습니다. 연결할 검토본을 다시 확인하세요.')
+            info = {'video_path': str(video), 'video_sha256': video_hash, 'youtube_id': video_id}
+            if expected_video_info is not None and info != expected_video_info:
+                raise ValueError('영상 또는 업로드 기록이 변경됐습니다.')
+            if self.get_schedule(schedule_id) != schedule:
+                raise ValueError('파일 확인 중 회차가 변경됐습니다.')
             updated = self.update_schedule(schedule_id, {
-                'last_video_path': str(video), 'last_video_sha256': video_hash, 'last_youtube_id': video_id,
+                'last_video_path': info['video_path'], 'last_video_sha256': info['video_sha256'],
+                'last_youtube_id': info['youtube_id'],
             })
             if updated is None:
                 raise ValueError('일정이 사라져 업로드 기록을 연결하지 못했습니다.')

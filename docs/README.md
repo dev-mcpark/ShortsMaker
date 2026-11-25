@@ -1,5 +1,7 @@
 # Project map
 
+`episode_review_recovery.py` locates finished uploads for a pending Studio episode using its existing operation audit, `StudioAction` request and typed upload receipt. It matches scope, saved schedule and script hashes, upload ID and the existing `pending_video_info` evidence. `episode_review_recovery_panel.py` offers explicit attachment without requiring a current workspace video selection. The scheduler's normal attachment lock rechecks the schedule and exact video evidence on write.
+
 `scheduled_planning.py` uses the same minimum visual batch as `ProductionService.full_pipeline`, with the scheduled episode's fixed Lite profile, exchange rate, visual cap and Google batch rounding. The operator panel shows the amount in its read-only confirmation or beneath the planning action if the room is too small. The service rechecks before dispatch, and the worker retains the live budget gate. The estimate covers the base number of new visuals. Script-specific production and individual OpenAI requests retain their actual-input checks.
 
 `services/budget_calendar.py` shares provider calendar time zones with the monthly reservation ledgers. `queue_host_panel.py` projects the month for each verified registered slot and displays any upcoming boundary in KST. The calculation uses the host's validated timestamp and performs no billing lookup, configuration change, or reservation. `test_queue_host_status.py` covers split provider months, summer/winter calendar boundaries and removal of stale previews.

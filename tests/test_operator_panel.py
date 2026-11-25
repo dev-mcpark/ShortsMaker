@@ -4,10 +4,12 @@ import asyncio
 import hashlib
 import json
 import sqlite3
+from dataclasses import asdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, Mock, patch
+from uuid import uuid4
 
 from nicegui import core, ui
 from nicegui.client import Client
@@ -559,6 +561,93 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         with self.client, ui.column() as root:
             refresh = render_operator_panel(self.state, self.manager, self.schedule, self.attached)
         return root, refresh
+
+    def saved_upload(self, *, scope_episode=None, id_in_receipt='private_test_12'):
+        from shorts_maker.services import studio_episode_action as action
+        from shorts_maker.services.operating_status import schedule_sha256
+        from shorts_maker.services.production_service import ProductionResult
+        from shorts_maker.services.work_drafts import script_draft_key
+
+        saved_script = script()
+        request = action.StudioAction(
+            scope=action.EpisodeScope(schedules_file=str(self.manager.filename.resolve()),
+                schedule_id=self.schedule['id'], episode_id=scope_episode or self.episode['id']),
+            operation='upload', schedule_sha256=schedule_sha256(self.schedule),
+            script_sha256=script_sha256(self.schedule['last_script']), review_receipt=script_draft_key(saved_script),
+            mode=self.schedule['mode'], image_model=settings.image_model_id, video_path=str(self.video),
+        )
+        directory = action.action_directory()
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f'{uuid4().hex}.request.json'
+        raw = request.model_dump_json().encode('utf-8')
+        path.write_bytes(raw)
+        digest = hashlib.sha256(raw).hexdigest()
+        result_path = path.with_suffix('.result.json')
+        result_path.write_text(json.dumps({'request_sha256': digest, 'status': 'returned', 'kind': 'production',
+            'value': asdict(ProductionResult(success=True, video_path=str(self.video),
+                                            youtube_id=id_in_receipt, ready_for_upload=True))}))
+        base = episode_path(self.episode['id'])
+        audit = base.with_suffix(f'.operation.{uuid4().hex}.json')
+        command_sha256 = hashlib.sha256(json.dumps(action.worker_command(path, digest)).encode()).hexdigest()
+        audit.write_text(json.dumps({'command_sha256': command_sha256, 'returncode': 0}))
+        return result_path, audit
+
+    async def test_recovered_upload_checks_same_episode_audit_receipt_report_and_pending_state(self):
+        from shorts_maker.services.episode_review_recovery import recovered_review_copies, attach_recovered_review_copy
+
+        self.saved_upload(scope_episode='1' * 32)
+        self.saved_upload(id_in_receipt='different_id')
+        self.assertEqual(recovered_review_copies(self.manager, self.schedule), {})
+        result, audit = self.saved_upload()
+        valid = audit.read_bytes()
+        audit.write_text('{}')
+        self.assertEqual(recovered_review_copies(self.manager, self.schedule), {})
+        audit.write_bytes(valid)
+        copies = recovered_review_copies(self.manager, self.schedule)
+        self.assertEqual(list(copies), [str(self.video)])
+        before = self.manager.filename.read_bytes()
+        valid = result.read_bytes()
+        result.write_text('{}')
+        with self.assertRaisesRegex(ValueError, '업로드 기록이 변경'):
+            attach_recovered_review_copy(self.manager, self.schedule, copies[str(self.video)])
+        result.write_bytes(valid)
+        pending = episode_path(self.episode['id']).with_suffix('.operation.pending.json')
+        pending.symlink_to(pending.with_name('missing'))
+        with self.assertRaisesRegex(ValueError, '실행 결과'):
+            recovered_review_copies(self.manager, self.schedule)
+        pending.unlink()
+        pending = self.video.with_suffix('.upload-pending.json')
+        pending.symlink_to(pending.with_name('missing'))
+        self.assertEqual(recovered_review_copies(self.manager, self.schedule), {})
+        self.assertEqual(self.manager.filename.read_bytes(), before)
+
+    async def test_recovered_upload_can_attach_explicitly_with_no_current_video_selection(self):
+        self.state.final_video_path = None
+        self.saved_upload()
+        protected = [self.video, self.report, episode_path(self.episode['id']),
+                     google_budget._database_path(), openai_budget._database_path()]
+        before = [path.read_bytes() for path in protected]
+        self.render()
+        schedule_bytes = self.manager.filename.read_bytes()
+        with self.client, patch('subprocess.run') as process:
+            await self.click_and_wait('이 회차의 업로드한 검토본 찾기', 'find_copies')
+            chooser = next(e for e in self.client.elements.values() if e._props.get('label') == '완료된 검토본')
+            self.assertIsNone(chooser.value)
+            chooser.value = str(self.video)
+            self.click('닫기')
+            self.assertEqual(self.manager.filename.read_bytes(), schedule_bytes)
+            await self.click_and_wait('이 회차의 업로드한 검토본 찾기', 'find_copies')
+            chooser = next(e for e in self.client.elements.values() if e._props.get('label') == '완료된 검토본')
+            chooser.value = str(self.video)
+            await self.click_and_wait('선택한 저장 검토본 연결', 'attach')
+            process.assert_not_called()
+        current = self.manager.get_schedule(self.schedule['id'])
+        self.assertEqual(current['last_youtube_id'], 'private_test_12')
+        self.assertFalse(current['enabled'])
+        self.assertEqual(current['last_result'], 'script_review_pending')
+        self.assertNotIn('accepted_at', current)
+        self.assertIsNone(self.state.final_video_path)
+        self.assertEqual([path.read_bytes() for path in protected], before)
 
     def click(self, text):
         button = next(e for e in self.client.elements.values() if getattr(e, 'text', '') == text)

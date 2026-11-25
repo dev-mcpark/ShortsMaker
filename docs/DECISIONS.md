@@ -1293,3 +1293,7 @@ Share provider time zones between reservations and the queue panel. Display the 
 ## 2026-11-25 — Show the worker's minimum visual estimate before paid planning
 
 Use the shared minimum batch and Google request-rounding calculation for the Studio preview and the production guard. The scheduled preview uses the episode's visual profile, conversion rate and cap. Leave exact pricing for first frames, a reviewed scene plan and narration to the corresponding production steps. Retain the current-balance check before the fixed planning child starts.
+
+## 2026-11-25 — Recover a scoped upload using its completed local evidence
+
+Find the review copy from the exact episode's completed command audit, upload request and typed receipt. Confirm its identity with the production report and video, then use the existing explicit attachment transition. A new workspace can complete the connection while the episode stays pending editorial review. Legacy and independently uploaded copies continue through explicit file selection.

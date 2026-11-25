@@ -7,6 +7,7 @@ from pathlib import Path
 from nicegui import run, ui
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
+from shorts_maker.gui.components.episode_review_recovery_panel import render_episode_review_recovery
 from shorts_maker.gui.components.scheduled_run_view import STOP_GUIDANCE
 from shorts_maker.gui.components.work_drafts_panel import render_episode_writer_draft
 from shorts_maker.services.operating_budget import episode_path, load_episode
@@ -451,6 +452,8 @@ def render_operator_panel(state, manager, schedule, on_attached):
             planning_check.set_visibility(False)
         if schedule.get('last_result') == 'script_review_pending' and not schedule.get('last_youtube_id') and not schedule.get('enabled'):
             if not schedule.get('last_video_path'):
+                if schedule.get('review_operator') == 'agent' and schedule.get('last_episode_id'):
+                    render_episode_review_recovery(state, manager, schedule, on_attached)
                 ui.label('작업실에서 대본을 수정·적용·확인했다면 이 회차에도 수정본을 저장하세요.').classes('text-xs text-slate-300')
                 ui.button('확인한 수정 대본을 회차에 저장', on_click=revision_preview).props('flat icon=save').style('min-height:44px').bind_enabled_from(
                     state, 'is_busy', lambda busy: not busy and state.is_script_reviewed() and not state.has_unapplied_script_draft())
