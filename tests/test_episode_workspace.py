@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import asdict
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
@@ -294,16 +295,22 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
         self.assertFalse(self.pending.exists())
 
     async def test_real_cli_child_transports_scoped_action_with_offline_provider_only(self):
-        _, path, digest = self.request(getattr(self, '_transport_operation', 'frame'), narration_budget_usd=.002)
+        await self.exercise_scoped_transport('frame')
+
+    async def exercise_scoped_transport(self, operation, *, new_openings=False):
         hooks = self.root / 'hooks';hooks.mkdir()
         (hooks / 'sitecustomize.py').write_text('''import os
+from decimal import Decimal
 from pathlib import Path
 from shorts_maker.utils.config import settings
 from shorts_maker.services import google_budget, openai_budget
 from shorts_maker.services.production_service import ProductionService
 settings.output_dir=Path(os.environ['STUDIO_TEST_OUTPUT'])
-settings.google_budget_month=google_budget._period();settings.google_budget_opening_krw=0
-settings.openai_budget_month=openai_budget._period();settings.openai_budget_opening_usd=0
+new_openings=os.environ.get('STUDIO_TEST_NEW_OPENINGS')=='yes'
+settings.google_budget_month='2000-01' if new_openings else google_budget._period()
+settings.openai_budget_month='2000-01' if new_openings else openai_budget._period()
+settings.google_budget_opening_krw=0
+settings.openai_budget_opening_usd=0
 settings.google_monthly_budget_krw=int(os.getenv('GOOGLE_MONTHLY_BUDGET_KRW','10000'))
 settings.openai_monthly_budget_usd=float(os.getenv('OPENAI_MONTHLY_BUDGET_USD','1'))
 settings.openai_api_key='';settings.gcp_project_id='offline-fixture'
@@ -314,7 +321,19 @@ for method in ('produce_video','generate_script','regenerate_script','generate_r
 async def frame(self,script,scene_index,**kwargs):
  assert os.environ['SHORTSMAKER_EPISODE_ID']
  assert settings.veo_model_id=='veo-3.1-lite-generate-001'
- assert settings.google_monthly_budget_krw<=3000 and settings.openai_monthly_budget_usd<=.3
+ if new_openings:
+  assert google_budget.budget_status()['opening_krw']==9000
+  assert openai_budget.budget_status()['opening_usd']==.88
+  try:
+   openai_budget._reserve('fixture over cap',Decimal('.13'))
+  except openai_budget.OpenAIBudgetExceeded:
+   pass
+  else:
+   raise AssertionError('Worker accepted a reservation above the new monthly room')
+  hold=google_budget.reserve_google_output('image',settings.image_model_id)
+  assert google_budget.mark_google_result(hold,'failed')
+ else:
+  assert settings.google_monthly_budget_krw<=3000 and settings.openai_monthly_budget_usd<=.3
  output=settings.output_dir/'offline-transport.png';output.write_bytes(b'mocked image, not paid media')
  return str(output)
 ProductionService.generate_first_frame=frame
@@ -326,13 +345,24 @@ async def narration(self,script,**kwargs):
  return str(output)
 ProductionService.prepare_narration=narration
 ''')
+        env = {'PYTHONPATH': str(hooks), 'STUDIO_TEST_OUTPUT': str(settings.output_dir),
+               'GOOGLE_MONTHLY_BUDGET_KRW': '10000', 'OPENAI_MONTHLY_BUDGET_USD': '1'}
+        if new_openings:
+            self.state.confirm_script_review()
+            service = self.state.new_production_service()
+            with patch.dict(os.environ, {**env, 'STUDIO_TEST_NEW_OPENINGS': 'yes'}):
+                result = await asyncio.wait_for(
+                    service.generate_first_frame(self.script, 0, request_budget_usd=.10), 20)
+            self.assertTrue(Path(result).is_file())
+            self.assertFalse(self.pending.exists())
+            return
+        _, path, digest = self.request(operation, narration_budget_usd=.002)
         command = [sys.executable, str(Path('scripts/operate_schedule.py').resolve()), '--schedules',
             str(self.manager.filename), 'run', '--studio-request', str(path), '--request-sha256', digest,
             self.schedule['id'], '--', sys.executable, '-m', 'shorts_maker.services.studio_episode_action', str(path), digest]
         before = google_budget._database_path().read_bytes(), openai_budget._database_path().read_bytes()
-        env = {**os.environ, 'PYTHONPATH': str(hooks), 'STUDIO_TEST_OUTPUT': str(settings.output_dir),
-               'GOOGLE_MONTHLY_BUDGET_KRW': '10000', 'OPENAI_MONTHLY_BUDGET_USD': '1'}
-        result = await asyncio.to_thread(subprocess.run, command, env=env, capture_output=True, text=True, timeout=20)
+        result = await asyncio.to_thread(subprocess.run, command, env={**os.environ, **env},
+                                         capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr)
         receipt = action.validate_receipt(path, digest)
         self.assertEqual(receipt['kind'], 'path', receipt)
@@ -341,8 +371,23 @@ ProductionService.prepare_narration=narration
         self.assertEqual(before, (google_budget._database_path().read_bytes(), openai_budget._database_path().read_bytes()))
 
     async def test_real_cli_child_transports_narration_action_with_existing_episode_caps(self):
-        self._transport_operation = 'narration'
-        await self.test_real_cli_child_transports_scoped_action_with_offline_provider_only()
+        await self.exercise_scoped_transport('narration')
+
+    async def test_studio_dispatch_uses_saved_month_openings_in_the_scoped_child(self):
+        protected = self.manager.filename, episode_path(self.record['id'])
+        before = [path.read_bytes() for path in protected]
+        with patch.object(settings, 'google_budget_month', '2000-01'), patch.object(
+                settings, 'openai_budget_month', '2000-01'):
+            google_budget.record_google_opening(google_budget._period(), 9000, 'fixture monthly statement')
+            openai_budget.record_openai_opening(openai_budget._period(), Decimal('.88'), 'fixture monthly statement')
+            await self.exercise_scoped_transport('frame', new_openings=True)
+            google = google_budget.budget_status()
+            self.assertGreater(google['local_reserved_krw'], 0)
+            self.assertEqual(google['requests_by_status']['failed']['requests'], 1)
+            self.assertEqual(openai_budget.budget_status()['local_reserved_usd'], 0)
+            _, costs = episode_environment(self.record)
+            self.assertEqual(costs['google_new_reserved_krw'], google['local_reserved_krw'])
+        self.assertEqual([path.read_bytes() for path in protected], before)
 
     async def test_scoped_narration_dispatch_uses_distinct_zero_cap_and_requires_typed_path_receipt(self):
         self.state.confirm_script_review()
