@@ -335,12 +335,28 @@ class OperatingHandoffTests(unittest.TestCase):
         before = self.manager.filename.read_bytes()
         with patch.object(settings, 'paid_production_enabled', True):
             room = scheduled_planning.planning_preflight(self.manager, expected)
-            self.assertEqual(room, {'google_remaining_krw': 3000, 'openai_remaining_usd': .30})
+            self.assertEqual(room, {'google_remaining_krw': 3000, 'openai_remaining_usd': .30,
+                                    'minimum_visual_scenes': 5, 'minimum_visual_reservation_krw': 636})
             self.assertNotIn('last_episode_id', self.manager.get_schedule(expected['id']))
             self.manager.update_schedule(expected['id'], {'name': 'changed since preview'})
             with self.assertRaises(ValueError):
                 scheduled_planning.planning_preflight(self.manager, expected)
         self.assertNotEqual(before, self.manager.filename.read_bytes())
+
+    def test_positive_google_balance_below_minimum_blocks_planning_before_child_or_episode(self):
+        expected = self.pending_schedule()
+        expected = self.manager.update_schedule(expected['id'], {'mode': 'video'})
+        before = self.manager.filename.read_bytes()
+        ledgers = [google_budget._database_path(), openai_budget._database_path()]
+        ledger_bytes = [path.read_bytes() for path in ledgers]
+        with patch.object(settings, 'paid_production_enabled', True), patch.object(
+                settings, 'google_budget_opening_krw', 8000), patch.object(
+                scheduled_planning.subprocess, 'run') as child:
+            with self.assertRaisesRegex(ValueError, '₩2,404.*₩2,000'):
+                asyncio.run(scheduled_planning.plan_pending_schedule(self.manager, expected))
+            child.assert_not_called()
+        self.assertEqual(self.manager.filename.read_bytes(), before)
+        self.assertEqual(ledger_bytes, [path.read_bytes() for path in ledgers])
 
     def test_studio_planning_runs_only_fixed_existing_scoped_command(self):
         from test_gui_creation_flows import script

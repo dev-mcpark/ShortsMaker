@@ -5,10 +5,12 @@ import subprocess
 import sys
 
 from shorts_maker.planner.models import ShortsScript
+from shorts_maker.planner.script_planner import ScriptPlanner
 from shorts_maker.services import google_budget, openai_budget
-from shorts_maker.services.operating_budget import default_episode_caps
+from shorts_maker.services.operating_budget import default_episode_caps, episode_video_spec, episode_visual_limits
 from shorts_maker.services.operating_status import operator_status, schedule_sha256
-from shorts_maker.utils.config import PROJECT_ROOT
+from shorts_maker.services.visual_cost import minimum_planning_visuals
+from shorts_maker.utils.config import PROJECT_ROOT, settings
 from shorts_maker.utils.logger import get_logger
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 
@@ -41,6 +43,20 @@ def planning_preflight(manager, expected: dict) -> dict:
         room[f'{provider}_{amount}'] = min(snapshot[amount], caps[f'{provider}_{amount}'])
     if room['google_remaining_krw'] <= 0 or room['openai_remaining_usd'] <= 0:
         raise ValueError('이 회차의 남은 제작 예산을 확인하세요.')
+    mode = current.get('mode', 'image')
+    model, seconds = episode_video_spec(mode)
+    cost, count = minimum_planning_visuals(
+        mode, ScriptPlanner.MIN_SCENES, image_model=settings.image_model_id,
+        video_model=model, video_seconds=seconds, video_attempts=1,
+    )
+    rate, visual_cap = episode_visual_limits(caps['google_remaining_krw'])
+    minimum_krw = google_budget.google_batch_reservation_krw(cost, count, usd_krw_rate=rate)
+    if cost > visual_cap or minimum_krw > room['google_remaining_krw']:
+        raise ValueError(f'최소 {ScriptPlanner.MIN_SCENES}장면의 신규 비주얼 예약에 ₩{minimum_krw:,}가 필요합니다. '
+                         f'Google 월·회차 잔여 상한은 ₩{room["google_remaining_krw"]:,}이며 '
+                         f'이 회차의 비주얼 상한은 ${visual_cap:.2f}입니다.')
+    room['minimum_visual_scenes'] = ScriptPlanner.MIN_SCENES
+    room['minimum_visual_reservation_krw'] = minimum_krw
     return room
 
 

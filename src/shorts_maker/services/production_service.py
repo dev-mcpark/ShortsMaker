@@ -31,7 +31,7 @@ from shorts_maker.utils.character_overlay import CharacterOverlayConfig
 from shorts_maker.utils.config import settings
 from shorts_maker.utils.source_manager import SourceManager
 from shorts_maker.editor.quality_check import check_video_quality
-from shorts_maker.services.visual_cost import estimated_scene_cost, scene_mode
+from shorts_maker.services.visual_cost import estimated_scene_cost, minimum_planning_visuals, scene_mode
 from shorts_maker.services.openai_models import ModelMigrationRequired, require_production_models_active
 from shorts_maker.services.visual_review import verified_first_frame
 from shorts_maker.services.raw_review import (
@@ -1223,22 +1223,12 @@ class ProductionService:
                     return self._failed_result(str(error))
                 # shortcut: future cache hits are unknown; use approved_script to reuse existing visuals.
                 try:
-                    if self.mode == "hybrid":
-                        minimum_cost = (
-                            self.max_veo_attempts * estimated_scene_cost(
-                                "video", settings.veo_model_id, settings.hybrid_veo_duration_seconds)
-                            + (ScriptPlanner.MIN_SCENES - 1) * estimated_scene_cost(
-                                "image", settings.image_model_id)
-                        )
-                        request_count = self.max_veo_attempts + ScriptPlanner.MIN_SCENES - 1
-                    else:
-                        mode = self.mode
-                        attempts = self.max_veo_attempts if mode == "video" else 1
-                        duration = settings.veo_duration_seconds if mode == "video" else 0
-                        model = settings.veo_model_id if mode == "video" else settings.image_model_id
-                        minimum_cost = (ScriptPlanner.MIN_SCENES * attempts
-                                        * estimated_scene_cost(mode, model, duration))
-                        request_count = ScriptPlanner.MIN_SCENES * attempts
+                    minimum_cost, request_count = minimum_planning_visuals(
+                        self.mode, ScriptPlanner.MIN_SCENES, image_model=settings.image_model_id,
+                        video_model=settings.veo_model_id, video_attempts=self.max_veo_attempts,
+                        video_seconds=(settings.hybrid_veo_duration_seconds if self.mode == "hybrid"
+                                       else settings.veo_duration_seconds),
+                    )
                     if minimum_cost > settings.max_visual_cost_usd:
                         return self._failed_result(
                             f"VISUAL_COST_CAP_EXCEEDED: 자동 대본의 {ScriptPlanner.MIN_SCENES}장면 기준 "

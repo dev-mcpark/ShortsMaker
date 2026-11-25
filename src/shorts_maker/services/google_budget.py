@@ -31,11 +31,12 @@ def _period() -> str:
     return datetime.now(GOOGLE_BUDGET_TIMEZONE).strftime("%Y-%m")
 
 
-def _reserve_krw(estimated_usd: float) -> int:
+def _reserve_krw(estimated_usd: float, *, usd_krw_rate: float | None = None) -> int:
     amount = Decimal(str(estimated_usd))
     if not amount.is_finite() or amount < 0:
         raise ValueError("Google 비용 추정액은 0 이상의 유한한 값이어야 합니다.")
-    return int((amount * Decimal(str(settings.google_usd_krw_rate))).to_integral_value(rounding=ROUND_CEILING))
+    rate = settings.google_usd_krw_rate if usd_krw_rate is None else usd_krw_rate
+    return int((amount * Decimal(str(rate))).to_integral_value(rounding=ROUND_CEILING))
 
 
 def _budget_period() -> str | None:
@@ -87,18 +88,26 @@ def _check(db: sqlite3.Connection, period: str, additional_krw: int) -> int:
     return used
 
 
-def check_google_budget(estimated_usd: float, request_count: int = 1) -> None:
-    """Preflight a batch before narration; each actual request reserves atomically later."""
+def google_batch_reservation_krw(estimated_usd: float, request_count: int, *,
+                                usd_krw_rate: float | None = None) -> int:
+    """Reserve conservatively for per-request won rounding."""
     if not math.isfinite(estimated_usd) or estimated_usd < 0:
         raise ValueError("Google 비용 추정액은 0 이상의 유한한 값이어야 합니다.")
     if not isinstance(request_count, int) or isinstance(request_count, bool) or request_count < 1:
         raise ValueError("Google 요청 수는 1 이상이어야 합니다.")
-    if estimated_usd == 0:
+    if not estimated_usd:
+        return 0
+    return _reserve_krw(estimated_usd, usd_krw_rate=usd_krw_rate) + request_count - 1
+
+
+def check_google_budget(estimated_usd: float, request_count: int = 1) -> None:
+    """Preflight a batch before narration; each actual request reserves atomically later."""
+    amount = google_batch_reservation_krw(estimated_usd, request_count)
+    if not amount:
         return
     period = _budget_period()
     if period is None:
         return
-    amount = _reserve_krw(estimated_usd) + request_count - 1
     try:
         with closing(_connect_existing()) as db:
             _check(db, period, amount)

@@ -132,7 +132,11 @@ def render_operator_panel(state, manager, schedule, on_attached):
             ui.label(f'선택 기사 · {source}' if source else '소재 선택 · RSS 자동 발견').classes('text-sm break-all')
             ui.label('소재 분석·각본·검증에 OpenAI 비용이 발생합니다. 음성·이미지·영상 제작과 업로드는 실행하지 않습니다.').classes('text-sm text-slate-300')
             ui.label(f'월·회차 중 작은 잔여 상한: Google ₩{room["google_remaining_krw"]:,} · OpenAI ${room["openai_remaining_usd"]:.6f}').classes('text-sm text-teal-200')
-            ui.label('이 금액은 요청 예상가가 아닙니다. 기존 회차 기준·예약을 보존하고 각 요청 전 예약 추정액을 검사합니다. 서버에 저장된 API 설정으로 실행합니다.').classes('text-xs text-slate-400')
+            ui.label(f'최소 {room["minimum_visual_scenes"]}장면 신규 비주얼 예약 추정 · '
+                     f'₩{room["minimum_visual_reservation_krw"]:,}').classes('text-sm text-slate-300')
+            ui.label('이 화면의 신규 비주얼 추정은 기본 장면 구성에 대한 금액입니다. '
+                     '각본에 맞춘 첫 프레임·장면·음성의 예약액은 제작 단계에서 확인합니다.').classes('text-xs text-slate-400')
+            ui.label('OpenAI 기획은 실제 기사·응답에 맞춰 각 요청 직전에 예약액을 계산합니다.').classes('text-xs text-slate-400')
             ui.label('업로드 인증이 만료됐다면 기획 비용을 쓰기 전에 멈춥니다. 중단된 실행을 자동으로 다시 제출하지 않습니다.').classes('text-xs text-slate-400')
 
             async def confirm():

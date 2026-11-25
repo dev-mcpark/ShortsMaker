@@ -233,6 +233,8 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
             await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
             self.assertEqual(self.manager.filename.read_bytes(), before)
             self.assertIn('OpenAI $0.300000', '\n'.join(getattr(e, 'text', '') for e in self.client.elements.values()))
+            self.assertIn('최소 5장면 신규 비주얼 예약 추정', '\n'.join(
+                getattr(e, 'text', '') for e in self.client.elements.values()))
             self.click('취소')
             await self.click_and_wait('이 회차 기획 실행', 'confirm')
             plan.assert_not_awaited()
@@ -278,7 +280,8 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         async def delayed_check(*args):
             entered.set()
             await release.wait()
-            return {'google_remaining_krw': 3000, 'openai_remaining_usd': .3}
+            return {'google_remaining_krw': 3000, 'openai_remaining_usd': .3,
+                    'minimum_visual_scenes': 5, 'minimum_visual_reservation_krw': 636}
 
         with self.client, patch.object(operator_panel.run, 'io_bound', side_effect=delayed_check) as check:
             before = asyncio.all_tasks()
@@ -317,6 +320,25 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
             plan.assert_not_awaited()
         self.assertEqual(before, self.manager.filename.read_bytes())
         self.assertEqual(ledger_bytes, [path.read_bytes() for path in ledgers])
+
+    async def test_planning_dialog_explains_minimum_visual_shortfall_and_recovers_on_recheck(self):
+        self.pending()
+        self.schedule = self.manager.update_schedule(self.schedule['id'], {'mode': 'video'})
+        root, _ = self.render()
+        before = self.manager.filename.read_bytes()
+        with self.client, patch.object(operator_panel, 'plan_pending_schedule', new_callable=AsyncMock) as plan:
+            with patch.object(settings, 'google_budget_opening_krw', 8000):
+                await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
+                self.assertIn('₩2,404가 필요합니다', self.text(root))
+                self.assertIn('₩2,000', self.text(root))
+                self.assertFalse(any(getattr(e, 'text', '') == '이 회차 기획 실행'
+                                     for e in self.client.elements.values()))
+            await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
+            self.assertNotIn('₩2,404가 필요합니다', self.text(root))
+            self.assertIn('₩2,404', self.text(root))
+            self.click('취소')
+            plan.assert_not_awaited()
+        self.assertEqual(self.manager.filename.read_bytes(), before)
 
     async def test_music_stop_can_prepare_its_saved_source_in_studio_without_a_paid_request(self):
         from shorts_maker.services.audio_choices import save_audio_choices

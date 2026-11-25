@@ -1289,3 +1289,7 @@ Keep the recurring RSS configuration as the default. Allow the owner to save an 
 ## 2026-11-24 — Preview each provider's month from a verified slot
 
 Share provider time zones between reservations and the queue panel. Display the two months at the verified slot and any upcoming month boundary in the owner's time zone. The actual budget gate continues to use the current provider month at execution and the verified opening usage.
+
+## 2026-11-25 — Show the worker's minimum visual estimate before paid planning
+
+Use the shared minimum batch and Google request-rounding calculation for the Studio preview and the production guard. The scheduled preview uses the episode's visual profile, conversion rate and cap. Leave exact pricing for first frames, a reviewed scene plan and narration to the corresponding production steps. Retain the current-balance check before the fixed planning child starts.

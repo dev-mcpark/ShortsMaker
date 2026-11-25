@@ -27,3 +27,17 @@ def estimated_scene_cost(mode: str, model_id: str, duration_seconds: int = 0) ->
     if prices is None or model_id not in prices:
         raise ValueError(f"비용을 알 수 없는 비주얼 모델입니다: {model_id}")
     return prices[model_id] * (duration_seconds if mode == "video" else 1)
+
+
+def minimum_planning_visuals(mode: str, scene_count: int, *, image_model: str,
+                            video_model: str, video_seconds: int, video_attempts: int) -> tuple[float, int]:
+    """Estimate the minimum new visual batch before the planner knows the script."""
+    if mode == "hybrid":
+        images = scene_count - 1
+        image_usd = estimated_scene_cost("image", image_model)
+        video_usd = estimated_scene_cost("video", video_model, video_seconds)
+        return video_attempts * video_usd + images * image_usd, video_attempts + images
+    if mode == "video":
+        requests = scene_count * video_attempts
+        return requests * estimated_scene_cost(mode, video_model, video_seconds), requests
+    return scene_count * estimated_scene_cost(mode, image_model), scene_count
