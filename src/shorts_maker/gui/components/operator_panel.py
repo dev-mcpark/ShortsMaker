@@ -6,7 +6,9 @@ from pathlib import Path
 from nicegui import run, ui
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
-from shorts_maker.gui.components.episode_review_recovery_panel import render_episode_review_recovery
+from shorts_maker.gui.components.episode_review_recovery_panel import (
+    render_episode_review_recovery, render_pending_upload_recovery,
+)
 from shorts_maker.gui.components.scheduled_run_view import STOP_GUIDANCE
 from shorts_maker.gui.components.work_drafts_panel import render_episode_writer_draft
 from shorts_maker.services.operating_budget import episode_path, load_episode
@@ -333,6 +335,9 @@ def render_operator_panel(state, manager, schedule, on_attached):
             ui.label('아직 회차 장부가 없습니다. 실제 예약 대기 항목에서만 회차를 시작합니다.').classes('text-xs text-slate-400')
         if data.get('operation_pending_unverified'):
             ui.label('실행 결과 대조 필요 · 요청 기록을 확인하기 전 재실행·연결을 중단합니다.').classes('text-xs text-amber-200')
+            if (schedule.get('review_operator') == 'agent' and schedule.get('last_result') == 'script_review_pending'
+                    and not schedule.get('enabled') and not schedule.get('last_youtube_id') and not schedule.get('last_video_path')):
+                render_pending_upload_recovery(state, manager, schedule, refresh)
         elif stop:
             ui.label(stop[1]).classes('text-sm text-slate-300 break-words')
         if 'budget_error' in data:

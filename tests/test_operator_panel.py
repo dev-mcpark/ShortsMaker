@@ -3,7 +3,9 @@
 import asyncio
 import hashlib
 import json
+import os
 import sqlite3
+import sys
 from dataclasses import asdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -830,6 +832,69 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.assertFalse(current['enabled'])
         self.assertNotIn('accepted_at', current)
         self.assertEqual(marker.read_bytes(), original)
+
+    async def test_exited_upload_can_preserve_pending_bytes_in_history_without_attachment(self):
+        result_path, audit = self.saved_upload()
+        exited = await asyncio.create_subprocess_exec(sys.executable, '-c', 'pass')
+        self.assertEqual(await exited.wait(), 0)
+        pending = episode_path(self.episode['id']).with_suffix('.operation.pending.json')
+        record = {**json.loads(audit.read_text()), 'studio_parent_pid': exited.pid}
+        pending.write_text(json.dumps(record))
+        audit.unlink()
+        before_files = [self.manager.filename, self.video, self.report, result_path,
+                        google_budget._database_path(), openai_budget._database_path()]
+        before = [path.read_bytes() for path in before_files]
+        pending_bytes = pending.read_bytes()
+        root, refresh = self.render()
+        with self.client:
+            await refresh()
+            await asyncio.sleep(0)
+            await self.click_and_wait('완료된 업로드 기록 대조', 'preview')
+            self.assertEqual(pending.read_bytes(), pending_bytes)
+            self.click('닫기')
+            self.assertEqual(pending.read_bytes(), pending_bytes)
+            await self.click_and_wait('완료된 업로드 기록 대조', 'preview')
+            await self.click_and_wait('이 실행 기록 보관', 'archive')
+            await asyncio.sleep(0)
+        self.assertFalse(pending.exists())
+        base = episode_path(self.episode['id'])
+        retained, = base.parent.glob(f'{base.stem}.operation.*.json')
+        self.assertEqual(retained.read_bytes(), pending_bytes)
+        self.assertEqual([path.read_bytes() for path in before_files], before)
+        self.assertNotIn('실행 결과 대조 필요', self.text(root))
+        self.attached.assert_not_called()
+        from shorts_maker.services.episode_review_recovery import recovered_review_copies
+        self.assertEqual(list(recovered_review_copies(self.manager, self.schedule)), [str(self.video)])
+
+    async def test_pending_recovery_requires_exit_receipt_and_rechecks_the_displayed_video(self):
+        from shorts_maker.services.episode_review_recovery import archive_reaped_upload, preview_reaped_upload
+
+        result_path, audit = self.saved_upload()
+        pending = episode_path(self.episode['id']).with_suffix('.operation.pending.json')
+        record = json.loads(audit.read_text())
+        audit.unlink()
+        pending.write_text(json.dumps(record))
+        with self.assertRaisesRegex(ValueError, '정상 종료한'):
+            preview_reaped_upload(self.manager, self.schedule)
+        pending.write_text(json.dumps({**record, 'studio_parent_pid': os.getpid()}))
+        with self.assertRaisesRegex(ValueError, '프로세스가 종료'):
+            preview_reaped_upload(self.manager, self.schedule)
+        exited = await asyncio.create_subprocess_exec(sys.executable, '-c', 'pass')
+        await exited.wait()
+        pending.write_text(json.dumps({**record, 'studio_parent_pid': exited.pid}))
+        before = pending.read_bytes()
+        result = result_path.read_bytes()
+        result_path.write_text('{}')
+        with self.assertRaisesRegex(ValueError, '요청·업로드 결과·영상'):
+            preview_reaped_upload(self.manager, self.schedule)
+        result_path.write_bytes(result)
+        proof = preview_reaped_upload(self.manager, self.schedule)
+        sidecar = json.loads(self.report.read_text())
+        sidecar['youtube_id'] = 'another_upload'
+        self.report.write_text(json.dumps(sidecar))
+        with self.assertRaises(ValueError):
+            archive_reaped_upload(self.manager, self.schedule, proof)
+        self.assertEqual(pending.read_bytes(), before)
 
     async def test_unuploaded_selection_explains_next_step_in_the_episode_panel(self):
         self.saved_edit()

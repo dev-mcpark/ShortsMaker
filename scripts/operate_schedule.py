@@ -67,6 +67,8 @@ def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedu
         env, status = episode_environment(record)
         path = episode_path(record['id']).with_suffix('.operation.pending.json')
         audit = {'command_sha256': hashlib.sha256(json.dumps(command).encode()).hexdigest(), 'status': status}
+        if studio_request is not None:
+            audit['studio_parent_pid'] = os.getpid()
         with path.open('x') as file:
             json.dump(audit, file)
             file.flush()

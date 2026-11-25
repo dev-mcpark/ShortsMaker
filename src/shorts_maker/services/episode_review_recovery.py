@@ -2,7 +2,11 @@
 
 import hashlib
 import json
+import os
+import re
+import stat
 from pathlib import Path
+from uuid import uuid4
 
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.services.completed_video import completed_video
@@ -33,17 +37,17 @@ def _completed_commands(episode_id: str) -> set[str]:
     return hashes
 
 
-def _recovered_results(manager, expected_schedule, operation, verify_media):
+def _recovered_results(manager, expected_schedule, operation, verify_media, *, reaped_command=None):
     scope = EpisodeScope(schedules_file=str(manager.filename.resolve()), schedule_id=expected_schedule['id'],
                          episode_id=expected_schedule.get('last_episode_id'))
-    current, _ = scope_status(scope)
+    current, _ = scope_status(scope, child=reaped_command is not None)
     if current != expected_schedule:
         raise ValueError('회차 상태가 변경됐습니다. 예약 화면을 다시 확인하세요.')
     expected = schedule_sha256(current)
     script = ShortsScript.model_validate(current['last_script'])
     content_digest = script_sha256(script.model_dump(mode='json'))
     review_digest = script_draft_key(script)
-    commands = _completed_commands(scope.episode_id)
+    commands = {reaped_command} if reaped_command else _completed_commands(scope.episode_id)
     matches = {}
     if not commands:
         return matches
@@ -75,14 +79,68 @@ def _recovered_results(manager, expected_schedule, operation, verify_media):
 
 def recovered_review_copies(manager, expected_schedule: dict) -> dict[str, dict[str, str]]:
     """List confirmed local uploads without switching the current Studio workspace."""
+    return _recovered_uploads(manager, expected_schedule)
+
+
+def _recovered_uploads(manager, expected_schedule, reaped_command=None):
     def verify_media(request, result):
         if (not request.video_path or result.get('video_path') != request.video_path
                 or not result.get('youtube_id')):
             return None
-        info = manager.pending_video_info(request.scope.schedule_id, request.video_path)
+        if reaped_command is None:
+            info = manager.pending_video_info(request.scope.schedule_id, request.video_path)
+        else:
+            video, digest, video_id = manager._verified_uploaded_file(expected_schedule, request.video_path)
+            info = {'video_path': str(video), 'video_sha256': digest, 'youtube_id': video_id}
         return info if info['youtube_id'] == result['youtube_id'] else None
 
-    return _recovered_results(manager, expected_schedule, 'upload', verify_media)
+    return _recovered_results(manager, expected_schedule, 'upload', verify_media, reaped_command=reaped_command)
+
+
+def _reaped_upload_audit(path: Path) -> tuple[str, str]:
+    attributes = path.lstat()
+    limit = 2 * 1024 * 1024
+    if not stat.S_ISREG(attributes.st_mode) or attributes.st_size > limit:
+        raise ValueError('회차 대기 기록을 확인할 수 없습니다.')
+    with path.open('rb') as stream:
+        raw = stream.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError('회차 대기 기록을 확인할 수 없습니다.')
+    audit = json.loads(raw)
+    if not isinstance(audit, dict):
+        raise ValueError('회차 대기 기록을 확인할 수 없습니다.')
+    command, pid = audit.get('command_sha256'), audit.get('studio_parent_pid')
+    if (type(audit.get('returncode')) is not int or audit['returncode'] != 0
+            or type(pid) is not int or not 1 < pid <= 2**31 - 1
+            or not isinstance(command, str) or not re.fullmatch(r'[0-9a-f]{64}', command)):
+        raise ValueError('정상 종료한 Studio 업로드 기록이 없습니다. 실행 결과를 먼저 대조하세요.')
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return hashlib.sha256(raw).hexdigest(), command
+    except PermissionError:
+        pass
+    raise ValueError('업로드를 실행한 프로세스가 종료됐는지 확인할 수 없습니다.')
+
+
+def preview_reaped_upload(manager, schedule) -> tuple[str, dict[str, str]]:
+    pending = episode_path(schedule.get('last_episode_id')).with_suffix('.operation.pending.json')
+    digest, command = _reaped_upload_audit(pending)
+    matches = _recovered_uploads(manager, schedule, reaped_command=command)
+    if len(matches) != 1:
+        raise ValueError('회차의 요청·업로드 결과·영상이 일치하지 않습니다. YouTube Studio에서 결과를 먼저 대조하세요.')
+    if _reaped_upload_audit(pending) != (digest, command):
+        raise ValueError('회차 대기 기록이 조회 중 변경됐습니다.')
+    return digest, next(iter(matches.values()))
+
+
+def archive_reaped_upload(manager, schedule, expected: tuple[str, dict[str, str]]) -> None:
+    """Move a confirmed, exited upload audit to history, leaving approval and attachment separate."""
+    with manager._review_transition_lock():
+        if preview_reaped_upload(manager, schedule) != expected:
+            raise ValueError('회차 대기 기록이나 영상이 변경됐습니다. 다시 확인하세요.')
+        base = episode_path(schedule['last_episode_id'])
+        base.with_suffix('.operation.pending.json').rename(base.with_suffix(f'.operation.{uuid4().hex}.json'))
 
 
 def recovered_episode_edits(manager, expected_schedule: dict) -> dict[str, dict[str, str]]:

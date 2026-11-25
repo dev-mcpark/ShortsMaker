@@ -1301,3 +1301,5 @@ Use the shared minimum batch and Google request-rounding calculation for the Stu
 ## 2026-11-25 — Recover a scoped upload using its completed local evidence
 
 Find the review copy from the exact episode's completed command audit, upload request and typed receipt. Confirm its identity with the production report and video, then use the existing explicit attachment transition. A new workspace can complete the connection while the episode stays pending editorial review. Legacy and independently uploaded copies continue through explicit file selection.
+
+If the Studio launcher stopped before archiving its pending audit, allow the owner to archive the original bytes under the existing scheduler lock. Require a recorded zero exit code from the upload worker, confirmed absence of the recorded launcher PID, the exact request and successful receipt, and matching local private-video evidence. Keep incomplete, PID-less, live or conflicting audits pending. Archiving leaves attachment and owner adoption as separate actions.

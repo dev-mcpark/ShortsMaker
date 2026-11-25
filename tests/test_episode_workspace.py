@@ -209,6 +209,9 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
             with self.assertRaises(FileNotFoundError):
                 run_scoped(self.manager, self.schedule['id'], command, studio_request=path, request_sha256=digest)
             self.assertTrue(self.pending.exists())
+            audit = json.loads(self.pending.read_text())
+            self.assertEqual(audit['studio_parent_pid'], os.getpid())
+            self.assertEqual(audit['returncode'], 0)
         self.assertEqual(before, (self.manager.filename.read_bytes(), episode_path(self.record['id']).read_bytes()))
         self.pending.unlink()  # Only this isolated, zero-provider fixture.
         result_path = path.with_suffix('.result.json')

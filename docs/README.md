@@ -1,5 +1,7 @@
 # Project map
 
+`episode_review_recovery.py` also verifies an interrupted launcher’s pending upload audit when its worker exit and exact private result are already recorded. `episode_review_recovery_panel.py` offers explicit archival under the existing schedule lock before the normal attachment flow. `operate_schedule.py` records the launcher PID for scoped Studio work.
+
 `services/youtube_connection.py` derives a local hint from the saved scope, expiry and token-field presence. `youtube_connection_panel.py` displays the hint and uses the existing auth-only/check subprocess for an explicit authorization check or reconnect.
 
 `services/monthly_opening.py` stores confirmed provider-month openings in the existing Google and OpenAI reservation databases. Both provider guards read this record within the normal budget and reservation path. `budget_panel.py` offers explicit input when a readable ledger lacks a confirmed current-month opening. `test_episode_workspace.py` exercises the same ledger reads and limits through the Studio scoped CLI and child.

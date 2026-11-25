@@ -695,15 +695,20 @@ class ScheduleManager:
 
     @staticmethod
     def _verified_review_media(schedule: dict, video_path: str) -> tuple[Path, str, str]:
-        from shorts_maker.services.production_service import script_sha256
-        from shorts_maker.services.upload_evidence import has_unresolved_upload_claim
-        from shorts_maker.utils.config import settings
-
         if schedule.get('last_episode_id'):
             from shorts_maker.services.operating_budget import episode_path
             pending = episode_path(schedule['last_episode_id']).with_suffix('.operation.pending.json')
             if pending.exists() or pending.is_symlink():
                 raise ValueError('회차 실행 결과를 먼저 대조하세요. 미확인 실행 중에는 영상을 연결·채택할 수 없습니다.')
+        return ScheduleManager._verified_uploaded_file(schedule, video_path)
+
+    @staticmethod
+    def _verified_uploaded_file(schedule: dict, video_path: str) -> tuple[Path, str, str]:
+        """Verify output evidence, independently of the caller's episode operation guard."""
+        from shorts_maker.services.production_service import script_sha256
+        from shorts_maker.services.upload_evidence import has_unresolved_upload_claim
+        from shorts_maker.utils.config import settings
+
         if not isinstance(video_path, str) or not video_path:
             raise ValueError("완성 영상 경로가 필요합니다.")
         try:
