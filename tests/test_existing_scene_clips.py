@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, Mock, patch
 
-from moviepy import ColorClip, VideoFileClip
+from moviepy import ColorClip, VideoFileClip, concatenate_videoclips
 from nicegui import binding, core, ui
 from nicegui.client import Client
 from nicegui.page import page
@@ -57,7 +57,7 @@ class ExistingSceneClipsTests(IsolatedAsyncioTestCase):
         choices = self.reader.candidates()
         self.assertEqual(len(choices), 1)
         key, candidate = next(iter(choices.items()))
-        path, identity = self.reader.preview(key, candidate)
+        path, identity, _ = self.reader.preview(key, candidate)
         self.assertEqual(path, str(self.source))
         self.assertEqual(self.reader.read(key, candidate, identity), self.video)
         self.assertEqual(before, (record.read_bytes(), self.source.read_bytes()))
@@ -73,7 +73,7 @@ class ExistingSceneClipsTests(IsolatedAsyncioTestCase):
             choices = self.reader.candidates()
             key = next(key for key, row in choices.items() if row['workspace'] is None)
             candidate = choices[key]
-            _, identity = self.reader.preview(key, candidate)
+            _, identity, _ = self.reader.preview(key, candidate)
         with patch('shorts_maker.services.existing_scene_clips.raw_review_status', return_value='rejected'):
             with self.assertRaises(ValueError):
                 self.reader.read(key, candidate, identity)
@@ -81,7 +81,7 @@ class ExistingSceneClipsTests(IsolatedAsyncioTestCase):
 
     async def test_changed_file_workspace_symlink_or_oversized_input_cannot_be_imported(self):
         key, candidate = next(iter(self.reader.candidates().items()))
-        _, identity = self.reader.preview(key, candidate)
+        _, identity, _ = self.reader.preview(key, candidate)
         self.source.write_bytes(self.video + b'changed')
         with self.assertRaises(ValueError):
             self.reader.read(key, candidate, identity)
@@ -108,6 +108,49 @@ class ExistingSceneClipsTests(IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             self.reader.preview(key, candidate)
 
+    async def test_selected_segment_uses_later_frames_and_preserves_the_original(self):
+        source = self.root / 'colored-original.mp4'
+        with ColorClip((360, 640), (200, 0, 0), duration=1) as red, \
+             ColorClip((360, 640), (0, 200, 0), duration=1) as green, \
+             concatenate_videoclips([red, green]) as combined:
+            combined.write_videofile(str(source), fps=10, codec='libx264', audio=False, logger=None)
+        original = source.read_bytes()
+        self.exporter.save_uploaded_clip(original, self.saved, 1)
+        key, candidate = next(iter(self.reader.candidates().items()))
+        _, identity, duration = self.reader.preview(key, candidate)
+        self.assertAlmostEqual(duration, 2)
+        for invalid in ((1.5, .5), (0, 2.5), (float('nan'), 1)):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, '영상 길이'):
+                self.reader.read(key, candidate, identity, invalid)
+        result = self.reader.read(key, candidate, identity, (1.2, 1.8))
+        target = self.exporter.save_uploaded_clip(result, self.current, 1)
+        with VideoFileClip(str(target)) as clip:
+            self.assertAlmostEqual(clip.duration, .6, places=1)
+            self.assertIsNone(clip.audio)
+            self.assertGreater(clip.get_frame(0)[100, 100, 1], 150)
+        self.assertEqual(self.source.read_bytes(), original)
+
+    async def test_trim_rechecks_native_approval_after_local_encode(self):
+        native = settings.clips_dir / 'native-approved.mp4'
+        native.write_bytes(self.video)
+        self.service.review_clip_path = Mock(return_value=(str(native), 'exact-frame'))
+        approval = {'state': 'approved'}
+
+        def simulate_encode(*_):
+            approval['state'] = 'rejected'
+            return self.video
+
+        with patch('shorts_maker.services.existing_scene_clips.raw_review_status',
+                   side_effect=lambda *_: approval['state']), patch(
+                       'shorts_maker.services.existing_scene_clips._render_segment', side_effect=simulate_encode):
+            key, candidate = next((key, row) for key, row in self.reader.candidates().items()
+                                  if row['workspace'] is None)
+            _, identity, _ = self.reader.preview(key, candidate)
+            with self.assertRaisesRegex(ValueError, '승인된 Veo 원본이 없습니다'):
+                self.reader.read(key, candidate, identity, (0, .2))
+        self.assertEqual(native.read_bytes(), self.video)
+        self.assertFalse(self.exporter.get_clip_path(self.current, 1).exists())
+
     def approve_image(self, name, color, scene_number=1):
         image = self.root / name
         Image.new('RGB', (360, 640), color).save(image)
@@ -122,7 +165,7 @@ class ExistingSceneClipsTests(IsolatedAsyncioTestCase):
         self.assertNotIn(APPROVED_FIRST_FRAME, self.reader.candidates())
         image, approval = self.approve_image('first.png', 'red')
         candidate = self.reader.candidates()[APPROVED_FIRST_FRAME]
-        _, identity = self.reader.preview(APPROVED_FIRST_FRAME, candidate)
+        _, identity, _ = self.reader.preview(APPROVED_FIRST_FRAME, candidate)
         with patch('shorts_maker.services.existing_scene_clips._render_still') as render:
             render.side_effect = lambda _: approval.unlink()
             with self.assertRaisesRegex(ValueError, 'FIRST_FRAME_REVIEW_REQUIRED'):

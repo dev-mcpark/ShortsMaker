@@ -1,5 +1,7 @@
 # Project map
 
+`existing_scene_picker.py` accepts a time range after previewing an eligible saved clip. `existing_scene_clips.py` cuts the verified original bytes locally with FFmpeg and rechecks the source and any native approval after encoding. The existing validated manual import owns the final workspace write.
+
 `revision_validation.py` verifies the currently applied episode revision against its reassessment history, exact revision request and named model-review record. `script_review_panel.py` displays the retained excerpt and owner rationale independently of model verdicts for the applied script.
 
 `episode_review_recovery.py` also verifies an interrupted launcher’s pending upload audit when its worker exit and exact private result are already recorded. `episode_review_recovery_panel.py` offers explicit archival under the existing schedule lock before the normal attachment flow. `operate_schedule.py` records the launcher PID for scoped Studio work.

@@ -1,6 +1,7 @@
 """Local decode gates shared by material review and production preflight."""
 
 import hashlib
+import math
 from io import BytesIO
 from pathlib import Path
 from moviepy import VideoFileClip
@@ -29,11 +30,17 @@ def inspect_frame_bytes(content: bytes) -> tuple[str, str]:
     return hashlib.sha256(content).hexdigest(), mime
 
 
-def is_playable_video(path: Path) -> bool:
+def playable_video_duration(path: Path) -> float | None:
     try:
         if not path.is_file() or path.stat().st_size == 0:
-            return False
+            return None
         with VideoFileClip(str(path)) as clip:
-            return clip.duration > 0 and clip.get_frame(0) is not None
+            if math.isfinite(clip.duration) and clip.duration > 0 and clip.get_frame(0) is not None:
+                return clip.duration
     except Exception:
-        return False
+        pass
+    return None
+
+
+def is_playable_video(path: Path) -> bool:
+    return playable_video_duration(path) is not None

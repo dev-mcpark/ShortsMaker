@@ -1,6 +1,7 @@
 """Read exact-scene manual work and approved native sources without spending."""
 
 import hashlib
+import math
 import subprocess
 from io import BytesIO
 from pathlib import Path
@@ -13,7 +14,7 @@ from shorts_maker.services.asset_library import AssetLibrary
 from shorts_maker.services.raw_review import raw_review_status
 from shorts_maker.services.visual_review import verified_first_frame
 from shorts_maker.utils.config import settings
-from shorts_maker.utils.media_validation import MAX_FRAME_BYTES, is_playable_video
+from shorts_maker.utils.media_validation import MAX_FRAME_BYTES, playable_video_duration
 from shorts_maker.utils.veo_prompt_exporter import MAX_MANUAL_CLIP_BYTES, VeoPromptExporter
 
 APPROVED_FIRST_FRAME = 'approved-first-frame'
@@ -38,6 +39,33 @@ def _render_still(content: bytes) -> bytes:
             )
         except (OSError, subprocess.SubprocessError) as error:
             raise ValueError('첫 프레임을 정지 영상으로 변환하지 못했습니다. 기존 장면 파일은 그대로입니다.') from error
+        return output.read_bytes()
+
+
+def validate_segment(start, end, duration):
+    if (not all(type(value) in (float, int) and math.isfinite(value) for value in (start, end, duration))
+            or not 0 <= start < end <= duration):
+        raise ValueError('영상 길이 안에서 시작 시각보다 뒤에 끝 시각을 지정하세요.')
+
+
+def _render_segment(content: bytes, start: float, end: float) -> bytes:
+    with TemporaryDirectory(prefix='shortsmaker-trim-') as folder:
+        source, output = Path(folder) / 'source.mp4', Path(folder) / 'segment.mp4'
+        source.write_bytes(content)
+        validate_segment(start, end, playable_video_duration(source))
+        try:
+            subprocess.run(
+                [FFMPEG_BINARY, '-hide_banner', '-loglevel', 'error', '-nostdin',
+                 '-ss', f'{start:.6f}', '-i', str(source), '-t', f'{end - start:.6f}',
+                 '-map', '0:v:0', '-an', '-vf', 'pad=ceil(iw/2)*2:ceil(ih/2)*2',
+                 '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'fast',
+                 '-movflags', '+faststart', str(output)],
+                capture_output=True, timeout=60, check=True,
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            raise ValueError('영상 구간을 잘라내지 못했습니다. 기존 장면 파일은 그대로입니다.') from error
+        if output.stat().st_size > MAX_MANUAL_CLIP_BYTES or playable_video_duration(output) is None:
+            raise ValueError('재생할 수 있는 500 MB 이하의 영상 구간을 선택하세요.')
         return output.read_bytes()
 
 
@@ -108,15 +136,18 @@ class ExistingSceneClips:
     def preview(self, key, candidate):
         if key == APPROVED_FIRST_FRAME:
             identity = self._approved_frame()
-            return identity['path'], identity
+            return identity['path'], identity, None
         path = self._path(key, candidate)
         identity = self.library._identity(path)
-        if not is_playable_video(path):
+        duration = playable_video_duration(path)
+        if duration is None:
             raise ValueError('선택한 영상을 재생할 수 없습니다. 다른 재료를 선택하세요.')
-        return str(path), identity
+        return str(path), identity, duration
 
-    def read(self, key, candidate, identity):
+    def read(self, key, candidate, identity, segment=None):
         if key == APPROVED_FIRST_FRAME:
+            if segment is not None:
+                raise ValueError('정지 영상은 구간을 선택할 수 없습니다.')
             frame = self._approved_frame()
             if frame != identity:
                 raise ValueError('미리보기 이후 승인한 첫 프레임이 변경됐습니다. 다시 선택하세요.')
@@ -136,4 +167,8 @@ class ExistingSceneClips:
         if (len(content) > MAX_MANUAL_CLIP_BYTES or hashlib.sha256(content).hexdigest() != identity['sha256']
                 or self.library._identity(self._path(key, candidate)) != identity):
             raise ValueError('읽는 동안 재료 또는 판정이 변경됐습니다. 다시 선택하세요.')
+        if segment is not None:
+            content = _render_segment(content, *segment)
+            if self.library._identity(self._path(key, candidate)) != identity:
+                raise ValueError('구간을 자르는 동안 재료 또는 판정이 변경됐습니다. 다시 선택하세요.')
         return content

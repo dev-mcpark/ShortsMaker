@@ -1,6 +1,6 @@
 # Current status
 
-Updated: 2026-11-25. This file owns the active milestone and known limits. Code and tests remain the final evidence.
+Updated: 2026-11-26. This file owns the active milestone and known limits. Code and tests remain the final evidence.
 
 ## Goal and milestones
 
@@ -44,6 +44,8 @@ The November 18 slot produced the Namdaemun review copy, which the owner publish
 | 5. Sustainable publishing and iterative development | First scheduled copy needs improvement after owner review; chat-model comparison/access and billed allocation open; no accepted recurring series | Meet the initial product and operational acceptance above: a usable deployed app and three consecutive accepted private-upload cycles within approved budgets, with evidence-based improvements, verification, and shared handoff after each cycle. Code repairs are allowed and tracked. Continue recurring operations after setup validation. |
 
 ## Current evidence and limits
+
+- **2026-11-26 choose the usable part of a scene in Studio.** Namdaemun assembly required external trimming for three approved raw clips. The existing scene picker now accepts a start and end time after preview and connects a locally transcoded silent segment through manual import. Tests check the actual frame at the selected start, invalid ranges, and rejection if approval changes during the transcode. In the isolated 390px browser, the hash-matched Namdaemun scene 5 copy produced a 6.458-second segment from the requested 1.25–7.70 seconds and played to its end. The original bytes and review were preserved. This verifies editing behavior. Live deployment and the December episode remain pending. [Private QA evidence](../outputs/evaluation/studio_scene_clip_trim_20261126/review.json).
 
 - **2026-11-25 reopen the source used in an owner reassessment.** The applied-script preview showed only model records with that exact script hash, leaving the human-adopted revision's checked source unavailable on reentry. The panel now reads the current episode's exact revision, owner note, retained request and older verdict. It displays the saved excerpt without attributing the old verdict or a fresh approval to the corrected script. The native reassessment test reopens the workspace, verifies both displays, then changes the old verdict and checks that the source preview fails closed. Isolated 390px browser QA verified the same behavior. Older episodes without the bound reassessment record remain without this preview. Production deployment remains pending. [Private QA evidence](../outputs/evaluation/studio_reassessed_source_20261125/review.json).
 
