@@ -163,15 +163,16 @@ async def execute_action(request: StudioAction, path: Path, digest: str):
     if (script_sha256(script.model_dump(mode='json')) != request.script_sha256
             or script_draft_key(script) != request.review_receipt):
         raise ValueError('현재 대본과 검토 확인이 일치하지 않습니다.')
-    if request.operation == 'local_edit':
+    if request.operation in {'local_edit', 'upload'}:
         if settings.paid_production_enabled or settings.max_visual_cost_usd != 0:
-            raise ValueError('보유 재료 편집은 API가 꺼진 회차 작업으로 실행해야 합니다.')
-        if not complete_local_edit(script, request.manual_clip_paths, request.prepared_audio_paths):
-            raise ValueError('모든 장면의 보유 영상과 준비된 음성을 연결하세요.')
-        files = [*request.manual_clip_paths.values(), *request.prepared_audio_paths]
-        if any(Path(file).is_symlink() or not Path(file).resolve().is_relative_to(settings.output_dir.resolve())
-               for file in files):
-            raise ValueError('출력 폴더의 보유 장면 영상과 음성 파일만 연결하세요.')
+            raise ValueError('보유 재료 편집과 비공개 업로드는 생성 API가 꺼진 회차 작업으로 실행해야 합니다.')
+        if request.operation == 'local_edit':
+            if not complete_local_edit(script, request.manual_clip_paths, request.prepared_audio_paths):
+                raise ValueError('모든 장면의 보유 영상과 준비된 음성을 연결하세요.')
+            files = [*request.manual_clip_paths.values(), *request.prepared_audio_paths]
+            if any(Path(file).is_symlink() or not Path(file).resolve().is_relative_to(settings.output_dir.resolve())
+                   for file in files):
+                raise ValueError('출력 폴더의 보유 장면 영상과 음성 파일만 연결하세요.')
     else:
         env, _ = episode_environment(record)
         if (not 0 < settings.google_monthly_budget_krw <= int(env['GOOGLE_MONTHLY_BUDGET_KRW'])
@@ -236,6 +237,8 @@ async def execute_action(request: StudioAction, path: Path, digest: str):
                 raise ValueError('완성본이 현재 회차 대본과 다릅니다.')
             if report.get('video_sha256') != request.video_sha256:
                 raise ValueError('검토한 완성본 또는 제작 기록이 변경됐습니다. 영상을 다시 확인하세요.')
+            if report.get('source_url') != script.source_url:
+                raise ValueError('완성본의 출처가 현재 회차 대본과 다릅니다.')
             result = await service.upload_to_youtube(
                 request.video_path, request.metadata, expected_video_sha256=request.video_sha256,
             )

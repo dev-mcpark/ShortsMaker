@@ -68,7 +68,8 @@ class ScopedProductionService(ProductionService):
             *worker_command(path, digest)]
         self._update_progress(
             ProductionPhase.UPLOADING if operation == 'upload' else ProductionPhase.GENERATING, 0,
-            '보유 재료 편집 중 · 새 API 요청 없음' if operation == 'local_edit' else '회차 상한 안에서 실행 중',
+            {'local_edit': '보유 재료 편집 중 · 새 API 요청 없음',
+             'upload': '회차의 비공개 검토본을 업로드하는 중'}.get(operation, '회차 상한 안에서 실행 중'),
         )
         try:
             process = await asyncio.create_subprocess_exec(*command, cwd=PROJECT_ROOT,

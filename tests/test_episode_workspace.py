@@ -269,6 +269,7 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
             video_digest = hashlib.sha256(video.read_bytes()).hexdigest()
             video.with_suffix('.production.json').write_text(json.dumps({
                 'script_sha256': script_sha256(self.script.model_dump(mode='json')), 'video_sha256': video_digest,
+                'source_url': self.script.source_url,
             }))
             request, path, digest = self.request(operation, manual_clip_paths=clips,
                 prepared_audio_paths=['scene.mp3'], narration_budget_usd=.002, video_path=str(video),
@@ -276,7 +277,9 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
             parsed = action.read_request(path, digest)
             self.assertEqual(parsed.manual_clip_paths, clips)
             mock = AsyncMock(return_value=result)
-            with patch.object(ProductionService, method, mock):
+            cap = 0 if operation == 'upload' else settings.max_visual_cost_usd
+            with patch.object(ProductionService, method, mock), patch.object(
+                    settings, 'paid_production_enabled', operation != 'upload'), patch.object(settings, 'max_visual_cost_usd', cap):
                 response = await action.execute_action(parsed, path, digest)
             mock.assert_awaited_once()
             self.assertEqual(response['kind'], 'path' if operation in {'frame', 'raw', 'narration'} else 'production')
@@ -298,6 +301,8 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
 
     async def test_scoped_upload_rejects_a_different_cut_with_a_new_valid_report(self):
         self.scoped_env()
+        self.enterContext(patch.object(settings, 'paid_production_enabled', False))
+        self.enterContext(patch.object(settings, 'max_visual_cost_usd', 0))
         video = settings.output_dir / 'reviewed.mp4'
         video.write_bytes(b'reviewed cut')
         reviewed = hashlib.sha256(video.read_bytes()).hexdigest()
@@ -318,6 +323,8 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
 
     async def test_scoped_worker_cannot_submit_when_reviewed_video_identity_is_missing(self):
         self.scoped_env()
+        self.enterContext(patch.object(settings, 'paid_production_enabled', False))
+        self.enterContext(patch.object(settings, 'max_visual_cost_usd', 0))
         video = settings.output_dir / 'reviewed.mp4'
         video.write_bytes(b'different cut of the same script')
         request, path, digest = self.request('upload', video_path=str(video), metadata={'title': '검토본'})
@@ -329,6 +336,24 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
                           return_value=ProductionResult(True, youtube_id='fixture_123')) as upload:
             with self.assertRaisesRegex(ValueError, '완성본.*해시'):
                 await action.execute_action(request, path, digest)
+            upload.assert_not_awaited()
+
+    async def test_scoped_upload_stops_before_submission_if_generation_is_enabled_or_source_differs(self):
+        self.scoped_env()
+        video = settings.output_dir / 'reviewed.mp4'
+        video.write_bytes(b'fixture cut')
+        digest = hashlib.sha256(video.read_bytes()).hexdigest()
+        request, path, request_digest = self.request('upload', video_path=str(video),
+            metadata={'title': '검토본'}, video_sha256=digest)
+        report = video.with_suffix('.production.json')
+        report.write_text(json.dumps({'script_sha256': request.script_sha256, 'video_path': str(video),
+            'quality_passed': True, 'video_sha256': digest, 'source_url': 'https://example.com/other-story'}))
+        with patch.object(ProductionService, 'upload_to_youtube', new_callable=AsyncMock) as upload:
+            with self.assertRaisesRegex(ValueError, '생성 API가 꺼진'):
+                await action.execute_action(request, path, request_digest)
+            with patch.object(settings, 'paid_production_enabled', False), patch.object(settings, 'max_visual_cost_usd', 0):
+                with self.assertRaisesRegex(ValueError, '완성본의 출처'):
+                    await action.execute_action(request, path, request_digest)
             upload.assert_not_awaited()
 
     async def test_worker_rejects_wrong_profile_caps_hash_and_unreviewed_before_paid_work(self):
@@ -526,6 +551,61 @@ httpx.HTTPTransport.handle_request = httpx.AsyncHTTPTransport.handle_async_reque
         self.assertEqual([path.read_bytes() for path in protected], before)
         from shorts_maker.services.episode_review_recovery import recovered_episode_edits
         self.assertIn(result.video_path, recovered_episode_edits(self.manager, self.schedule))
+
+    async def test_private_upload_of_finished_cut_uses_same_episode_with_stale_ledgers(self):
+        video = settings.output_dir / 'finished.mp4'
+        await asyncio.to_thread(subprocess.run, [
+            FFMPEG_BINARY, '-hide_banner', '-loglevel', 'error',
+            '-f', 'lavfi', '-i', 'color=blue:s=360x640:r=12:d=2',
+            '-f', 'lavfi', '-i', 'sine=f=440:d=2', '-c:v', 'libx264',
+            '-pix_fmt', 'yuv420p', '-c:a', 'aac', str(video),
+        ], capture_output=True, check=True)
+        digest = hashlib.sha256(video.read_bytes()).hexdigest()
+        report = video.with_suffix('.production.json')
+        report.write_text(json.dumps({'schema_version': 1, 'video_path': str(video), 'video_sha256': digest,
+            'script_sha256': script_sha256(self.script.model_dump(mode='json')),
+            'source_url': self.script.source_url, 'quality_passed': True}))
+        hooks = self.root / 'hooks'
+        hooks.mkdir()
+        (hooks / 'sitecustomize.py').write_text('''import os
+from pathlib import Path
+import httpx
+from shorts_maker.services.production_service import ProductionService
+from shorts_maker.uploader.youtube_uploader import YouTubeUploader
+from shorts_maker.utils.config import settings
+settings.output_dir = Path(os.environ['STUDIO_TEST_OUTPUT'])
+settings.google_budget_month = settings.openai_budget_month = '2000-01'
+settings.google_monthly_budget_krw = 10000
+settings.openai_monthly_budget_usd = 1
+def blocked(*args, **kwargs):
+    raise AssertionError('No real provider or transport in this upload fixture')
+ProductionService._get_generator = blocked
+ProductionService._get_planner = blocked
+YouTubeUploader.get_authenticated_service = blocked
+httpx.HTTPTransport.handle_request = httpx.AsyncHTTPTransport.handle_async_request = blocked
+async def upload(self, video, metadata):
+    assert not settings.paid_production_enabled
+    assert settings.max_visual_cost_usd == 0
+    assert self.build_upload_body(metadata)['status']['privacyStatus'] == 'private'
+    return 'fixture_review_123'
+YouTubeUploader.upload = upload
+''')
+        self.state.confirm_script_review()
+        protected = [self.manager.filename, episode_path(self.record['id']),
+                     google_budget._database_path(), openai_budget._database_path(), video]
+        before = [path.read_bytes() for path in protected]
+        with patch.dict(os.environ, {'PYTHONPATH': str(hooks), 'STUDIO_TEST_OUTPUT': str(settings.output_dir)}):
+            result = await asyncio.wait_for(self.state.new_production_service().upload_to_youtube(
+                str(video), {'title': '검토본', 'description': self.script.source_url}, expected_video_sha256=digest,
+            ), 25)
+        self.assertTrue(result.success, result.error)
+        self.assertEqual(result.youtube_id, 'fixture_review_123')
+        self.assertEqual(json.loads(report.read_text())['youtube_upload_request']['status']['privacyStatus'], 'private')
+        self.assertFalse(self.pending.exists())
+        self.assertFalse(video.with_suffix('.upload-pending.json').exists())
+        self.assertEqual([path.read_bytes() for path in protected], before)
+        from shorts_maker.services.episode_review_recovery import recovered_review_copies
+        self.assertEqual(recovered_review_copies(self.manager, self.schedule)[str(video)]['youtube_id'], result.youtube_id)
 
     async def test_local_worker_requires_complete_media_and_disabled_paid_mode(self):
         request, path, digest = self.request('local_edit')

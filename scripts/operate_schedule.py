@@ -54,7 +54,7 @@ def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedu
             schedule, record, *_ = preflight(manager, schedule_id, revision_sha256)
         else:
             schedule, record = active_episode(manager, schedule_id)
-        local_edit = False
+        generation_free_operation = None
         if studio_request is not None:
             from shorts_maker.services.studio_episode_action import read_request, worker_command
             request = read_request(studio_request, request_sha256)
@@ -68,14 +68,15 @@ def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedu
             receipt = Path(studio_request).with_suffix('.result.json')
             if receipt.exists() or receipt.is_symlink():
                 raise ValueError('이미 실행 결과가 있는 요청입니다. 다시 제출하지 않습니다.')
-            local_edit = request.operation == 'local_edit'
+            if request.operation in {'local_edit', 'upload'}:
+                generation_free_operation = request.operation
         if schedule.get('last_youtube_id'):
             raise ValueError('비공개 완성본이 연결된 회차는 제작을 다시 실행할 수 없습니다. 완성본을 검토하세요.')
         if schedule.get('last_result') == 'script_review_pending':
             current_revision_copy(schedule)
-        if local_edit:
+        if generation_free_operation:
             env = {'SHORTSMAKER_EPISODE_ID': record['id'], 'PAID_PRODUCTION_ENABLED': 'false', 'MAX_VISUAL_COST_USD': '0'}
-            status = {'local_edit': True}
+            status = {generation_free_operation: True}
         else:
             env, status = episode_environment(record)
         path = episode_path(record['id']).with_suffix('.operation.pending.json')

@@ -12,6 +12,8 @@
 
 `publishing_tab.py` passes the selected video's digest through the scoped upload request. The launcher and upload worker require it for new actions, and `ProductionService` checks actual bytes before the submission claim and before recording a returned ID. Recovery compares the request digest when present.
 
+The typed scoped upload action opens the existing episode and runs with paid generation disabled and a zero visual cap, independently of current-month generation ledgers. The worker checks that the report's source matches the episode script before handing off to the existing private uploader.
+
 `ScopedProductionService` selects the fixed `local_edit` action when every scene has a supplied clip and prepared audio. `operate_schedule.py` keeps the episode lock and starts that worker with provider calls disabled and a zero visual cap. `studio_episode_action.py` checks complete local inputs and the usual episode, schedule and script identity before invoking the existing editor. Edit recovery reads the normal receipt for either edit action.
 
 `narration_panel.py` shows matching retained audio before the separate speech preparation controls. A sole match can prefill the picker; only explicit connection uses the existing manifest and audio checks. The existing audio preferences own saved selections.

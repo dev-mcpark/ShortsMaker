@@ -1324,6 +1324,10 @@ If the Studio launcher stopped before archiving its pending audit, allow the own
 
 Save a separate local receipt when the editor explicitly confirms the current scheduled script or saves an already confirmed revision to that episode. Bind it to episode scope, exact script digest and revision path so the same workspace can reopen after restart without altering the schedule digest used by submitted requests. An absent, mismatched or malformed receipt leads to ordinary review. Older revisions, unsaved changes, imported work drafts and model results carry no Studio confirmation by themselves. The existing scope, unresolved-result, draft and production gates still own admission to their respective actions.
 
+## 2026-11-28 — Keep private upload independent of the generation ledger month
+
+A finished cut can cross a provider month without another generation request. Let the fixed scoped upload command run with the generation switch off and visual cap zero, using the same episode marker and typed receipt as other Studio actions. Verify the source against the current script along with the existing file digest. Studio's explicit action, authentication, upload evidence, duplicate prevention, attachment and owner adoption retain their existing boundaries. Generation requests still require current ledger openings.
+
 ## 2026-11-27 — Keep a complete local edit inside its episode
 
 When all current scene numbers have connected clips and the selected narration supplies every scene, use a fixed local-only edit through the existing episode launcher. The child requires provider calls disabled, a zero visual cap, and media paths within outputs. It runs the normal editor and technical checks. Keep the schedule, script review, execution marker and typed receipt checks so the edited file can be found again in the same episode. A paid request still needs current ledger checks, and uploading remains a separate action.

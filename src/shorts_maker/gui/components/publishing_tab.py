@@ -411,6 +411,9 @@ def render_publishing_tab(state: 'AppState') -> None:
                 preview.bind_source_from(state, 'final_video_path', backward=media_source)
                 preview.bind_visibility_from(state, 'final_video_path', backward=bool)
                 ui.label('완성본을 확인한 뒤 업로드하세요. YouTube에는 비공개로 저장됩니다.').classes('text-sm text-gray-300 mb-4')
+                if state.operating_scope:
+                    ui.label('저장한 완성본은 생성비 장부의 월 기준을 갱신하는 동안에도 업로드할 수 있습니다.').classes(
+                        'text-xs text-slate-400 mb-3')
 
                 upload_btn = ui.button(
                     'YouTube에 비공개 업로드',

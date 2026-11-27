@@ -20,7 +20,7 @@ def render_episode_workspace(state, refresh):
     loading = {'value': False}
     with ui.column().classes('w-full p-3 bg-amber-950 border border-amber-700 gap-2 shrink-0') as panel:
         ui.label(f'예약 회차 제작 · {scope.episode_id[:8]}').classes('font-bold text-amber-200')
-        ui.label('첫 프레임·원본·편집·비공개 업로드는 같은 회차의 잔여 한도로 실행합니다. '
+        ui.label('첫 프레임·원본·음성 등 새 재료 생성에는 회차의 잔여 한도를 적용합니다. '
                  'Veo Lite · 무음 720p · 자동 재시도 없음. 서버에 저장된 API 설정을 사용합니다.').classes('text-xs text-amber-100')
         ui.label('수정 대본은 예약 운영에서 “확인한 수정 대본을 회차에 저장” 후 제작하세요. '
                  '업로드 후에는 예약 운영에서 완성본을 연결합니다. 연결·사용자 채택·공개는 별도입니다.').classes('text-xs text-amber-100')
