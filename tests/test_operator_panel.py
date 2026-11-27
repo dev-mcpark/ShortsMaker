@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 import sys
+from contextlib import closing
 from dataclasses import asdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -785,7 +786,18 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.schedule = self.manager.update_schedule(self.schedule['id'], {'last_episode_id': episode['id']})
         request = google_budget.reserve_google_output('video', 'veo-3.1-lite-generate-001', 4)
         google_budget.mark_google_result(request, 'failed')
+        google_budget.reserve_google_output('video', 'veo-3.1-lite-generate-001', 4)
         openai_budget.reserve_openai_speech('tts-1', '가' * 200)
+        openai_budget.reserve_openai_speech('tts-1', '가' * 400)
+        # Two seconds straddling Pacific midnight share the same UTC day.
+        with closing(sqlite3.connect(google_budget._database_path())) as db, db:
+            db.execute("UPDATE requests SET created_utc = ? WHERE status = 'failed'", ('2026-11-21T07:59:59+00:00',))
+            db.execute("UPDATE requests SET created_utc = ? WHERE reserved_krw = 240 AND status <> 'failed'",
+                       ('2026-11-21T08:00:01+00:00',))
+        with closing(sqlite3.connect(openai_budget._database_path())) as db, db:
+            db.execute('UPDATE requests SET created_utc = ? WHERE reserved_micro_usd = 3000',
+                       ('2026-11-21T07:59:59+00:00',))
+            db.execute('UPDATE requests SET created_utc = ? WHERE reserved_micro_usd = 6000', ('invalid',))
         protected = [self.manager.filename, episode_path(episode['id']),
                      google_budget._database_path(), openai_budget._database_path()]
         before = [path.read_bytes() for path in protected]
@@ -797,8 +809,10 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
             await asyncio.sleep(0)
         text = self.text(root)
         self.assertIn('회차 비용 확인 필요', text)
-        self.assertIn('veo-3.1-lite-generate-001 · 실패 · 1건 · ₩240', text)
-        self.assertIn('tts-1 · 결과 미기록 · 1건 · $0.003000', text)
+        self.assertIn('2026-11-20 · veo-3.1-lite-generate-001 · 실패 · 1건 · ₩240', text)
+        self.assertIn('2026-11-21 · veo-3.1-lite-generate-001 · 예약됨 · 1건 · ₩240', text)
+        self.assertIn('2026-11-21 · tts-1 · 결과 미기록 · 1건 · $0.003000', text)
+        self.assertIn('날짜 확인 필요 · tts-1 · 결과 미기록 · 1건 · $0.006000', text)
         self.assertNotIn('₩720', text)
         self.assertEqual([path.read_bytes() for path in protected], before)
 

@@ -33,7 +33,7 @@ def render_episode_reservation_panel(manager, schedule):
         elif error:
             ui.label(error).classes('text-xs text-amber-200 break-words').props('role=alert')
         elif snapshot is not None:
-            for provider, name in (('google', 'Google'), ('openai', 'OpenAI')):
+            for provider, name in (('google', 'Google · 미국 태평양 시간'), ('openai', 'OpenAI · UTC')):
                 ui.label(name).classes('text-xs font-semibold text-slate-200')
                 rows = snapshot[provider]
                 if not rows:
@@ -42,8 +42,9 @@ def render_episode_reservation_panel(manager, schedule):
                     amount = (f'₩{row["reserved"]:,}' if provider == 'google'
                               else f'${row["reserved"] / 1_000_000:.6f}')
                     status = GOOGLE_STATUS.get(row['status'], row['status']) if provider == 'google' else '결과 미기록'
-                    ui.label(f'{row["period"]} · {row["model"]} · {status} · {row["requests"]}건 · {amount}').classes(
-                        'text-xs text-slate-300 break-words')
+                    day = row['day'] or '날짜 확인 필요'
+                    tail = f'{row["model"]} · {status} · {row["requests"]}건 · {amount}'
+                    ui.label(f'장부 월 {row["period"]} · {day} · {tail}').classes('text-xs text-slate-300 break-words')
 
     async def refresh():
         nonlocal error, snapshot
@@ -62,8 +63,9 @@ def render_episode_reservation_panel(manager, schedule):
                 safe_refresh(details)
 
     with ui.expansion('회차 예약 내역', icon='list_alt').classes('w-full min-w-0') as view:
-        ui.label('이 회차가 시작된 뒤 장부에 추가된 요청입니다. 다른 앱 작업의 예약도 포함될 수 있습니다. '
-                 '실제 청구액은 공급자 보고서에서 확인하세요.').classes('text-xs text-slate-400')
+        ui.label('이 회차가 시작된 뒤 장부에 추가된 요청입니다. 날짜는 공급자별 시간대로 환산한 예약일입니다. '
+                 '다른 앱 작업의 예약도 포함될 수 있습니다. 실제 사용일과 청구액은 공급자 보고서에서 확인하세요.').classes(
+                     'text-xs text-slate-400')
         ui.button('예약 내역 조회', on_click=refresh).props('flat icon=refresh').classes(
             'min-h-[44px]').bind_enabled_from(loading, 'value', lambda value: not value)
         details()

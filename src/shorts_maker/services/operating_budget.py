@@ -12,6 +12,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from shorts_maker.services import google_budget, openai_budget
+from shorts_maker.services.budget_calendar import GOOGLE_BUDGET_TIMEZONE, OPENAI_BUDGET_TIMEZONE
 from shorts_maker.utils.config import settings
 
 
@@ -70,27 +71,35 @@ def episode_reservation_breakdown(manager, expected_schedule: dict) -> dict[str,
         raise ValueError('현재 회차가 바뀌었습니다. 예약 화면을 다시 확인하세요.')
     record = load_episode(expected_schedule.get('last_episode_id'), expected_schedule)
     result = {}
-    for provider, service, amount_column, status_column in (
-        ('google', google_budget, 'reserved_krw', 'status'),
-        ('openai', openai_budget, 'reserved_micro_usd', 'NULL'),
+    for provider, service, amount_column, status_column, zone in (
+        ('google', google_budget, 'reserved_krw', 'status', GOOGLE_BUDGET_TIMEZONE),
+        ('openai', openai_budget, 'reserved_micro_usd', 'NULL', OPENAI_BUDGET_TIMEZONE),
     ):
         path = service._database_path().resolve().as_uri()
         with closing(sqlite3.connect(path + '?mode=ro', uri=True)) as db:
-            records = {key: (period, model, status, amount) for key, period, model, status, amount
-                       in db.execute(f'SELECT id, period, model, {status_column}, {amount_column} FROM requests')}
+            records = {
+                key: (period, model, status, amount, created)
+                for key, period, model, status, amount, created in db.execute(
+                    f'SELECT id, period, model, {status_column}, {amount_column}, created_utc FROM requests')
+            }
         grouped = defaultdict(lambda: {'requests': 0, 'reserved': 0})
-        for period, model, status, amount in _after_baseline(record, provider, records).values():
+        for period, model, status, amount, created in _after_baseline(record, provider, records).values():
             if (not isinstance(period, str) or not re.fullmatch(r'\d{4}-(?:0[1-9]|1[0-2])', period)
                     or not isinstance(model, str) or not model
                     or (provider == 'google' and (not isinstance(status, str) or not status))
                     or type(amount) is not int or amount < 0):
                 raise ValueError('비용 장부의 월·모델·요청 상태·예약액을 확인하세요.')
-            row = grouped[(period, model, status)]
+            try:
+                instant = datetime.fromisoformat(created)
+                day = instant.astimezone(zone).date().isoformat() if instant.utcoffset() is not None else ''
+            except (TypeError, ValueError, OverflowError):
+                day = ''
+            row = grouped[(period, day, model, status)]
             row['requests'] += 1
             row['reserved'] += amount
         result[provider] = [
-            {'period': period, 'model': model, 'status': status, **amounts}
-            for (period, model, status), amounts in sorted(grouped.items())
+            {'period': period, 'day': day, 'model': model, 'status': status, **amounts}
+            for (period, day, model, status), amounts in sorted(grouped.items())
         ]
     if manager.get_schedule(schedule_id) != expected_schedule:
         raise ValueError('조회 중 현재 회차가 바뀌었습니다. 예약 화면을 다시 확인하세요.')
