@@ -1,5 +1,7 @@
 # Project map
 
+`publishing_tab.py` uses the production report to prefill primary and supporting source links. The explicit missing-credit action and pre-dispatch check share `source_credited_description` with existing link handling. `ProductionService` retains the final source check before any upload claim.
+
 `publishing_tab.py` passes the selected video's digest through the scoped upload request. The launcher and upload worker require it for new actions, and `ProductionService` checks actual bytes before the submission claim and before recording a returned ID. Recovery compares the request digest when present.
 
 `ScopedProductionService` selects the fixed `local_edit` action when every scene has a supplied clip and prepared audio. `operate_schedule.py` keeps the episode lock and starts that worker with provider calls disabled and a zero visual cap. `studio_episode_action.py` checks complete local inputs and the usual episode, schedule and script identity before invoking the existing editor. Edit recovery reads the normal receipt for either edit action.

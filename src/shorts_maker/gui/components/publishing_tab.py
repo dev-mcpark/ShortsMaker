@@ -55,16 +55,25 @@ def _load_completed_video(state: 'AppState', path: str) -> dict:
     return report
 
 
+def _with_report_sources(description: str, report: dict) -> str:
+    return source_credited_description(description, report.get('source_url'), report.get('supporting_source_urls', []))
+
+
 def _recorded_metadata(report: dict) -> dict:
     request = report.get('youtube_upload_request') or {}
     snippet = request.get('snippet', {}) if isinstance(request, dict) else {}
     snippet = snippet if isinstance(snippet, dict) else {}
     title = snippet.get('title') or report.get('title')
-    description, source = snippet.get('description'), report.get('source_url')
+    description = snippet.get('description')
+    if not isinstance(description, str):
+        try:
+            description = _with_report_sources('', report)
+        except ValueError:
+            description = ''  # Leave an invalid report visible for review; submission still checks it.
     tags, disclosure = snippet.get('tags', []), report.get('contains_synthetic_media')
     return {
         'title': title if isinstance(title, str) else Path(report['video_path']).stem,
-        'description': description if isinstance(description, str) else ('출처: ' + source if isinstance(source, str) else ''),
+        'description': description,
         'tags': ','.join(tag for tag in tags if isinstance(tag, str)) if isinstance(tags, list) else '',
         'disclosure': ('yes' if disclosure else 'no') if isinstance(disclosure, bool) else None,
     }
@@ -302,6 +311,34 @@ def render_publishing_tab(state: 'AppState') -> None:
                     on_click=load_metadata
                 ).props('flat color=white icon=download').classes('mb-4')
 
+                def selected_report():
+                    if not state.final_video_path or binding['path'] != state.final_video_path:
+                        raise ValueError('완성본을 다시 불러오세요.')
+                    report = _completed_video(state.final_video_path)
+                    if binding['key'] != _publishing_key(report):
+                        raise ValueError('선택된 영상이 바뀌었습니다. 완성본과 게시 정보를 다시 확인하세요.')
+                    return report
+
+                def add_source_credits():
+                    if state.is_busy or getattr(desc_input, 'is_deleted', False) is True:
+                        return
+                    try:
+                        description = desc_input.value or ''
+                        credited = _with_report_sources(description, selected_report())
+                    except (OSError, ValueError, TypeError) as error:
+                        safe_notify(str(error), type='warning')
+                        return
+                    if credited == description:
+                        safe_notify('추가할 출처가 없습니다.', type='info')
+                        return
+                    desc_input.value = credited
+                    remember_form()
+                    safe_notify('완성본 기록의 누락된 출처를 추가했습니다.', type='positive')
+
+                ui.button('누락된 출처 추가', on_click=add_source_credits).props('flat icon=link').classes(
+                    'min-h-[44px]').bind_enabled_from(
+                        state, 'is_busy', backward=lambda busy: not busy and bool(state.final_video_path))
+
                 async def upload_video(expected_execution=state.execution_key()):
                     """YouTube에 비디오 업로드"""
                     if state.is_busy:
@@ -312,12 +349,13 @@ def render_publishing_tab(state: 'AppState') -> None:
                     if getattr(upload_btn, 'is_deleted', False) is True:
                         return
                     try:
-                        report = _completed_video(state.final_video_path)
-                        if (binding['path'] != state.final_video_path or binding['key'] != _publishing_key(report)):
-                            raise ValueError('선택된 영상이 바뀌었습니다. 완성본과 게시 정보를 다시 확인하세요.')
+                        report = selected_report()
                         message = update_upload_status(report)
                         if message:
                             raise ValueError(message)
+                        description = desc_input.value or ''
+                        if description != _with_report_sources(description, report):
+                            raise ValueError('영상 설명에 출처가 빠졌습니다. “누락된 출처 추가”로 보완하세요.')
                     except (OSError, ValueError, TypeError) as error:
                         safe_notify(str(error), type='warning')
                         return
@@ -335,7 +373,7 @@ def render_publishing_tab(state: 'AppState') -> None:
                         safe_notify('YouTube에 비공개로 업로드 중입니다.', type='info')
                         meta = {
                             "title": title_input.value.strip(),
-                            "description": desc_input.value or '',
+                            "description": description,
                             "tags": [t.strip() for t in (tags_input.value or '').split(',') if t.strip()],
                             "contains_synthetic_media": synthetic_input.value == 'yes',
                         }

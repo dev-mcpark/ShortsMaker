@@ -58,7 +58,7 @@ def _has_source_credit(description: str, url: str) -> bool:
     }
 
 
-def source_credited_description(description: str, source_url: str,
+def source_credited_description(description: str, source_url: str | None,
                                 supporting_source_urls: list[str] | tuple[str, ...] = ()) -> str:
     for url in _required_source_urls(source_url, supporting_source_urls):
         if not _has_source_credit(description, url):

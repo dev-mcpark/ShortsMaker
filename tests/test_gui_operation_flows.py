@@ -202,6 +202,45 @@ class CompletedOutputTests(TestCase):
         self.assertEqual(title.value, '선택한 영상 제목')
         self.assertEqual(notify.call_args.kwargs['type'], 'warning')
 
+    def test_saved_multi_source_cut_prefills_every_credit_without_reloading_a_script(self):
+        primary = 'https://example.com/source'
+        supporting = 'https://example.com/second'
+        video, _ = self.write_output(source_url=primary, supporting_source_urls=[supporting, primary])
+        recorder = self.render(AppState(final_video_path=str(video)))
+        description = recorder.find('textarea', '영상 설명·출처').value
+        self.assertEqual(description, f'출처: {primary}\n\n출처: {supporting}')
+
+    def test_omitted_credit_stops_before_dispatch_and_can_be_added_without_overwriting_prose(self):
+        primary = 'https://example.com/source'
+        supporting = 'https://example.com/second'
+        video, _ = self.write_output(source_url=primary, supporting_source_urls=[supporting])
+        sidecar = video.with_suffix('.production.json')
+        original = sidecar.read_bytes()
+        state = AppState(final_video_path=str(video))
+        service = Mock()
+        service.upload_to_youtube = AsyncMock(return_value=ProductionResult(True, youtube_id='fixture_id'))
+        state.get_or_create_service = Mock(return_value=service)
+        recorder = self.render(state)
+        self.set_form(recorder)
+        field = recorder.find('textarea', '영상 설명·출처')
+        text = f'직접 작성한 설명입니다.\n출처: {primary}'
+        field.value = text
+        upload = recorder.find('button', 'YouTube에 비공개 업로드')
+        with patch.object(publishing_tab, 'safe_notify') as notify:
+            asyncio.run(upload.callback())
+            self.assertIn('누락된 출처 추가', notify.call_args.args[0])
+            state.get_or_create_service.assert_not_called()
+            self.assertEqual(field.value, text)
+            add = recorder.find('button', '누락된 출처 추가')
+            add.callback()
+            add.callback()
+            complete = f'{text}\n\n출처: {supporting}'
+            self.assertEqual(field.value, complete)
+            asyncio.run(upload.callback())
+        service.upload_to_youtube.assert_awaited_once()
+        self.assertEqual(service.upload_to_youtube.await_args.args[1]['description'], complete)
+        self.assertEqual(sidecar.read_bytes(), original)
+
     def test_upload_uses_configured_service_before_busy_state(self):
         video, _ = self.write_output()
         state = AppState(final_video_path=str(video))
