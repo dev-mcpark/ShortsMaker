@@ -6,6 +6,7 @@ from pathlib import Path
 from nicegui import run, ui
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
+from shorts_maker.gui.components.episode_reservation_panel import render_episode_reservation_panel
 from shorts_maker.gui.components.episode_review_recovery_panel import (
     render_episode_review_recovery, render_pending_upload_recovery,
 )
@@ -350,6 +351,8 @@ def render_operator_panel(state, manager, schedule, on_attached):
         if budget := data.get('budget'):
             ui.label(f'Google 회차 누적 예약 ₩{budget["google_new_reserved_krw"]:,} · 전체 상한까지 여유 ₩{budget["google_remaining_krw"]:,}').classes('text-xs text-teal-200')
             ui.label(f'OpenAI 회차 누적 예약 ${budget["openai_new_reserved_usd"]:.6f} · 전체 상한까지 여유 ${budget["openai_remaining_usd"]:.6f}').classes('text-xs text-teal-200')
+        if schedule.get('review_operator') == 'agent' and schedule.get('last_episode_id'):
+            render_episode_reservation_panel(manager, schedule)
         ui.label('전체 회차 여유는 새 지출 허가가 아닙니다. 월 잔액과 별도 비교·검증 범위 중 더 작은 한도 및 소진된 호출 횟수를 함께 적용합니다.').classes('text-xs text-slate-400')
         ui.label('기획은 실제 제작 대기 회차에서만 별도로 시작합니다. 회차를 앞당기거나 미디어를 자동 제작하지 않습니다.').classes('text-xs text-slate-400')
 

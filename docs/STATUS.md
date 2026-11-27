@@ -1,6 +1,6 @@
 # Current status
 
-Updated: 2026-11-26. This file owns the active milestone and known limits. Code and tests remain the final evidence.
+Updated: 2026-11-27. This file owns the active milestone and known limits. Code and tests remain the final evidence.
 
 ## Goal and milestones
 
@@ -44,6 +44,8 @@ The November 18 slot produced the Namdaemun review copy, which the owner publish
 | 5. Sustainable publishing and iterative development | First scheduled copy needs improvement after owner review; chat-model comparison/access and billed allocation open; no accepted recurring series | Meet the initial product and operational acceptance above: a usable deployed app and three consecutive accepted private-upload cycles within approved budgets, with evidence-based improvements, verification, and shared handoff after each cycle. Code repairs are allowed and tracked. Continue recurring operations after setup validation. |
 
 ## Current evidence and limits
+
+- **2026-11-27 inspect the current episode's reservation breakdown in Studio.** The status showed totals only. The new read-only panel groups the same conservative baseline difference by provider, ledger month, model and recorded status. It remains available when a new monthly opening is missing. The native regression excludes baseline rows and preserves failed holds without mutating ledgers or schedules. All 818 offline tests passed. On read-only Namdaemun data and a 390px isolated copy, the groups totalled ₩2,944 and $0.129750 and showed the ₩68 Google row as result unknown per the ledger. These figures remain reserves and may include other requests within the baseline interval. Billed attribution, live deployment and the next real slot remain pending. [Private QA evidence](../outputs/evaluation/studio_episode_reservations_20261127/review.json).
 
 - **2026-11-26 choose the usable part of a scene in Studio.** Namdaemun assembly required external trimming for three approved raw clips. The existing scene picker now accepts a start and end time after preview and connects a locally transcoded silent segment through manual import. Tests check the actual frame at the selected start, invalid ranges, and rejection if approval changes during the transcode. In the isolated 390px browser, the hash-matched Namdaemun scene 5 copy produced a 6.458-second segment from the requested 1.25–7.70 seconds and played to its end. The original bytes and review were preserved. This verifies editing behavior. Live deployment and the December episode remain pending. [Private QA evidence](../outputs/evaluation/studio_scene_clip_trim_20261126/review.json).
 

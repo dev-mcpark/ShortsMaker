@@ -5,6 +5,7 @@ import os
 import re
 import sqlite3
 import uuid
+from collections import defaultdict
 from contextlib import closing
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -53,6 +54,47 @@ def _reserves(provider: str) -> dict[str, int]:
            for key, value in rows.items()):
         raise ValueError('비용 장부의 요청 ID와 예약액을 확인하세요.')
     return rows
+
+
+def _after_baseline(record: dict, provider: str, rows: dict) -> dict:
+    baseline = set(record['baseline'][provider])
+    if not baseline <= rows.keys():
+        raise ValueError('이전 장부 행이 사라졌습니다. 회차 예산을 다시 승인한 것으로 처리하지 않습니다.')
+    return {key: value for key, value in rows.items() if key not in baseline}
+
+
+def episode_reservation_breakdown(manager, expected_schedule: dict) -> dict[str, list[dict]]:
+    """Group the conservative reservation delta without relying on the current provider month."""
+    schedule_id = expected_schedule['id']
+    if manager.get_schedule(schedule_id) != expected_schedule or expected_schedule.get('review_operator') != 'agent':
+        raise ValueError('현재 회차가 바뀌었습니다. 예약 화면을 다시 확인하세요.')
+    record = load_episode(expected_schedule.get('last_episode_id'), expected_schedule)
+    result = {}
+    for provider, service, amount_column, status_column in (
+        ('google', google_budget, 'reserved_krw', 'status'),
+        ('openai', openai_budget, 'reserved_micro_usd', 'NULL'),
+    ):
+        path = service._database_path().resolve().as_uri()
+        with closing(sqlite3.connect(path + '?mode=ro', uri=True)) as db:
+            records = {key: (period, model, status, amount) for key, period, model, status, amount
+                       in db.execute(f'SELECT id, period, model, {status_column}, {amount_column} FROM requests')}
+        grouped = defaultdict(lambda: {'requests': 0, 'reserved': 0})
+        for period, model, status, amount in _after_baseline(record, provider, records).values():
+            if (not isinstance(period, str) or not re.fullmatch(r'\d{4}-(?:0[1-9]|1[0-2])', period)
+                    or not isinstance(model, str) or not model
+                    or (provider == 'google' and (not isinstance(status, str) or not status))
+                    or type(amount) is not int or amount < 0):
+                raise ValueError('비용 장부의 월·모델·요청 상태·예약액을 확인하세요.')
+            row = grouped[(period, model, status)]
+            row['requests'] += 1
+            row['reserved'] += amount
+        result[provider] = [
+            {'period': period, 'model': model, 'status': status, **amounts}
+            for (period, model, status), amounts in sorted(grouped.items())
+        ]
+    if manager.get_schedule(schedule_id) != expected_schedule:
+        raise ValueError('조회 중 현재 회차가 바뀌었습니다. 예약 화면을 다시 확인하세요.')
+    return result
 
 
 def begin_episode(schedule_id: str, run_count: int) -> dict:
@@ -153,14 +195,9 @@ def episode_environment(record: dict) -> tuple[dict[str, str], dict]:
     openai = openai_budget.budget_status()
     if not google.get('enabled') or not openai.get('enabled'):
         raise ValueError('현재 월 사용 기준이 확인된 두 장부가 필요합니다.')
-    spent = {}
-    for provider in ('google', 'openai'):
-        rows = _reserves(provider)
-        baseline = set(record['baseline'][provider])
-        if not baseline <= rows.keys():
-            raise ValueError('이전 장부 행이 사라졌습니다. 회차 예산을 다시 승인한 것으로 처리하지 않습니다.')
-        # Other app requests are conservatively included; never guess an untracked allocation.
-        spent[provider] = sum(value for key, value in rows.items() if key not in baseline)
+    # Other app requests are conservatively included; never guess an untracked allocation.
+    spent = {provider: sum(_after_baseline(record, provider, _reserves(provider)).values())
+             for provider in ('google', 'openai')}
     remaining_google = max(0, record['google_cap_krw'] - spent['google'])
     # Keep the legacy cap readable by the still-running older Studio; it remains more restrictive.
     openai_cap = record.get('planning_validation_extension', {}).get(

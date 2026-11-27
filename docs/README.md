@@ -1,5 +1,7 @@
 # Project map
 
+`operating_budget.py` shares the episode's existing baseline subtraction with the read-only reservation breakdown. `episode_reservation_panel.py` exposes that breakdown in the current episode without requiring a valid new monthly opening or querying a provider.
+
 `existing_scene_picker.py` accepts a time range after previewing an eligible saved clip. `existing_scene_clips.py` cuts the verified original bytes locally with FFmpeg and rechecks the source and any native approval after encoding. The existing validated manual import owns the final workspace write.
 
 `revision_validation.py` verifies the currently applied episode revision against its reassessment history, exact revision request and named model-review record. `script_review_panel.py` displays the retained excerpt and owner rationale independently of model verdicts for the applied script.

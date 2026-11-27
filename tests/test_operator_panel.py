@@ -778,6 +778,30 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.assertEqual(operator_status(self.schedule)['budget']['google_new_reserved_krw'], 240)
         self.assertEqual(before, [p.read_bytes() for p in paths])
 
+    async def test_reservation_details_exclude_baseline_and_keep_failed_holds_when_month_setup_is_stale(self):
+        google_budget.reserve_google_output('video', 'veo-3.1-lite-generate-001', 8)
+        openai_budget.reserve_openai_speech('tts-1', '가' * 100)
+        episode = begin_episode(self.schedule['id'], self.schedule['run_count'])
+        self.schedule = self.manager.update_schedule(self.schedule['id'], {'last_episode_id': episode['id']})
+        request = google_budget.reserve_google_output('video', 'veo-3.1-lite-generate-001', 4)
+        google_budget.mark_google_result(request, 'failed')
+        openai_budget.reserve_openai_speech('tts-1', '가' * 200)
+        protected = [self.manager.filename, episode_path(episode['id']),
+                     google_budget._database_path(), openai_budget._database_path()]
+        before = [path.read_bytes() for path in protected]
+        root, refresh = self.render()
+        with self.client, patch.object(settings, 'google_budget_month', '2000-01'):
+            await refresh()
+            await asyncio.sleep(0)
+            await self.click_and_wait('예약 내역 조회', 'refresh')
+            await asyncio.sleep(0)
+        text = self.text(root)
+        self.assertIn('회차 비용 확인 필요', text)
+        self.assertIn('veo-3.1-lite-generate-001 · 실패 · 1건 · ₩240', text)
+        self.assertIn('tts-1 · 결과 미기록 · 1건 · $0.003000', text)
+        self.assertNotIn('₩720', text)
+        self.assertEqual([path.read_bytes() for path in protected], before)
+
     async def test_preview_then_attach_is_explicit_and_keeps_owner_acceptance_pending(self):
         self.render()
         before = self.manager.filename.read_bytes()
