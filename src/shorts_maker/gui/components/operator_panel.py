@@ -348,6 +348,10 @@ def render_operator_panel(state, manager, schedule, on_attached):
                      '이미 연결했다면 이 회차의 기획을 재개하세요. 현재 연결 상태는 '
                      '완성본·업로드 → YouTube 업로드 연결 → 저장된 인증 확인에서 확인할 수 있습니다.').classes(
                 'text-sm text-amber-200').props('role=alert')
+        if data.get('planning_source_unavailable'):
+            ui.label('RSS 피드를 읽지 못해 유료 기획 전에 멈췄습니다. '
+                     'RSS를 확인하거나 이번 회차에 다른 기사 주소를 지정한 뒤 같은 회차에서 기획을 재개하세요.').classes(
+                'text-sm text-amber-200').props('role=alert')
         if schedule.get('review_operator') != 'agent':
             ui.label('Studio 직접 실행 일정입니다. 월 장부·비주얼 상한을 사용하며 에이전트 회차 한도를 새로 만들지 않습니다.').classes('text-xs text-slate-400')
         elif not data.get('last_episode_id'):
@@ -498,7 +502,12 @@ def render_operator_panel(state, manager, schedule, on_attached):
                     'text-sm text-slate-300 break-all')
                 ui.button('이번 회차 기사 지정', on_click=choose_episode_source).props('outline').classes(
                     'min-h-[44px]').bind_enabled_from(state, 'is_busy', lambda busy: not busy)
-            ui.button('계정 연결 후 기획 재개' if schedule.get('planning_auth_required') else '예약 회차 기획 시작', on_click=plan_preview).props('outline color=teal').bind_enabled_from(
+            plan_label = '예약 회차 기획 시작'
+            if schedule.get('planning_auth_required'):
+                plan_label = '계정 연결 후 기획 재개'
+            elif schedule.get('planning_source_unavailable'):
+                plan_label = '같은 회차 기획 재개'
+            ui.button(plan_label, on_click=plan_preview).props('outline color=teal').bind_enabled_from(
                 state, 'is_busy', lambda busy: not busy and not planning_preview['checking'])
             ui.label('예약 기획 예산 확인 중…').classes('text-sm text-slate-300').props('role=status').bind_visibility_from(
                 planning_preview, 'checking')

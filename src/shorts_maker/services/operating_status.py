@@ -50,6 +50,8 @@ def operator_status(schedule: dict) -> dict:
         result['script_reassessment'] = True
     if schedule.get('planning_auth_required'):
         result['planning_auth_required'] = True
+    if schedule.get('last_result') == 'operator_pending' and schedule.get('planning_source_unavailable'):
+        result['planning_source_unavailable'] = True
     if source := episode_source_url(schedule):
         result['episode_source_url'] = source
     if schedule.get('last_episode_id'):

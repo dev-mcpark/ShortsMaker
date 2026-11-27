@@ -844,6 +844,43 @@ class OperatingHandoffTests(unittest.TestCase):
                 asyncio.run(self.manager._execute_pipeline(self.schedule, operator=True))
             pipeline.assert_awaited_once()
 
+    def test_unreadable_rss_keeps_same_slot_for_explicit_source_selection(self):
+        record = self.queued_episode()
+        sid = self.schedule['id']
+        episode_before = episode_path(record['id']).read_bytes()
+        budget_before = episode_environment(record)[1]
+        selected = 'https://example.com/manual-source'
+        draft = ShortsScript(title='Source story', description='Facts', tags=[], mood='calm',
+            style='documentary', generation_mode='video', source_name='Source', source_url=selected,
+            scenes=[VideoScene(scene_number=1, visual_description='Model', script_text='사실')])
+        failure = ProductionResult(success=False,
+            error='PLANNING_UNVERIFIED: RSS_SOURCE_UNVERIFIED: no readable feeds')
+        with patch.dict(os.environ, {'SHORTSMAKER_EPISODE_ID': record['id']}), patch.object(
+                settings, 'paid_production_enabled', True), patch(
+                'shorts_maker.utils.bgm_manager.BGMManager.has_documented_track', return_value=True), patch(
+                'shorts_maker.uploader.youtube_uploader.YouTubeUploader.get_authenticated_service'), patch(
+                'shorts_maker.services.production_service.ProductionService.full_pipeline', new_callable=AsyncMock,
+                side_effect=[failure, ProductionResult(success=True, review_pending=True, script=draft)]) as pipeline:
+            asyncio.run(self.manager._execute_pipeline(self.schedule, operator=True))
+            stopped = self.manager.get_schedule(sid)
+            self.assertEqual(stopped['last_result'], 'operator_pending')
+            self.assertFalse(stopped['enabled'])
+            self.assertTrue(operator_status(stopped)['planning_source_unavailable'])
+            asyncio.run(self.manager.queue_overdue())
+            pipeline.assert_awaited_once()
+            self.assertEqual(self.manager.get_schedule(sid), stopped)
+            queued = self.manager.set_pending_episode_source(sid, selected,
+                expected_schedule_sha256=schedule_sha256(stopped))
+            asyncio.run(self.manager._execute_pipeline(queued, operator=True))
+            self.assertEqual(pipeline.await_args.kwargs['direct_url'], selected)
+        recovered = self.manager.get_schedule(sid)
+        self.assertEqual(recovered['last_result'], 'script_review_pending')
+        self.assertFalse(recovered.get('planning_source_unavailable'))
+        for key in ('last_episode_id', 'scheduled_for', 'run_count'):
+            self.assertEqual(recovered.get(key), stopped.get(key))
+        self.assertEqual(episode_path(record['id']).read_bytes(), episode_before)
+        self.assertEqual(episode_environment(record)[1], budget_before)
+
     def test_overdue_recovery_queues_latest_slot_once_and_records_missed_dates(self):
         first = datetime.now(ZoneInfo('Asia/Seoul')).replace(tzinfo=None) - timedelta(weeks=4, minutes=10)
         self.manager.update_schedule(self.schedule['id'], {'first_run_at': first.isoformat(), 'frequency': 'Every 2 Weeks'})

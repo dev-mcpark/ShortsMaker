@@ -39,7 +39,7 @@ _RUN_FIELDS = (
     'last_rendered_url', 'last_video_path', 'last_video_sha256', 'last_youtube_id', 'accepted_at',
     'queued_at', 'last_episode_id',
     'scheduled_for', 'late_by_seconds', 'skipped_slots', 'script_revisions', 'last_script_path', 'review_continuation',
-    'planning_auth_required', 'episode_source_url', 'episode_source_run_count',
+    'planning_auth_required', 'planning_source_unavailable', 'episode_source_url', 'episode_source_run_count',
 )
 
 
@@ -972,12 +972,15 @@ class ScheduleManager:
             service = ProductionService(mode=schedule.get('mode', 'image'))
 
             # Persist the pause before the first paid call; a killed process cannot save a final result.
-            self.update_schedule(schedule['id'], {
+            started = {
                 'last_run': datetime.now().isoformat(),
                 'run_count': run_count,
                 'last_result': 'run_in_progress',
                 'enabled': False,
-            })
+            }
+            if operator and schedule.get('planning_source_unavailable'):
+                started['planning_source_unavailable'] = False
+            self.update_schedule(schedule['id'], started)
 
             result = await service.full_pipeline(
                 topic=schedule.get('topic'),
@@ -1015,6 +1018,13 @@ class ScheduleManager:
                                   and not result.video_path
                                   and (result.error or "").startswith(
                                       "PLANNING_UNVERIFIED: RSS_SOURCE_UNVERIFIED:"))
+            if operator and source_unavailable:
+                self.update_schedule(schedule['id'], {
+                    'last_result': 'operator_pending',
+                    'planning_source_unavailable': True,
+                })
+                self.logger.warning("RSS unavailable before paid planning; waiting for the same episode's source.")
+                return
             rendered_failed = not result.success and bool(result.video_path)
             # Other failures pause before another scheduled paid round.
             # 공급자 제한 뒤의 다음 일정이 계획·내레이션 비용을 다시 쓰지 않도록 멈춘다.

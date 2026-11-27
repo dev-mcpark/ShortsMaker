@@ -60,6 +60,22 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.assertIn('배경음악 선택 필요', self.text(root))
         self.assertNotIn('지난 기획 시도', self.text(root))
 
+    async def test_after_rss_failure_the_same_slot_shows_source_selection_and_cost_preview(self):
+        self.pending()
+        self.schedule = self.manager.update_schedule(self.schedule['id'], {'planning_source_unavailable': True})
+        root, refresh = self.render()
+        before = self.manager.filename.read_bytes()
+        with self.client, patch.object(operator_panel, 'plan_pending_schedule', new_callable=AsyncMock) as plan:
+            await refresh()
+            await asyncio.sleep(0)
+            self.assertIn('RSS 피드를 읽지 못해 유료 기획 전에 멈췄습니다', self.text(root))
+            self.assertIn('이번 회차 기사 지정', self.text(root))
+            await self.click_and_wait('같은 회차 기획 재개', 'plan_preview')
+            self.assertIn('월·회차 중 작은 잔여 상한', self.text(root))
+            self.click('취소')
+            plan.assert_not_awaited()
+        self.assertEqual(before, self.manager.filename.read_bytes())
+
     async def test_saved_stop_reason_and_matching_next_action_survive_reopening(self):
         for reason, title, next_step in (
             ('source_unavailable', 'RSS 피드를 읽지 못함', '무료 RSS 기사 조회'),
