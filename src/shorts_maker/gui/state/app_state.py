@@ -223,6 +223,7 @@ class AppState:
 
     def load_scheduled_script(self, manager, schedule_id: str, *, expected_schedule: dict | None = None) -> None:
         from shorts_maker.planner.models import ShortsScript
+        from shorts_maker.services.episode_script_review import saved_episode_script_review
         from shorts_maker.services.studio_episode_action import EpisodeScope, scope_status
         current = manager.get_schedule(schedule_id)
         if not current or current.get('review_operator') != 'agent':
@@ -236,10 +237,14 @@ class AppState:
         if self.is_busy:
             raise ValueError('제작 또는 업로드가 진행 중에는 각본을 바꿀 수 없습니다.')
         scope_data = scope.model_dump()
+        saved_review = saved_episode_script_review(scope, current, script)
         if self.operating_scope == scope_data and self.script == script:
+            if not self.is_script_reviewed():
+                self.reviewed_script_sha256 = saved_review
             return
         self.load_saved_script(script, backup_current=True)
         self.operating_scope = scope_data
+        self.reviewed_script_sha256 = saved_review
         self._execution_version += 1
 
     def detach_operating_scope(self) -> None:
@@ -450,9 +455,22 @@ class AppState:
     def confirm_script_review(self) -> None:
         if self.script is None:
             raise ValueError("검토할 각본이 없습니다.")
-        self.reviewed_script_sha256 = hashlib.sha256(
-            self.script.model_dump_json().encode("utf-8")
-        ).hexdigest()
+        self.reviewed_script_sha256 = self.script_editor_key()
+
+    def record_script_review(self) -> bool:
+        """Record the workroom confirmation and report whether it was retained on disk."""
+        if self.script is None:
+            raise ValueError("검토할 각본이 없습니다.")
+        if self.is_busy or self.has_unapplied_script_draft():
+            raise ValueError('작업을 마치고 미적용 수정 내용을 정리한 뒤 각본을 확인하세요.')
+        saved = False
+        if self.operating_scope:
+            from shorts_maker.services.episode_script_review import retain_episode_script_review
+            from shorts_maker.services.studio_episode_action import EpisodeScope
+
+            saved = retain_episode_script_review(EpisodeScope.model_validate(self.operating_scope), self.script)
+        self.confirm_script_review()
+        return saved
 
     def script_editor_key(self) -> str:
         from shorts_maker.services.work_drafts import script_draft_key

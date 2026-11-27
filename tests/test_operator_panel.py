@@ -198,6 +198,10 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         self.assertEqual(self.state.reviewed_script_sha256, receipt)
         self.assertIsNone(self.state.production_service)
         self.attached.assert_called_once()
+        restored = AppState()
+        restored.load_scheduled_script(self.manager, current['id'])
+        self.assertTrue(restored.is_script_reviewed())
+        self.assertEqual(restored.script.title, '직접 다듬은 대본')
 
     async def test_unapplied_changed_or_busy_revision_dialog_cannot_save(self):
         self.prepare_revision()

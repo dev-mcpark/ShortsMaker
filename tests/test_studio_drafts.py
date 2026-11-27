@@ -74,7 +74,8 @@ class StudioDraftTests(TestCase):
         recorder = self.render(state)
         editor = recorder.find('textarea', '각본 JSON')
         editor.kwargs['on_change'](SimpleNamespace(value='{broken'))
-        env = {'state': state, 'previewed_script': {'json': state.script.model_dump_json()},
+        env = {'state': state, 'previewed_script': {'json': state.script.model_dump_json(), 'execution': state.execution_key()},
+               'confirm_script_button': SimpleNamespace(is_deleted=False),
                'safe_notify': Mock(), 'logger': Mock(), 'on_reviewed': Mock()}
         callback('planning_tab.py', 'confirm_script', env)()
         self.assertFalse(state.is_script_reviewed())

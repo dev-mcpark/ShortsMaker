@@ -13,10 +13,12 @@ from shorts_maker.gui.components.episode_review_recovery_panel import (
 from shorts_maker.gui.components.scheduled_run_view import STOP_GUIDANCE
 from shorts_maker.gui.components.work_drafts_panel import render_episode_writer_draft
 from shorts_maker.gui.components.youtube_connection_panel import render_youtube_connection_panel
+from shorts_maker.services.episode_script_review import retain_episode_script_review
 from shorts_maker.services.operating_budget import episode_path, load_episode
 from shorts_maker.services.operating_status import episode_source_url, operator_status, schedule_sha256
 from shorts_maker.services.scheduled_script_history import restore_missing_revision_copy
 from shorts_maker.services.scheduled_planning import planning_preflight, plan_pending_schedule
+from shorts_maker.services.studio_episode_action import EpisodeScope
 from shorts_maker.services.revision_validation import (
     prepare_recovery, preview_reassessment, preview_recovery, save_reassessment,
 )
@@ -89,13 +91,25 @@ def render_operator_panel(state, manager, schedule, on_attached):
                     current()
                     if state.script.model_dump_json() != script_text or state.reviewed_script_sha256 != receipt:
                         raise ValueError('대본 또는 확인 상태가 바뀌었습니다. 수정본을 다시 확인하세요.')
-                    manager.revise_pending_script(schedule['id'], state.script.model_dump(mode='json'),
+                    saved = manager.revise_pending_script(schedule['id'], state.script.model_dump(mode='json'),
                         expected_schedule_sha256=schedule_sha256(schedule), reviewed_script_sha256=receipt)
-                    dialog.close()
-                    on_attached()
-                    safe_notify('수정 대본을 회차에 저장했습니다. 장면 검토 후 제작을 이어가세요.', type='positive')
                 except (ValueError, RuntimeError, OSError) as error:
                     safe_notify(f'회차 대본 저장 중단: {error}', type='warning')
+                    return
+                review_error = None
+                try:
+                    if saved.get('review_operator') == 'agent' and saved.get('last_episode_id'):
+                        scope = EpisodeScope(schedules_file=str(manager.filename.resolve()), schedule_id=saved['id'],
+                                             episode_id=saved['last_episode_id'])
+                        retain_episode_script_review(scope, state.script, expected_schedule=saved)
+                except (ValueError, RuntimeError, OSError) as error:
+                    review_error = error
+                dialog.close()
+                on_attached()
+                if review_error is None:
+                    safe_notify('수정 대본을 회차에 저장했습니다. 장면 검토 후 제작을 이어가세요.', type='positive')
+                else:
+                    safe_notify(f'수정 대본은 저장했습니다. 각본 확인 기록을 저장하려면 회차를 다시 열어 확인하세요. {review_error}', type='warning')
 
             with ui.row().classes('w-full flex-wrap'):
                 ui.button('취소', on_click=dialog.close).props('flat').style('min-height:44px')

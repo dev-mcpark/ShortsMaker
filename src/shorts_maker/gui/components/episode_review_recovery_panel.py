@@ -54,7 +54,7 @@ def render_episode_review_recovery(state, manager, schedule, refresh, *, edit=Fa
             opening_workspace = workspace()
             with ui.dialog() as opened, ui.card().classes('w-full max-w-xl'):
                 ui.label('이 회차에서 편집한 완성본' if edit else '이번 회차에서 비공개 업로드한 검토본').classes('text-lg font-bold')
-                ui.label('이 회차 대본과 완성본을 작업실에 불러옵니다. 대본 확인 후 완성본·업로드에서 검토를 이어가세요.'
+                ui.label('이 회차 대본과 완성본을 작업실에 불러옵니다. 완성본·업로드에서 전체 영상을 검토하세요.'
                          if edit else
                          '파일과 YouTube ID를 확인해 이 회차에 연결하세요. 연결 후에는 검토 대기입니다.').classes('text-sm')
                 choice = ui.select({path: Path(path).name if edit else f'{Path(path).name} · {row["youtube_id"]}'
@@ -101,7 +101,9 @@ def render_episode_review_recovery(state, manager, schedule, refresh, *, edit=Fa
                     if not panel.is_deleted:
                         opened.close()
                         if edit:
-                            notice.text = '편집한 완성본을 불러왔습니다. 작업실에서 대본을 확인한 뒤 완성본·업로드에서 검토하세요.'
+                            notice.text = ('편집한 완성본을 불러왔습니다. 완성본·업로드에서 검토하세요.'
+                                           if state.is_script_reviewed() else
+                                           '편집한 완성본을 불러왔습니다. 작업실에서 대본을 확인한 뒤 완성본·업로드에서 검토하세요.')
                         else:
                             refresh()
                             safe_notify('저장된 비공개 검토본을 이 회차에 연결했습니다.', type='positive')

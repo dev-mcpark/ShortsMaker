@@ -1318,7 +1318,11 @@ Find the review copy from the exact episode's completed command audit, upload re
 
 If the Studio launcher stopped before archiving its pending audit, allow the owner to archive the original bytes under the existing scheduler lock. Require a recorded zero exit code from the upload worker, confirmed absence of the recorded launcher PID, the exact request and successful receipt, and matching local private-video evidence. Keep incomplete, PID-less, live or conflicting audits pending. Archiving leaves attachment and owner adoption as separate actions.
 
-2026-11-28 update. Recover an interrupted planning launcher under the same lock when its zero exit code and departed PID are recorded, its fixed command identifies the same schedule, and the saved script matches that episode's script and source. Recheck the preview on confirmation before archiving the audit. Reopening the saved script returns to ordinary review. A missing terminal result or a mismatched file leaves the episode blocked.
+2026-11-28 update. Recover an interrupted planning launcher under the same lock when its zero exit code and departed PID are recorded, its fixed command identifies the same schedule, and the saved script matches that episode's script and source. Recheck the preview on confirmation before archiving the audit. A missing terminal result or a mismatched file leaves the episode blocked.
+
+## 2026-11-28 — Retain explicit Studio confirmation of a saved episode script
+
+Save a separate local receipt when the editor explicitly confirms the current scheduled script or saves an already confirmed revision to that episode. Bind it to episode scope, exact script digest and revision path so the same workspace can reopen after restart without altering the schedule digest used by submitted requests. An absent, mismatched or malformed receipt leads to ordinary review. Older revisions, unsaved changes, imported work drafts and model results carry no Studio confirmation by themselves. The existing scope, unresolved-result, draft and production gates still own admission to their respective actions.
 
 ## 2026-11-27 — Keep a complete local edit inside its episode
 

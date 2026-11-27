@@ -64,7 +64,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
     script_preview_container = None
     editor_area = None
     editor_source = {'key': state.script_editor_key()}
-    previewed_script = {'json': None}
+    previewed_script = {'json': None, 'execution': state.execution_key()}
     form_panel = None
     draft_panel = None
     draft_view_key = {'value': state.script_editor_key()}
@@ -118,6 +118,7 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
 
         script = state.script
         previewed_script['json'] = script.model_dump_json()
+        previewed_script['execution'] = state.execution_key()
         total_duration = sum(s.duration_seconds for s in script.scenes) if script.scenes else 0
 
         with script_preview_container:
@@ -573,25 +574,38 @@ def render_planning_tab(state: 'AppState', on_reviewed=None) -> None:
                 ui.label('출처·내레이션·장면 설명을 확인하세요. 영상 첫 프레임과 움직임은 별도 검토가 필요합니다.').classes(
                     'text-xs text-amber-300 mb-2')
                 def confirm_script():
+                    if confirm_script_button.is_deleted:
+                        return
                     if state.is_busy:
                         safe_notify('진행 중인 제작·업로드가 끝난 뒤 각본을 확인하세요.', type='warning')
                         return
                     if state.has_unapplied_script_draft():
                         safe_notify('미적용 대본 수정이 있습니다. 먼저 적용하거나 되돌린 뒤 각본을 확인하세요.', type='warning')
                         return
-                    if state.script and state.script.model_dump_json() != previewed_script['json']:
+                    if (state.execution_key() != previewed_script['execution']
+                            or (state.script and state.script.model_dump_json() != previewed_script['json'])):
                         safe_notify('각본이 변경됐습니다. 미리보기를 새로고침하고 다시 확인하세요.', type='warning')
                         return
                     if state.script:
-                        state.confirm_script_review()
-                        safe_notify('각본 확인을 기록했습니다. 장면·영상 제작으로 이어가세요.', type='positive')
+                        try:
+                            saved = state.record_script_review()
+                        except (OSError, ValueError, RuntimeError) as error:
+                            safe_notify(f'각본 확인 중단 · {error}', type='warning')
+                            return
+                        if saved:
+                            message = '회차에 각본 확인을 기록했습니다. 장면·영상 제작으로 이어가세요.'
+                        elif state.operating_scope:
+                            message = '현재 수정 대본을 확인했습니다. 예약 운영에서 수정본을 회차에 저장하세요.'
+                        else:
+                            message = '각본 확인을 기록했습니다. 장면·영상 제작으로 이어가세요.'
+                        safe_notify(message, type='positive')
                         logger.info(f"Script confirmed: {state.script.title}")
                         if on_reviewed:
                             on_reviewed()
                     else:
                         safe_notify('생성된 각본이 없습니다', type='warning')
 
-                ui.button(
+                confirm_script_button = ui.button(
                     '각본 확인 완료 · 영상 제작으로 →',
                     on_click=confirm_script
                 ).classes('w-full').props('color=green-9 unelevated icon=check_circle size=md').bind_enabled_from(

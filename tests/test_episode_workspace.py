@@ -161,6 +161,50 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
         self.assertIsNone(self.state.final_video_path)
         self.assertNotEqual(self.state.execution_key(), execution_key)
 
+    async def test_fresh_workspace_recovers_explicit_review_for_the_same_episode_script(self):
+        protected = [self.manager.filename, episode_path(self.record['id']),
+                     google_budget._database_path(), openai_budget._database_path()]
+        before = [path.read_bytes() for path in protected]
+        open_elsewhere = AppState()
+        open_elsewhere.load_scheduled_script(self.manager, self.schedule['id'])
+        self.assertFalse(open_elsewhere.is_script_reviewed())
+        self.assertTrue(self.state.record_script_review())
+
+        restored = AppState()
+        restored.load_scheduled_script(self.manager, self.schedule['id'])
+        self.assertTrue(restored.is_script_reviewed())
+        self.assertEqual(restored.script, self.script)
+        self.assertEqual(restored.operating_scope, self.state.operating_scope)
+        self.assertEqual([path.read_bytes() for path in protected], before)
+        open_elsewhere.load_scheduled_script(self.manager, self.schedule['id'])
+        self.assertTrue(open_elsewhere.is_script_reviewed())
+
+    async def test_exact_script_review_never_moves_to_an_unsaved_revision_or_unknown_run(self):
+        base = episode_path(self.record['id'])
+        edited = self.script.model_copy(update={'title': '이 회차에 아직 저장하지 않은 수정본'})
+        self.state.load_saved_script(edited)
+        self.assertFalse(self.state.record_script_review())
+        self.assertTrue(self.state.is_script_reviewed())
+        self.assertEqual(list(base.parent.glob(f'{base.stem}.script-review.*.json')), [])
+        self.state.load_saved_script(self.script)
+        self.assertTrue(self.state.record_script_review())
+        receipt, = base.parent.glob(f'{base.stem}.script-review.*.json')
+        original = receipt.read_bytes()
+
+        self.pending.write_text('{}')
+        fresh = AppState()
+        with self.assertRaisesRegex(ValueError, '먼저 대조'):
+            fresh.load_scheduled_script(self.manager, self.schedule['id'])
+        self.assertFalse(fresh.is_script_reviewed())
+        self.assertEqual(receipt.read_bytes(), original)
+        self.pending.unlink()
+
+        receipt.write_text('{}')
+        fresh.load_scheduled_script(self.manager, self.schedule['id'])
+        self.assertFalse(fresh.is_script_reviewed())
+        self.assertTrue(fresh.record_script_review())
+        self.assertEqual(receipt.read_bytes(), original)
+
     async def test_episode_loader_blocks_missing_current_revision_even_with_embedded_script(self):
         from shorts_maker.services.scheduled_script_history import restore_missing_revision_copy
 

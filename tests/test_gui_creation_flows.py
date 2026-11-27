@@ -81,6 +81,18 @@ class CreationCallbackTests(unittest.IsolatedAsyncioTestCase):
         restore()
         state.restore_manual_workspace.assert_not_called()
 
+    async def test_old_script_confirmation_cannot_be_saved_in_a_different_workspace(self):
+        state = AppState(script=script())
+        state.record_script_review = Mock()
+        previewed = {'json': state.script.model_dump_json(), 'execution': state.execution_key()}
+        state.detach_operating_scope()
+        handler = callback('planning_tab.py', 'confirm_script', {
+            'state': state, 'previewed_script': previewed, 'safe_notify': Mock(),
+            'confirm_script_button': SimpleNamespace(is_deleted=False),
+        })
+        handler()
+        state.record_script_review.assert_not_called()
+
     async def test_unapplied_json_cannot_be_mistaken_for_saved_current_script(self):
         state = AppState(script=script('Original'))
         state.save_script_copy = Mock()
@@ -349,7 +361,8 @@ class CreationCallbackTests(unittest.IsolatedAsyncioTestCase):
     async def test_confirm_routes_only_after_current_preview_is_reviewed(self):
         state = AppState(script=script())
         env = {'state': state, 'safe_notify': Mock(), 'logger': Mock(), 'on_reviewed': Mock(),
-               'previewed_script': {'json': state.script.model_dump_json()}}
+               'confirm_script_button': SimpleNamespace(is_deleted=False),
+               'previewed_script': {'json': state.script.model_dump_json(), 'execution': state.execution_key()}}
         callback('planning_tab.py', 'confirm_script', env)()
         self.assertTrue(state.is_script_reviewed())
         env['on_reviewed'].assert_called_once()
@@ -357,7 +370,8 @@ class CreationCallbackTests(unittest.IsolatedAsyncioTestCase):
     async def test_confirm_does_not_approve_a_script_changed_in_another_tab(self):
         state = AppState(script=script('B'))
         env = {'state': state, 'safe_notify': Mock(), 'logger': Mock(), 'on_reviewed': Mock(),
-               'previewed_script': {'json': script('A').model_dump_json()}}
+               'confirm_script_button': SimpleNamespace(is_deleted=False),
+               'previewed_script': {'json': script('A').model_dump_json(), 'execution': state.execution_key()}}
         callback('planning_tab.py', 'confirm_script', env)()
         self.assertFalse(state.is_script_reviewed())
         env['on_reviewed'].assert_not_called()
