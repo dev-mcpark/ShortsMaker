@@ -35,8 +35,6 @@ SCENE_ACCENT = [
 
 
 def _manual_edit_ready(state, exporter) -> bool:
-    if state.operating_scope and not settings.paid_production_enabled:
-        return False
     if (state.is_busy or not (settings.paid_production_enabled or state.prepared_narration_manifest) or not state.script
             or state.has_unapplied_script_draft() or not state.is_script_reviewed() or not state.manual_script_id):
         return False
@@ -60,17 +58,19 @@ def _auto_edit_ready(state, verdicts) -> bool:
 def _next_edit_step(state, verdicts) -> str:
     if state.is_busy:
         return '작업 진행 중 · 완료 또는 중지 결과를 기다려 주세요.'
-    if state.operating_scope and not settings.paid_production_enabled:
-        return '회차 실행은 API 활성화가 필요합니다. 무료 수동 편집은 회차 연결을 해제한 뒤 진행하세요.'
     if not state.script:
         return '다음: 대본·장면 검토에서 대본을 기획하거나 불러오세요.'
     if state.has_unapplied_script_draft():
         return '다음: 미적용 대본 수정을 적용하거나 되돌리세요. 이전 대본으로 제작하지 않습니다.'
     if not state.is_script_reviewed():
         return '다음: 대본·장면 검토에서 현재 각본 확인을 완료하세요.'
+    if state.operating_scope and not settings.paid_production_enabled and not state.manual_video_mode:
+        return '다음: 모든 장면에 보유 영상을 연결하고 준비된 내레이션을 선택하면 이 회차에서 편집할 수 있습니다.'
     if not settings.paid_production_enabled and not state.prepared_narration_manifest:
         return '다음: 기존 내레이션을 연결하거나 API 생성을 활성화하세요.'
     if state.manual_video_mode:
+        if state.operating_scope and state.prepared_narration_manifest:
+            return '보유 영상: 모든 장면을 연결하면 준비된 내레이션으로 이 회차에서 편집합니다. 새 API 요청은 없습니다.'
         return '보유 영상: 아래 장면별 파일 연결과 내레이션을 확인한 뒤 편집하세요.'
     if state.has_unapplied_first_frame_drafts():
         return '다음: 미적용 첫 프레임 후보·검토 입력을 승인하거나 되돌리세요.'
@@ -996,7 +996,8 @@ def render_generation_tab(state: 'AppState') -> None:
                 safe_notify('검토 모드입니다. 기존 내레이션을 연결하거나 API 생성을 활성화하세요.', type='warning')
                 return
             try:
-                state.require_execution_context(expected_execution)
+                state.require_execution_context(expected_execution,
+                    local_edit=bool(manual_clip_paths and state.prepared_narration_manifest))
                 prepared_audio = state.prepared_audio_paths()
                 service = state.new_production_service()
             except (OSError, ValueError, TypeError, RuntimeError) as error:

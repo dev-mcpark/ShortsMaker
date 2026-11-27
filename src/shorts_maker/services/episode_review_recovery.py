@@ -37,7 +37,7 @@ def _completed_commands(episode_id: str) -> set[str]:
     return hashes
 
 
-def _recovered_results(manager, expected_schedule, operation, verify_media, *, reaped_command=None):
+def _recovered_results(manager, expected_schedule, operations, verify_media, *, reaped_command=None):
     scope = EpisodeScope(schedules_file=str(manager.filename.resolve()), schedule_id=expected_schedule['id'],
                          episode_id=expected_schedule.get('last_episode_id'))
     current, _ = scope_status(scope, child=reaped_command is not None)
@@ -61,7 +61,7 @@ def _recovered_results(manager, expected_schedule, operation, verify_media, *, r
             if command_digest not in commands:
                 continue
             request = read_request(path, digest)
-            if (request.operation != operation or request.scope != scope or request.schedule_sha256 != expected
+            if (request.operation not in operations or request.scope != scope or request.schedule_sha256 != expected
                     or request.script_sha256 != content_digest or request.review_receipt != review_digest):
                 continue
             receipt = validate_receipt(path, digest)
@@ -94,7 +94,7 @@ def _recovered_uploads(manager, expected_schedule, reaped_command=None):
             info = {'video_path': str(video), 'video_sha256': digest, 'youtube_id': video_id}
         return info if info['youtube_id'] == result['youtube_id'] else None
 
-    return _recovered_results(manager, expected_schedule, 'upload', verify_media, reaped_command=reaped_command)
+    return _recovered_results(manager, expected_schedule, {'upload'}, verify_media, reaped_command=reaped_command)
 
 
 def _reaped_upload_audit(path: Path) -> tuple[str, str]:
@@ -162,7 +162,7 @@ def recovered_episode_edits(manager, expected_schedule: dict) -> dict[str, dict[
             return None
         return {'video_path': report['video_path'], 'video_sha256': report['video_sha256']}
 
-    return _recovered_results(manager, expected_schedule, 'edit', verify_media)
+    return _recovered_results(manager, expected_schedule, {'edit', 'local_edit'}, verify_media)
 
 
 def attach_recovered_review_copy(manager, schedule, expected: dict[str, str]):

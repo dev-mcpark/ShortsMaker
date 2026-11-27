@@ -83,6 +83,19 @@ class EditReadinessTests(IsolatedAsyncioTestCase):
         state.manual_video_mode = True
         self.assertFalse(generation_tab._auto_edit_ready(state, {0: 'approved'}))
 
+    def test_review_only_episode_can_edit_complete_manual_media(self):
+        self.state.manual_video_mode = True
+        self.state.manual_script_id = 'workspace'
+        self.state.operating_scope = {'episode_id': 'fixture'}
+        exporter = SimpleNamespace(all_clips_ready=Mock(return_value=True))
+        with patch.object(settings, 'paid_production_enabled', False):
+            self.assertFalse(generation_tab._manual_edit_ready(self.state, exporter))
+            self.state.prepared_narration_manifest = 'selected/narration.json'
+            self.assertTrue(generation_tab._manual_edit_ready(self.state, exporter))
+            self.assertFalse(generation_tab._auto_edit_ready(self.state, {}))
+            exporter.all_clips_ready.return_value = False
+            self.assertFalse(generation_tab._manual_edit_ready(self.state, exporter))
+
     def test_native_button_and_next_step_follow_live_verdicts_and_pending_edits(self):
         state, verdicts = self.state, {0: 'pending'}
         client = Client(page('/test-edit-readiness'))

@@ -19,6 +19,7 @@ from uuid import uuid4
 from nicegui import core, ui
 from nicegui.client import Client
 from nicegui.page import page
+from moviepy.config import FFMPEG_BINARY
 
 from scripts.operate_schedule import run_scoped
 from shorts_maker.gui.components.episode_workspace import render_episode_workspace
@@ -37,7 +38,7 @@ from test_gui_creation_flows import script
 class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
-        self.root = Path(temp.name)
+        self.root = Path(temp.name).resolve()
         for name, value in [('output_dir', self.root / 'outputs'),
                             ('google_monthly_budget_krw', 10000), ('google_budget_opening_krw', 0),
                             ('google_budget_month', google_budget._period()), ('google_usd_krw_rate', 2000),
@@ -336,6 +337,75 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
 
     async def test_real_cli_child_transports_scoped_action_with_offline_provider_only(self):
         await self.exercise_scoped_transport('frame')
+
+    async def test_local_edit_uses_same_episode_with_stale_ledgers_and_provider_calls_disabled(self):
+        video, audio = settings.output_dir / 'input.mp4', settings.output_dir / 'input.mp3'
+        await asyncio.to_thread(subprocess.run, [
+            FFMPEG_BINARY, '-hide_banner', '-loglevel', 'error',
+            '-f', 'lavfi', '-i', 'color=blue:s=360x640:r=12:d=2',
+            '-f', 'lavfi', '-i', 'sine=f=440:d=2',
+            '-map', '0:v', '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(video),
+            '-map', '1:a', str(audio),
+        ], capture_output=True, check=True)
+        hooks = self.root / 'hooks'
+        hooks.mkdir()
+        (hooks / 'sitecustomize.py').write_text('''import os
+from pathlib import Path
+import httpx
+from shorts_maker.editor.video_editor import VideoEditor
+from shorts_maker.services.production_service import ProductionService
+from shorts_maker.utils.config import settings
+settings.output_dir = Path(os.environ['STUDIO_TEST_OUTPUT'])
+settings.temp_dir = settings.output_dir / 'temp'
+settings.temp_dir.mkdir(exist_ok=True)
+settings.google_budget_month = settings.openai_budget_month = '2000-01'
+settings.google_monthly_budget_krw = 10000
+settings.openai_monthly_budget_usd = 1
+def blocked(*args, **kwargs):
+    raise AssertionError('No paid or outbound requests in local edit fixture')
+ProductionService._get_generator = ProductionService.upload_to_youtube = blocked
+VideoEditor.prepare_narration = blocked
+httpx.HTTPTransport.handle_request = httpx.AsyncHTTPTransport.handle_async_request = blocked
+''')
+        self.state.confirm_script_review()
+        self.state.bgm_volume = 0
+        protected = [self.manager.filename, episode_path(self.record['id']),
+                     google_budget._database_path(), openai_budget._database_path(), video, audio]
+        before = [path.read_bytes() for path in protected]
+        with patch.dict(os.environ, {'PYTHONPATH': str(hooks), 'STUDIO_TEST_OUTPUT': str(settings.output_dir)}), patch.object(
+                settings, 'paid_production_enabled', False):
+            service = self.state.new_production_service()
+            with self.assertRaisesRegex(RuntimeError, '유료 API'):
+                await service.produce_video(self.script, {1: str(video)})
+            result = await asyncio.wait_for(
+                service.produce_video(self.script, {1: str(video)}, prepared_audio_paths=[str(audio)]), 45)
+        self.assertTrue(result.success, result.error)
+        self.assertTrue(result.ready_for_upload)
+        self.assertIsNone(result.youtube_id)
+        self.assertEqual(result.estimated_visual_cost_usd, 0)
+        self.assertEqual(result.reused_scenes, 1)
+        self.assertFalse(self.pending.exists())
+        self.assertEqual([path.read_bytes() for path in protected], before)
+        from shorts_maker.services.episode_review_recovery import recovered_episode_edits
+        self.assertIn(result.video_path, recovered_episode_edits(self.manager, self.schedule))
+
+    async def test_local_worker_requires_complete_media_and_disabled_paid_mode(self):
+        request, path, digest = self.request('local_edit')
+        self.pending.write_text(json.dumps({
+            'command_sha256': hashlib.sha256(json.dumps(action.worker_command(path, digest)).encode()).hexdigest()
+        }))
+        with patch.dict(os.environ, {'SHORTSMAKER_EPISODE_ID': self.record['id']}), patch.object(
+                ProductionService, 'produce_video', new_callable=AsyncMock) as edit:
+            with self.assertRaisesRegex(ValueError, 'API가 꺼진'):
+                await action.execute_action(request, path, digest)
+            with patch.object(settings, 'paid_production_enabled', False), patch.object(settings, 'max_visual_cost_usd', 0):
+                with self.assertRaisesRegex(ValueError, '모든 장면'):
+                    await action.execute_action(request, path, digest)
+                outside = request.model_copy(update={'manual_clip_paths': {1: str(self.root / 'outside.mp4')},
+                                                     'prepared_audio_paths': [str(settings.output_dir / 'input.mp3')]})
+                with self.assertRaisesRegex(ValueError, '출력 폴더'):
+                    await action.execute_action(outside, path, digest)
+            edit.assert_not_awaited()
 
     async def exercise_scoped_transport(self, operation, *, new_openings=False):
         hooks = self.root / 'hooks';hooks.mkdir()

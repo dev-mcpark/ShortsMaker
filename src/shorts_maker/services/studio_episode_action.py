@@ -34,7 +34,7 @@ class EpisodeScope(BaseModel):
 class StudioAction(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     scope: EpisodeScope
-    operation: Literal['frame', 'raw', 'narration', 'edit', 'upload']
+    operation: Literal['frame', 'raw', 'narration', 'edit', 'local_edit', 'upload']
     schedule_sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
     script_sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
     review_receipt: str = Field(pattern=r'^[0-9a-f]{64}$')
@@ -51,6 +51,17 @@ class StudioAction(BaseModel):
     metadata: dict[str, JsonValue] | None = None
     editor_options: dict[str, JsonValue] = Field(default_factory=dict)
     overlay_options: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+def complete_local_edit(
+    script: ShortsScript,
+    manual_clip_paths: dict[int, str] | None,
+    prepared_audio_paths: list[str] | None,
+) -> bool:
+    return bool(manual_clip_paths and prepared_audio_paths
+                and set(manual_clip_paths) == {scene.scene_number for scene in script.scenes}
+                and len(prepared_audio_paths) == len(script.scenes)
+                and all(manual_clip_paths.values()) and all(prepared_audio_paths))
 
 
 def action_directory() -> Path:
@@ -141,23 +152,34 @@ async def execute_action(request: StudioAction, path: Path, digest: str):
     audit = json.loads(pending.read_text())
     if audit.get('command_sha256') != hashlib.sha256(json.dumps(worker_command(path, digest)).encode()).hexdigest():
         raise ValueError('다른 회차 요청이 실행 중입니다. 기존 실행 결과를 먼저 대조하세요.')
-    env, _ = episode_environment(record)
     if (os.getenv('SHORTSMAKER_EPISODE_ID') != record['id']
-            or not 0 < settings.google_monthly_budget_krw <= int(env['GOOGLE_MONTHLY_BUDGET_KRW'])
-            or not 0 < settings.openai_monthly_budget_usd <= float(env['OPENAI_MONTHLY_BUDGET_USD'])
-            or settings.veo_model_id != env['VEO_MODEL_ID']
-            or settings.veo_duration_seconds != int(env['VEO_DURATION_SECONDS'])
-            or settings.hybrid_veo_duration_seconds != int(env['HYBRID_VEO_DURATION_SECONDS'])
-            or settings.google_usd_krw_rate < float(env['GOOGLE_USD_KRW_RESERVE_RATE'])
-            or not 0 <= settings.max_visual_cost_usd <= float(env['MAX_VISUAL_COST_USD'])
             or settings.image_model_id != request.image_model
             or schedule_sha256(schedule) != request.schedule_sha256):
         raise ValueError('회차 상한·모델·일정이 고정된 별도 실행 경로가 필요합니다.')
-    require_paid_production_enabled()
     script = ShortsScript.model_validate(schedule['last_script'])
     if (script_sha256(script.model_dump(mode='json')) != request.script_sha256
             or script_draft_key(script) != request.review_receipt):
         raise ValueError('현재 대본과 검토 확인이 일치하지 않습니다.')
+    if request.operation == 'local_edit':
+        if settings.paid_production_enabled or settings.max_visual_cost_usd != 0:
+            raise ValueError('보유 재료 편집은 API가 꺼진 회차 작업으로 실행해야 합니다.')
+        if not complete_local_edit(script, request.manual_clip_paths, request.prepared_audio_paths):
+            raise ValueError('모든 장면의 보유 영상과 준비된 음성을 연결하세요.')
+        files = [*request.manual_clip_paths.values(), *request.prepared_audio_paths]
+        if any(Path(file).is_symlink() or not Path(file).resolve().is_relative_to(settings.output_dir.resolve())
+               for file in files):
+            raise ValueError('출력 폴더의 보유 장면 영상과 음성 파일만 연결하세요.')
+    else:
+        env, _ = episode_environment(record)
+        if (not 0 < settings.google_monthly_budget_krw <= int(env['GOOGLE_MONTHLY_BUDGET_KRW'])
+                or not 0 < settings.openai_monthly_budget_usd <= float(env['OPENAI_MONTHLY_BUDGET_USD'])
+                or settings.veo_model_id != env['VEO_MODEL_ID']
+                or settings.veo_duration_seconds != int(env['VEO_DURATION_SECONDS'])
+                or settings.hybrid_veo_duration_seconds != int(env['HYBRID_VEO_DURATION_SECONDS'])
+                or settings.google_usd_krw_rate < float(env['GOOGLE_USD_KRW_RESERVE_RATE'])
+                or not 0 <= settings.max_visual_cost_usd <= float(env['MAX_VISUAL_COST_USD'])):
+            raise ValueError('회차 상한·모델·일정이 고정된 별도 실행 경로가 필요합니다.')
+        require_paid_production_enabled()
     if request.operation in {'frame', 'raw'} and (request.scene_index is None or request.scene_index >= len(script.scenes)):
         raise ValueError('현재 대본의 장면 번호를 선택하세요.')
     allowed_editor = {'tts_voice', 'bgm_mood', 'bgm_track', 'bgm_volume', 'subtitle_color', 'subtitle_size', 'subtitle_y_position', 'text_overlays'}
@@ -192,7 +214,7 @@ async def execute_action(request: StudioAction, path: Path, digest: str):
             if request.narration_budget_usd is None:
                 raise ValueError('내레이션의 요청 상한이 필요합니다.')
             result = await service.prepare_narration(script, request_budget_usd=request.narration_budget_usd)
-        elif request.operation == 'edit':
+        elif request.operation in {'edit', 'local_edit'}:
             result = await service.produce_video(script, manual_clip_paths=request.manual_clip_paths,
                 prepared_audio_paths=request.prepared_audio_paths, retain_narration=True, finish_phase=request.finish_phase)
         else:

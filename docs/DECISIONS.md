@@ -1307,3 +1307,7 @@ Use the shared minimum batch and Google request-rounding calculation for the Stu
 Find the review copy from the exact episode's completed command audit, upload request and typed receipt. Confirm its identity with the production report and video, then use the existing explicit attachment transition. A new workspace can complete the connection while the episode stays pending editorial review. Legacy and independently uploaded copies continue through explicit file selection.
 
 If the Studio launcher stopped before archiving its pending audit, allow the owner to archive the original bytes under the existing scheduler lock. Require a recorded zero exit code from the upload worker, confirmed absence of the recorded launcher PID, the exact request and successful receipt, and matching local private-video evidence. Keep incomplete, PID-less, live or conflicting audits pending. Archiving leaves attachment and owner adoption as separate actions.
+
+## 2026-11-27 — Keep a complete local edit inside its episode
+
+When all current scene numbers have connected clips and the selected narration supplies every scene, use a fixed local-only edit through the existing episode launcher. The child requires provider calls disabled, a zero visual cap, and media paths within outputs. It runs the normal editor and technical checks. Keep the schedule, script review, execution marker and typed receipt checks so the edited file can be found again in the same episode. A paid request still needs current ledger checks, and uploading remains a separate action.

@@ -211,13 +211,14 @@ class AppState:
         model = episode_video_spec(self.mode)[0] if self.operating_scope else settings.veo_model_id
         return f'영상 모델 · {model}' + (' · 회차 고정' if self.operating_scope else '')
 
-    def require_execution_context(self, expected: tuple) -> None:
+    def require_execution_context(self, expected: tuple, *, local_edit: bool = False) -> None:
         if self.execution_key() != expected:
             raise ValueError('제작 회차 연결이 바뀌었습니다. 현재 화면을 다시 열어 주세요.')
         if self.operating_scope:
             from shorts_maker.utils.paid_gate import require_paid_production_enabled
             from shorts_maker.services.studio_episode_action import EpisodeScope, scope_status
-            require_paid_production_enabled()
+            if not local_edit:
+                require_paid_production_enabled()
             scope_status(EpisodeScope.model_validate(self.operating_scope), self.script)
 
     def load_scheduled_script(self, manager, schedule_id: str, *, expected_schedule: dict | None = None) -> None:

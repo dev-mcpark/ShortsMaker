@@ -1,5 +1,7 @@
 # Project map
 
+`ScopedProductionService` selects the fixed `local_edit` action when every scene has a supplied clip and prepared audio. `operate_schedule.py` keeps the episode lock and starts that worker with provider calls disabled and a zero visual cap. `studio_episode_action.py` checks complete local inputs and the usual episode, schedule and script identity before invoking the existing editor. Edit recovery reads the normal receipt for either edit action.
+
 `narration_panel.py` shows matching retained audio before the separate speech preparation controls. A sole match can prefill the picker; only explicit connection uses the existing manifest and audio checks. The existing audio preferences own saved selections.
 
 `scheduling_tab.py` binds the script-open action to the displayed schedule and enters the workspace. `AppState.load_scheduled_script` validates the episode and script before preserving an already-open matching workspace or using the standard saved-script loader for changed work.

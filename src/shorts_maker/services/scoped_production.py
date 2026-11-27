@@ -12,7 +12,9 @@ from shorts_maker.planner.models import ShortsScript
 from shorts_maker.services.operating_budget import episode_video_spec
 from shorts_maker.services.operating_status import schedule_sha256
 from shorts_maker.services.production_service import ProductionPhase, ProductionProgress, ProductionResult, ProductionService, SceneProgress, script_sha256
-from shorts_maker.services.studio_episode_action import EpisodeScope, StudioAction, action_directory, scope_status, validate_receipt, worker_command
+from shorts_maker.services.studio_episode_action import (
+    EpisodeScope, StudioAction, action_directory, complete_local_edit, scope_status, validate_receipt, worker_command,
+)
 from shorts_maker.utils.config import PROJECT_ROOT, settings
 from shorts_maker.utils.paid_gate import require_paid_production_enabled
 
@@ -37,7 +39,8 @@ class ScopedProductionService(ProductionService):
                     file.write(self._request_digest)
 
     async def _dispatch(self, operation, script=None, **parameters):
-        require_paid_production_enabled()
+        if operation != 'local_edit':
+            require_paid_production_enabled()
         scope = EpisodeScope.model_validate(self.scope)
         current, _ = await asyncio.to_thread(scope_status, scope, script)
         current_script = ShortsScript.model_validate(current['last_script'])
@@ -63,7 +66,10 @@ class ScopedProductionService(ProductionService):
         command = [sys.executable, str(PROJECT_ROOT / 'scripts/operate_schedule.py'), '--schedules', scope.schedules_file,
             'run', '--studio-request', str(path), '--request-sha256', digest, scope.schedule_id, '--',
             *worker_command(path, digest)]
-        self._update_progress(ProductionPhase.UPLOADING if operation == 'upload' else ProductionPhase.GENERATING, 0, '회차 상한 안에서 실행 중')
+        self._update_progress(
+            ProductionPhase.UPLOADING if operation == 'upload' else ProductionPhase.GENERATING, 0,
+            '보유 재료 편집 중 · 새 API 요청 없음' if operation == 'local_edit' else '회차 상한 안에서 실행 중',
+        )
         try:
             process = await asyncio.create_subprocess_exec(*command, cwd=PROJECT_ROOT,
                 stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
@@ -130,7 +136,8 @@ class ScopedProductionService(ProductionService):
                                     expected_frame_sha256=expected_frame_sha256, manual_clip_paths=manual_clip_paths)
 
     async def produce_video(self, script, manual_clip_paths=None, finish_phase=True, prepared_audio_paths=None, retain_narration=False):
-        return await self._dispatch('edit', script, manual_clip_paths=manual_clip_paths,
+        operation = 'local_edit' if complete_local_edit(script, manual_clip_paths, prepared_audio_paths) else 'edit'
+        return await self._dispatch(operation, script, manual_clip_paths=manual_clip_paths,
                                     prepared_audio_paths=prepared_audio_paths, finish_phase=finish_phase)
 
     async def upload_to_youtube(self, video_path, metadata):
