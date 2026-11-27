@@ -428,15 +428,25 @@ class ScheduleDeletionTests(TestCase):
             source.load_sources.return_value = {}
             recorder = _UI()
             state = AppState(final_video_path='newer-comparison.mp4')
+            navigate = Mock()
             with patch.object(scheduling_tab, 'ui', recorder), \
                     patch.object(scheduling_tab, 'schedule_manager', manager), \
                     patch.object(scheduling_tab, 'SourceManager', return_value=source), \
                     patch.object(scheduling_tab, 'card_with_header', lambda *args: recorder.card()):
-                scheduling_tab.render_scheduling_tab(state)
+                scheduling_tab.render_scheduling_tab(state, navigate)
                 actions = [e for e in recorder.elements if e.kind == 'button'
                            and e.args and e.args[0] == '검토할 각본 불러오기']
                 self.assertEqual(len(actions), 1)
                 self.assertEqual(manager.filename.read_bytes(), before)
+                original = manager.get_schedule(draft_id)
+                manager.update_schedule(draft_id, {'last_script': script().model_copy(
+                    update={'title': '다음 대본'}).model_dump(mode='json')})
+                with patch.object(scheduling_tab, 'safe_notify') as notify:
+                    actions[0].callback()
+                    self.assertIn('회차 상태가 변경됐습니다', notify.call_args.args[0])
+                navigate.assert_not_called()
+                self.assertIsNone(state.script)
+                manager.update_schedule(draft_id, {'last_script': original['last_script']})
                 manager.update_schedule(draft_id, {'last_youtube_id': 'nowattached1'})
                 with patch.object(scheduling_tab, 'safe_notify'):
                     actions[0].callback()

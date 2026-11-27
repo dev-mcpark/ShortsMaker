@@ -1,5 +1,6 @@
 """Schedule Management 탭 컴포넌트"""
 
+from collections.abc import Callable
 from pathlib import Path
 import re
 from typing import TYPE_CHECKING
@@ -72,7 +73,7 @@ def _schedule_readiness_messages() -> list[str]:
     return messages
 
 
-def render_scheduling_tab(state: 'AppState') -> None:
+def render_scheduling_tab(state: 'AppState', open_workspace: Callable[[], None] | None = None) -> None:
     """Schedule Management 탭 렌더링"""
     media_source = media_sources(ui.context.client)
 
@@ -383,24 +384,33 @@ def render_scheduling_tab(state: 'AppState') -> None:
                                                          else '각본·장면 검토 대기 · 제작·업로드 결과는 별도 확인').classes(
                                                     'text-xs text-amber-300')
 
-                                                def load_pending_script(sid=schedule['id']):
+                                                def load_pending_script(expected=schedule):
+                                                    sid = expected['id']
                                                     try:
                                                         current = schedule_manager.get_schedule(sid)
                                                         if (not current or current.get('enabled')
                                                                 or current.get('last_result') != 'script_review_pending'
                                                                 or current.get('last_youtube_id')):
                                                             raise ValueError('현재 회차는 각본 검토 단계가 아닙니다. 연결된 완성본을 확인하세요.')
-                                                        script = ShortsScript.model_validate(current.get('last_script'))
+                                                        if current != expected:
+                                                            raise ValueError('회차 상태가 변경됐습니다. 예약 화면을 다시 확인하세요.')
                                                         if current.get('review_operator') == 'agent':
-                                                            state.load_scheduled_script(schedule_manager, sid)
+                                                            state.load_scheduled_script(schedule_manager, sid, expected_schedule=expected)
                                                         else:
                                                             if state.operating_scope:
                                                                 raise ValueError('먼저 제작 작업실에서 회차 연결을 해제하세요.')
+                                                            script = ShortsScript.model_validate(current.get('last_script'))
                                                             state.load_saved_script(script, backup_current=True)
-                                                    except (TypeError, ValueError) as error:
+                                                    except (OSError, TypeError, ValueError) as error:
                                                         safe_notify(f'저장된 각본 확인 실패: {error}', type='negative')
                                                         return
-                                                    safe_notify('각본을 불러왔습니다. 제작 작업실 → 1. 대본·장면 검토에서 확인하세요.', type='info')
+                                                    if open_workspace:
+                                                        state.workspace_sub_tab = ('preview' if state.is_script_reviewed()
+                                                                                   and not state.has_unapplied_script_draft()
+                                                                                   else 'editor')
+                                                        open_workspace()
+                                                    else:
+                                                        safe_notify('각본을 불러왔습니다. 제작 작업실에서 이어서 확인하세요.', type='info')
 
                                                 if not schedule.get('last_youtube_id'):
                                                     ui.button('검토할 각본 불러오기', on_click=load_pending_script).props(

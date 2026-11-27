@@ -1,5 +1,7 @@
 # Project map
 
+`scheduling_tab.py` binds the script-open action to the displayed schedule and enters the workspace. `AppState.load_scheduled_script` validates the episode and script before preserving an already-open matching workspace or using the standard saved-script loader for changed work.
+
 `operating_budget.py` shares the episode's existing baseline subtraction with the read-only reservation breakdown. It groups reservation timestamps into days using the existing provider time zones in `budget_calendar.py` and retains the ledger month separately. `episode_reservation_panel.py` exposes that breakdown in the current episode without requiring a valid new monthly opening or querying a provider.
 
 `existing_scene_picker.py` accepts a time range after previewing an eligible saved clip. `existing_scene_clips.py` cuts the verified original bytes locally with FFmpeg and rechecks the source and any native approval after encoding. The existing validated manual import owns the final workspace write.

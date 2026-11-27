@@ -232,8 +232,13 @@ class AppState:
         if expected_schedule is not None and current != expected_schedule:
             raise ValueError('회차 상태가 변경됐습니다. 예약 화면을 다시 확인하세요.')
         script = ShortsScript.model_validate(current['last_script'])
+        if self.is_busy:
+            raise ValueError('제작 또는 업로드가 진행 중에는 각본을 바꿀 수 없습니다.')
+        scope_data = scope.model_dump()
+        if self.operating_scope == scope_data and self.script == script:
+            return
         self.load_saved_script(script, backup_current=True)
-        self.operating_scope = scope.model_dump()
+        self.operating_scope = scope_data
         self._execution_version += 1
 
     def detach_operating_scope(self) -> None:

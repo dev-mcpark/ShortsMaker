@@ -123,6 +123,43 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
                 await self.state.new_production_service().generate_first_frame(self.script, 0, request_budget_usd=.034)
             start.assert_not_awaited()
 
+    async def test_reopening_exact_episode_preserves_in_progress_workspace(self):
+        self.state.confirm_script_review()
+        self.state.manual_script_id = 'existing-manual-workspace'
+        self.state.prepared_narration_manifest = 'existing-narration.json'
+        self.state.prepared_narration_sha256 = 'a' * 64
+        self.state.final_video_path = 'retained-result.mp4'
+        self.state.bgm_volume = 0.35
+        execution_key = self.state.execution_key()
+        before = self.manager.filename.read_bytes()
+
+        self.state.load_scheduled_script(self.manager, self.schedule['id'], expected_schedule=self.schedule)
+
+        self.assertTrue(self.state.is_script_reviewed())
+        self.assertEqual(self.state.execution_key(), execution_key)
+        self.assertEqual(self.state.manual_script_id, 'existing-manual-workspace')
+        self.assertEqual(self.state.prepared_narration_manifest, 'existing-narration.json')
+        self.assertEqual(self.state.prepared_narration_sha256, 'a' * 64)
+        self.assertEqual(self.state.final_video_path, 'retained-result.mp4')
+        self.assertEqual(self.state.bgm_volume, 0.35)
+        self.assertEqual(self.manager.filename.read_bytes(), before)
+
+        revised = self.script.model_copy(update={'title': '새로 저장된 회차 대본'})
+        current = self.manager.update_schedule(
+            self.schedule['id'], {'last_script': revised.model_dump(mode='json')})
+        with patch.object(self.state, '_backup_text_work'), self.assertRaisesRegex(ValueError, '회차 상태'):
+            self.state.load_scheduled_script(self.manager, self.schedule['id'], expected_schedule=self.schedule)
+        self.assertTrue(self.state.is_script_reviewed())
+        self.assertEqual(self.state.final_video_path, 'retained-result.mp4')
+
+        with patch.object(self.state, '_backup_text_work') as backup:
+            self.state.load_scheduled_script(self.manager, self.schedule['id'], expected_schedule=current)
+            backup.assert_called_once_with(revised, save_applied=True)
+        self.assertEqual(self.state.script, revised)
+        self.assertFalse(self.state.is_script_reviewed())
+        self.assertIsNone(self.state.final_video_path)
+        self.assertNotEqual(self.state.execution_key(), execution_key)
+
     async def test_worker_uses_existing_services_and_typed_local_inputs(self):
         self.scoped_env()
         clips = {0: str(self.root / 'clip.mp4')}
