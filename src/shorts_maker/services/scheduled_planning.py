@@ -8,7 +8,9 @@ from shorts_maker.planner.models import ShortsScript
 from shorts_maker.planner.script_planner import ScriptPlanner
 from shorts_maker.services import google_budget, openai_budget
 from shorts_maker.services.monthly_opening import MonthOpeningRequired
-from shorts_maker.services.operating_budget import default_episode_caps, episode_video_spec, episode_visual_limits
+from shorts_maker.services.operating_budget import (
+    default_episode_caps, episode_new_visual_plan, episode_video_spec, episode_visual_limits,
+)
 from shorts_maker.services.operating_status import operator_status, schedule_sha256
 from shorts_maker.services.visual_cost import minimum_planning_visuals
 from shorts_maker.utils.config import PROJECT_ROOT, settings
@@ -71,6 +73,10 @@ def planning_preflight(manager, expected: dict) -> dict:
                          f'이 회차의 비주얼 상한은 ${visual_cap:.2f}입니다.')
     room['minimum_visual_scenes'] = ScriptPlanner.MIN_SCENES
     room['minimum_visual_reservation_krw'] = minimum_krw
+    room['new_visual_reservation_krw'], room['max_fully_new_scenes'] = episode_new_visual_plan(
+        mode, range(ScriptPlanner.MIN_SCENES, ScriptPlanner.MAX_SCENES + 1), room['google_remaining_krw'],
+        usd_krw_rate=rate, visual_cap=visual_cap,
+    )
     return room
 
 

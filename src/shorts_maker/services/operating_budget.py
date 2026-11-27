@@ -13,6 +13,7 @@ from pathlib import Path
 
 from shorts_maker.services import google_budget, openai_budget
 from shorts_maker.services.budget_calendar import GOOGLE_BUDGET_TIMEZONE, OPENAI_BUDGET_TIMEZONE
+from shorts_maker.services.visual_cost import estimated_scene_cost, minimum_planning_visuals
 from shorts_maker.utils.config import settings
 
 
@@ -38,6 +39,31 @@ def episode_video_spec(mode: str) -> tuple[str, int]:
 def episode_visual_limits(remaining_google_krw: int) -> tuple[float, float]:
     rate = max(2000, settings.google_usd_krw_rate)
     return rate, min(1.5, remaining_google_krw / rate)
+
+
+def episode_new_visual_plan(mode: str, scene_counts: range, remaining_krw: int, *,
+                            usd_krw_rate: float, visual_cap: float) -> tuple[int, int | None]:
+    """Estimate all-new material with one first frame for each default video scene."""
+    model, seconds = episode_video_spec(mode)
+    minimum_krw = 0
+    max_fitting = None
+    for scene_count in scene_counts:
+        output_cost, output_count = minimum_planning_visuals(
+            mode, scene_count, image_model=settings.image_model_id,
+            video_model=model, video_seconds=seconds, video_attempts=1,
+        )
+        frames = scene_count if mode == 'video' else int(mode == 'hybrid')
+        total_cost = output_cost
+        if frames:
+            total_cost += frames * estimated_scene_cost('image', settings.image_model_id)
+        reserved_krw = google_budget.google_batch_reservation_krw(
+            total_cost, output_count + frames, usd_krw_rate=usd_krw_rate,
+        )
+        if scene_count == scene_counts.start:
+            minimum_krw = reserved_krw
+        if reserved_krw <= remaining_krw and total_cost <= visual_cap:
+            max_fitting = scene_count
+    return minimum_krw, max_fitting
 
 
 def episode_path(episode_id: str) -> Path:

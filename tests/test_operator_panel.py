@@ -254,8 +254,9 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
             await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
             self.assertEqual(self.manager.filename.read_bytes(), before)
             self.assertIn('OpenAI $0.300000', '\n'.join(getattr(e, 'text', '') for e in self.client.elements.values()))
-            self.assertIn('최소 5장면 신규 비주얼 예약 추정', '\n'.join(
+            self.assertIn('기본 5장면의 출력 예약 추정', '\n'.join(
                 getattr(e, 'text', '') for e in self.client.elements.values()))
+            self.assertIn('영상 장면의 첫 프레임 포함', self.text(self.client.content))
             self.click('취소')
             await self.click_and_wait('이 회차 기획 실행', 'confirm')
             plan.assert_not_awaited()
@@ -302,7 +303,8 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
             entered.set()
             await release.wait()
             return {'google_remaining_krw': 3000, 'openai_remaining_usd': .3,
-                    'minimum_visual_scenes': 5, 'minimum_visual_reservation_krw': 636}
+                    'minimum_visual_scenes': 5, 'minimum_visual_reservation_krw': 636,
+                    'new_visual_reservation_krw': 705, 'max_fully_new_scenes': 7}
 
         with self.client, patch.object(operator_panel.run, 'io_bound', side_effect=delayed_check) as check:
             before = asyncio.all_tasks()

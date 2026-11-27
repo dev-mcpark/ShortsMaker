@@ -86,6 +86,7 @@ class TerraPlanningTests(unittest.TestCase):
                 planner = object.__new__(ScriptPlanner)
                 planner.client, planner.logger = client, Mock()
                 planner.generation_mode, planner.allowed_moods = 'video', ['sci-fi']
+                planner.preferred_max_scenes = 5
                 result = await planner._write_script(dict(title=script.title, content=source,
                                                          url=script.source_url, source='Source', category='City_Life'))
                 self.assertEqual(result.model_dump(), script.model_dump())
@@ -101,5 +102,6 @@ class TerraPlanningTests(unittest.TestCase):
         self.assertIn('Visible proof', writer_prompt)
         self.assertIn('Continuity anchors', writer_prompt)
         self.assertIn('Do not list cabin, capacity, route and fare', writer_prompt)
+        self.assertIn('aim for no more than 5 scenes', writer_prompt)
         self.assertIn('visual_discontinuity', requests[2]['messages'][0]['content'])
 

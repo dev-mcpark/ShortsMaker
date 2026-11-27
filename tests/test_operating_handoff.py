@@ -342,7 +342,8 @@ class OperatingHandoffTests(unittest.TestCase):
         with patch.object(settings, 'paid_production_enabled', True):
             room = scheduled_planning.planning_preflight(self.manager, expected)
             self.assertEqual(room, {'google_remaining_krw': 3000, 'openai_remaining_usd': .30,
-                                    'minimum_visual_scenes': 5, 'minimum_visual_reservation_krw': 636})
+                                    'minimum_visual_scenes': 5, 'minimum_visual_reservation_krw': 636,
+                                    'new_visual_reservation_krw': 705, 'max_fully_new_scenes': 7})
             self.assertNotIn('last_episode_id', self.manager.get_schedule(expected['id']))
             self.manager.update_schedule(expected['id'], {'name': 'changed since preview'})
             with self.assertRaises(ValueError):
@@ -363,6 +364,27 @@ class OperatingHandoffTests(unittest.TestCase):
             child.assert_not_called()
         self.assertEqual(self.manager.filename.read_bytes(), before)
         self.assertEqual(ledger_bytes, [path.read_bytes() for path in ledgers])
+
+    def test_all_new_video_plan_counts_first_frames_and_reaches_scoped_writer(self):
+        record = self.queued_episode()
+        expected = self.manager.update_schedule(self.schedule['id'], {'mode': 'video'})
+        with patch.object(settings, 'paid_production_enabled', True), patch.object(
+                settings, 'google_budget_opening_krw', 7500):
+            room = scheduled_planning.planning_preflight(self.manager, expected)
+            self.assertEqual(room['google_remaining_krw'], 2500)
+            self.assertEqual(room['new_visual_reservation_krw'], 2749)
+            self.assertIsNone(room['max_fully_new_scenes'])
+        with patch.object(settings, 'paid_production_enabled', True), patch.object(
+                settings, 'max_visual_cost_usd', 1.5), patch.dict(
+                os.environ, {'SHORTSMAKER_EPISODE_ID': record['id']}), patch(
+                'shorts_maker.uploader.youtube_uploader.YouTubeUploader.get_authenticated_service'), patch(
+                'shorts_maker.utils.bgm_manager.BGMManager.has_documented_track', return_value=True), patch(
+                'shorts_maker.services.production_service.ProductionService') as service:
+            service.return_value.full_pipeline = AsyncMock(return_value=ProductionResult(success=False))
+            room = scheduled_planning.planning_preflight(self.manager, expected)
+            self.assertEqual(room['max_fully_new_scenes'], 5)
+            asyncio.run(self.manager._execute_pipeline(expected, operator=True))
+            service.assert_called_once_with(mode='video', preferred_max_scenes=5)
 
     def test_studio_planning_runs_only_fixed_existing_scoped_command(self):
         from test_gui_creation_flows import script

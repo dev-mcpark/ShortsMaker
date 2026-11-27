@@ -2,6 +2,8 @@
 
 `scheduled_planning.py` reports both providers' current-month blockers before offering a planning confirmation. The pending operator panel exposes the shared, explicit YouTube connection controls so account checks can be completed from the same screen.
 
+`operating_budget.episode_new_visual_plan` adds first-frame reservations for the default video scenes. The planning confirmation uses its bounded estimate, and the scoped scheduler uses the same calculation to give the writer a scene-count preference. Per-scene production checks own the actual reserve.
+
 `ScheduleManager` records a confirmed pre-scoring RSS read failure on the same waiting agent episode. `operating_status.py` exposes the reason, and `operator_panel.py` offers the existing source picker and budget-checked planning confirmation to resume.
 
 `scheduled_script_history.py` checks the current revision file at workspace entry and scoped execution. Its explicit recovery operation recreates a missing Studio-managed copy from the current run's verified history at the same path. The operator panel exposes the action after a missing-file status read.

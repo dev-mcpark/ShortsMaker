@@ -1310,6 +1310,8 @@ Share provider time zones between reservations and the queue panel. Display the 
 
 Use the shared minimum batch and Google request-rounding calculation for the Studio preview and the production guard. The scheduled preview uses the episode's visual profile, conversion rate and cap. Leave exact pricing for first frames, a reviewed scene plan and narration to the corresponding production steps. Retain the current-balance check before the fixed planning child starts.
 
+2026-11-28 update. Add an all-new estimate with one first-frame request per default video scene. Use the episode and provider room to estimate the largest default scene count that fits, with one video hook in hybrid mode. The scoped writer gets a scene-count preference based on the same calculation. Keep the existing minimum-output admission and script validation so the editor can still revise the story or reuse eligible assets. Exact costs and approval remain at production.
+
 ## 2026-11-25 — Recover a scoped upload using its completed local evidence
 
 Find the review copy from the exact episode's completed command audit, upload request and typed receipt. Confirm its identity with the production report and video, then use the existing explicit attachment transition. A new workspace can complete the connection while the episode stays pending editorial review. Legacy and independently uploaded copies continue through explicit file selection.

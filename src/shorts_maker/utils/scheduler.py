@@ -856,6 +856,8 @@ class ScheduleManager:
                 connection.close()
 
     async def _execute_pipeline_serial(self, schedule: Dict[str, Any], *, operator: bool = False):
+        from shorts_maker.planner.script_planner import ScriptPlanner
+        from shorts_maker.services.operating_budget import episode_new_visual_plan
         from shorts_maker.services.production_service import ProductionService
         from shorts_maker.services.google_budget import budget_status as google_budget_status
         from shorts_maker.services.openai_budget import budget_status as openai_budget_status
@@ -941,6 +943,7 @@ class ScheduleManager:
                 })
                 self.logger.warning("Scheduled pipeline paused: paid production disabled")
                 return
+            google_room = None
             for status, remaining, reason in (
                 (google_budget_status, 'remaining_krw', 'google_budget_exceeded'),
                 (openai_budget_status, 'remaining_usd', 'openai_budget_exceeded'),
@@ -948,6 +951,8 @@ class ScheduleManager:
                 try:
                     snapshot = status()
                     if snapshot.get('enabled') and snapshot.get(remaining, 0) > 0:
+                        if remaining == 'remaining_krw':
+                            google_room = snapshot[remaining]
                         continue
                 except (RuntimeError, ValueError, OSError):
                     pass
@@ -969,7 +974,15 @@ class ScheduleManager:
                 self.logger.warning("Scheduled pipeline paused: documented BGM missing")
                 return
 
-            service = ProductionService(mode=schedule.get('mode', 'image'))
+            mode = schedule.get('mode', 'image')
+            preferred_max_scenes = None
+            if operator:
+                _, max_fitting = episode_new_visual_plan(
+                    mode, range(ScriptPlanner.MIN_SCENES, ScriptPlanner.MAX_SCENES + 1), google_room,
+                    usd_krw_rate=settings.google_usd_krw_rate, visual_cap=settings.max_visual_cost_usd,
+                )
+                preferred_max_scenes = max_fitting or ScriptPlanner.MIN_SCENES
+            service = ProductionService(mode=mode, preferred_max_scenes=preferred_max_scenes)
 
             # Persist the pause before the first paid call; a killed process cannot save a final result.
             started = {

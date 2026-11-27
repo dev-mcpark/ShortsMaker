@@ -194,7 +194,7 @@ class ProductionService:
     def __init__(self, mode: str = "image", parallel_clips: bool = False,
                  character_overlay_config: Optional[CharacterOverlayConfig] = None,
                  editor_options: Optional[Dict[str, Any]] = None,
-                 max_veo_attempts: int = 1):
+                 max_veo_attempts: int = 1, preferred_max_scenes: int | None = None):
         """
         ProductionService 초기화
 
@@ -211,6 +211,7 @@ class ProductionService:
         if max_veo_attempts < 1:
             raise ValueError("max_veo_attempts는 1 이상이어야 합니다.")
         self.max_veo_attempts = max_veo_attempts
+        self._preferred_max_scenes = preferred_max_scenes
         self._progress = ProductionProgress()
         self._cancelled = False
 
@@ -329,6 +330,7 @@ class ProductionService:
         """ScriptPlanner 인스턴스 반환 (지연 초기화)"""
         if self._planner is None:
             self._planner = ScriptPlanner(generation_mode=self.mode)
+            self._planner.preferred_max_scenes = self._preferred_max_scenes
         return self._planner
 
     def _get_generator(self) -> VideoGenerator:

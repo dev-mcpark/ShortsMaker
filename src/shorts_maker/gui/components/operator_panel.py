@@ -135,10 +135,18 @@ def render_operator_panel(state, manager, schedule, on_attached):
             ui.label(f'선택 기사 · {source}' if source else '소재 선택 · RSS 자동 발견').classes('text-sm break-all')
             ui.label('소재 분석·각본·검증에 OpenAI 비용이 발생합니다. 음성·이미지·영상 제작과 업로드는 실행하지 않습니다.').classes('text-sm text-slate-300')
             ui.label(f'월·회차 중 작은 잔여 상한: Google ₩{room["google_remaining_krw"]:,} · OpenAI ${room["openai_remaining_usd"]:.6f}').classes('text-sm text-teal-200')
-            ui.label(f'최소 {room["minimum_visual_scenes"]}장면 신규 비주얼 예약 추정 · '
-                     f'₩{room["minimum_visual_reservation_krw"]:,}').classes('text-sm text-slate-300')
-            ui.label('이 화면의 신규 비주얼 추정은 기본 장면 구성에 대한 금액입니다. '
-                     '각본에 맞춘 첫 프레임·장면·음성의 예약액은 제작 단계에서 확인합니다.').classes('text-xs text-slate-400')
+            scene_count = room['minimum_visual_scenes']
+            output_cost = room['minimum_visual_reservation_krw']
+            all_new_cost = room['new_visual_reservation_krw']
+            ui.label(f'기본 {scene_count}장면의 출력 예약 추정 · ₩{output_cost:,}').classes('text-sm text-slate-300')
+            if all_new_cost != output_cost:
+                ui.label(f'기본 {scene_count}장면을 모두 새로 준비 · '
+                         f'₩{all_new_cost:,} (영상 장면의 첫 프레임 포함)').classes('text-sm text-slate-300')
+            if max_scenes := room['max_fully_new_scenes']:
+                ui.label(f'현재 예산에서 기본 구성으로 모두 새로 준비할 수 있는 장면은 최대 {max_scenes}개로 추정합니다.').classes('text-xs text-slate-400')
+            else:
+                ui.label('현재 예산으로는 기본 장면을 모두 새로 준비하기 어렵습니다. 제작 전에 재사용할 재료를 확인하세요.').classes('text-xs text-amber-200')
+            ui.label('혼합 모드는 영상 오프닝 1개를 기준으로 계산합니다. 실제 장면·재사용·음성 비용은 제작 단계에서 확인합니다.').classes('text-xs text-slate-400')
             ui.label('OpenAI 기획은 실제 기사·응답에 맞춰 각 요청 직전에 예약액을 계산합니다.').classes('text-xs text-slate-400')
             ui.label('업로드 인증이 만료됐다면 기획 비용을 쓰기 전에 멈춥니다. 중단된 실행을 자동으로 다시 제출하지 않습니다.').classes('text-xs text-slate-400')
 
