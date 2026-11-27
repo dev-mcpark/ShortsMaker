@@ -2,9 +2,9 @@
 
 import hashlib
 import json
-from pathlib import Path
 
 from shorts_maker.services.operating_budget import episode_environment, episode_path, load_episode
+from shorts_maker.services.scheduled_script_history import MissingRevisionCopy, current_revision_copy
 
 
 def schedule_sha256(schedule: dict) -> str:
@@ -45,17 +45,11 @@ def operator_status(schedule: dict) -> dict:
         except (ValueError, RuntimeError, OSError) as error:
             result['budget_error'] = str(error)
     if 'last_script_path' in schedule:
-        from shorts_maker.services.production_service import script_sha256
-        from shorts_maker.utils.config import settings
         result['planned_script_path'] = None
         try:
-            script = Path(schedule['last_script_path'])
-            if script.is_symlink() or not script.resolve().is_relative_to(settings.output_dir.resolve()):
-                raise ValueError('invalid current script path')
-            stored = json.loads(script.read_text(encoding='utf-8'))
-            if not isinstance(stored, dict) or script_sha256(stored) != script_sha256(schedule['last_script']):
-                raise ValueError('current script hash mismatch')
-            result['planned_script_path'] = str(script.resolve())
-        except (OSError, TypeError, ValueError, KeyError):
-            result['planned_script_error'] = '현재 회차의 수정 대본 파일·해시를 확인하세요. 이전 원본 파일로 대체하지 않습니다.'
+            result['planned_script_path'] = str(current_revision_copy(schedule))
+        except MissingRevisionCopy as error:
+            result.update(planned_script_error=str(error), planned_script_missing=True)
+        except (OSError, ValueError, RuntimeError):
+            result['planned_script_error'] = '현재 회차의 수정 대본 파일과 해시를 확인하세요.'
     return result

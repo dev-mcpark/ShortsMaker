@@ -17,6 +17,7 @@ from shorts_maker.planner.models import ShortsScript
 from shorts_maker.services.operating_budget import episode_environment, episode_path, load_episode
 from shorts_maker.services.operating_status import schedule_sha256
 from shorts_maker.services.production_service import ProductionResult, ProductionService, script_sha256
+from shorts_maker.services.scheduled_script_history import current_revision_copy
 from shorts_maker.services.work_drafts import script_draft_key
 from shorts_maker.utils.character_overlay import CharacterOverlayConfig
 from shorts_maker.utils.config import settings
@@ -107,6 +108,7 @@ def scope_status(scope: EpisodeScope, script: ShortsScript | None = None, *, chi
         raise ValueError('이전 회차 실행 결과를 먼저 대조하세요. 다시 요청하지 않습니다.')
     if child and not pending.is_file():
         raise ValueError('회차 실행 잠금이 없습니다.')
+    current_revision_copy(schedule)
     if script is not None and script_sha256(script.model_dump(mode='json')) != script_sha256(schedule['last_script']):
         raise ValueError('수정한 대본을 먼저 이 회차에 저장하세요.')
     return schedule, record

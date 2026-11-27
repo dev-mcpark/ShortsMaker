@@ -14,6 +14,7 @@ from shorts_maker.gui.components.scheduled_run_view import STOP_GUIDANCE
 from shorts_maker.gui.components.work_drafts_panel import render_episode_writer_draft
 from shorts_maker.services.operating_budget import episode_path, load_episode
 from shorts_maker.services.operating_status import episode_source_url, operator_status, schedule_sha256
+from shorts_maker.services.scheduled_script_history import restore_missing_revision_copy
 from shorts_maker.services.scheduled_planning import planning_preflight, plan_pending_schedule
 from shorts_maker.services.revision_validation import (
     prepare_recovery, preview_reassessment, preview_recovery, save_reassessment,
@@ -26,6 +27,7 @@ def render_operator_panel(state, manager, schedule, on_attached):
     planning_dialog = None
     attachment_checking = False
     attachment_dialog = None
+    restoring_revision = False
 
     def choose_episode_source():
         if panel.is_deleted or state.is_busy:
@@ -308,6 +310,21 @@ def render_operator_panel(state, manager, schedule, on_attached):
             ui.button('수정 대본 1회 검증', on_click=confirm).props('color=teal')
         dialog.open()
 
+    async def restore_revision():
+        nonlocal restoring_revision
+        if panel.is_deleted or state.is_busy or restoring_revision:
+            return
+        restoring_revision = True
+        try:
+            await run.io_bound(restore_missing_revision_copy, manager, schedule)
+            safe_notify('저장된 수정 대본 파일을 복원했습니다. 검토할 각본을 다시 불러오세요.', type='positive')
+        except (OSError, ValueError, RuntimeError) as error:
+            safe_notify(f'수정 대본 복원 중단: {error}', type='warning')
+        finally:
+            restoring_revision = False
+            if not panel.is_deleted:
+                await refresh()
+
     @ui.refreshable
     def details():
         if not readout:
@@ -345,6 +362,11 @@ def render_operator_panel(state, manager, schedule, on_attached):
             ui.label(f'회차 비용 확인 필요: {data["budget_error"]}').classes('text-xs text-amber-200 break-all')
         if data.get('planned_script_error'):
             ui.label(data['planned_script_error']).classes('text-xs text-amber-200')
+            if (data.get('planned_script_missing') and data['last_result'] == 'script_review_pending'
+                    and not data['enabled'] and not data.get('last_video_path') and not data.get('last_youtube_id')):
+                ui.button('누락된 수정 대본 파일 복원', on_click=restore_revision).props('outline icon=restore').classes(
+                    'min-h-[44px]').bind_enabled_from(state, 'is_busy',
+                        lambda busy: not busy and not restoring_revision)
         if data.get('script_reassessment'):
             ui.label('사용자 재평가로 수정 대본을 채택했습니다. 이전 모델 미통과 기록은 보관되어 있습니다.').classes(
                 'text-xs text-slate-300')

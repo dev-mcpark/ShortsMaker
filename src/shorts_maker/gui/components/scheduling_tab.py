@@ -18,6 +18,7 @@ from shorts_maker.gui.components.review_continuation import (
 from shorts_maker.gui.components.queue_host_panel import render_queue_host_panel
 from shorts_maker.gui.components.scheduled_run_view import STOP_GUIDANCE
 from shorts_maker.gui.components.scheduled_script_history import render_script_history_browser
+from shorts_maker.services.scheduled_script_history import current_revision_copy
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.utils.scheduler import INTERVAL_WEEKS, ScheduleManager
 from shorts_maker.utils.config import settings
@@ -399,6 +400,7 @@ def render_scheduling_tab(state: 'AppState', open_workspace: Callable[[], None] 
                                                         else:
                                                             if state.operating_scope:
                                                                 raise ValueError('먼저 제작 작업실에서 회차 연결을 해제하세요.')
+                                                            current_revision_copy(current)
                                                             script = ShortsScript.model_validate(current.get('last_script'))
                                                             state.load_saved_script(script, backup_current=True)
                                                     except (OSError, TypeError, ValueError) as error:

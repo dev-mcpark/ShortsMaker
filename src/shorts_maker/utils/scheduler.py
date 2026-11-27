@@ -542,7 +542,7 @@ class ScheduleManager:
         from shorts_maker.services.operating_status import schedule_sha256
         from shorts_maker.services.production_service import script_sha256
         from shorts_maker.services.script_store import save_script_copy
-        from shorts_maker.services.scheduled_script_history import validated_revisions
+        from shorts_maker.services.scheduled_script_history import current_revision_copy, validated_revisions
         from shorts_maker.services.work_drafts import script_draft_key
         from shorts_maker.utils.config import settings
 
@@ -562,6 +562,7 @@ class ScheduleManager:
                     raise ValueError('이전 회차 실행 결과를 먼저 대조하세요.')
                 if schedule.get('review_operator') == 'agent':
                     load_episode(schedule['last_episode_id'], schedule)
+            current_revision_copy(schedule)
             old = ShortsScript.model_validate(schedule.get('last_script'))
             script = ShortsScript.model_validate(script_data)
             if reviewed_script_sha256 != script_draft_key(script):

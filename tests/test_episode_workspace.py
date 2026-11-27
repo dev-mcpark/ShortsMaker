@@ -161,6 +161,59 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
         self.assertIsNone(self.state.final_video_path)
         self.assertNotEqual(self.state.execution_key(), execution_key)
 
+    async def test_episode_loader_blocks_missing_current_revision_even_with_embedded_script(self):
+        from shorts_maker.services.scheduled_script_history import restore_missing_revision_copy
+
+        revised = self.script.model_copy(update={'title': '확인된 수정본'})
+        revision = self.manager.revise_pending_script(
+            self.schedule['id'], revised.model_dump(mode='json'),
+            expected_schedule_sha256=schedule_sha256(self.schedule), reviewed_script_sha256=script_draft_key(revised),
+        )
+        revision_file = Path(revision['last_script_path'])
+        revision_file.unlink()
+        self.state.final_video_path = 'retain.mp4'
+        with self.assertRaisesRegex(ValueError, '수정 대본.*파일'):
+            self.state.load_scheduled_script(self.manager, revision['id'], expected_schedule=revision)
+        self.assertEqual(self.state.script, self.script)
+        self.assertEqual(self.state.final_video_path, 'retain.mp4')
+        with patch('scripts.operate_schedule.subprocess.run') as child:
+            with self.assertRaisesRegex(ValueError, '수정 대본.*파일'):
+                run_scoped(self.manager, revision['id'], [sys.executable])
+            child.assert_not_called()
+            self.assertFalse(self.pending.exists())
+
+        protected = self.manager.filename, episode_path(self.record['id']), google_budget._database_path()
+        before = [path.read_bytes() for path in protected]
+        self.assertEqual(restore_missing_revision_copy(self.manager, revision), revision_file)
+        self.assertEqual(json.loads(revision_file.read_text()), revised.model_dump(mode='json'))
+        self.assertEqual([path.read_bytes() for path in protected], before)
+        with patch.object(self.state, '_backup_text_work'):
+            self.state.load_scheduled_script(self.manager, revision['id'], expected_schedule=revision)
+        self.assertEqual(self.state.script, revised)
+        self.assertFalse(self.state.is_script_reviewed())
+
+    async def test_restore_does_not_replace_existing_file_or_use_a_changed_review_record(self):
+        from shorts_maker.services.scheduled_script_history import restore_missing_revision_copy
+
+        revised = self.script.model_copy(update={'title': '확인된 수정본'})
+        revision = self.manager.revise_pending_script(
+            self.schedule['id'], revised.model_dump(mode='json'),
+            expected_schedule_sha256=schedule_sha256(self.schedule), reviewed_script_sha256=script_draft_key(revised),
+        )
+        target = Path(revision['last_script_path'])
+        target.write_text('{}')
+        with self.assertRaisesRegex(ValueError, '파일 해시'):
+            restore_missing_revision_copy(self.manager, revision)
+        self.assertEqual(target.read_text(), '{}')
+        damaged = [dict(revision['script_revisions'][0], review_receipt_sha256='bad')]
+        updated = self.manager.update_schedule(revision['id'], {'script_revisions': damaged})
+        target.unlink()
+        with self.assertRaisesRegex(ValueError, '회차가 바뀌었습니다'):
+            restore_missing_revision_copy(self.manager, revision)
+        with self.assertRaisesRegex(ValueError, '이전 검토 기록'):
+            restore_missing_revision_copy(self.manager, updated)
+        self.assertFalse(target.exists())
+
     async def test_worker_uses_existing_services_and_typed_local_inputs(self):
         self.scoped_env()
         clips = {0: str(self.root / 'clip.mp4')}

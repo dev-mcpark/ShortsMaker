@@ -1278,6 +1278,8 @@ The owner can explicitly adopt a newly reviewed correction after a completed sam
 
 2026-11-25 update. When the exact owner-adopted revision is later opened, show its retained excerpt and rationale from the bound revision request and model-review record. Require the applied script, episode and revision chain to match. Label the old verdict as evidence about the earlier script. A further edit, a missing record or a changed verdict carries no matching reassessment evidence for the currently applied script.
 
+2026-11-27 update. Check an explicit current revision pointer before opening or executing the pending episode. A missing Studio-managed file can be recreated at the same path by explicit action after checking the exact schedule, revision history and review hash. Publish the file exclusively to preserve existing bytes if the path reappears. The schedule and its request hashes stay intact so existing evidence can still be found. Opening the restored file follows normal script review.
+
 ## 2026-11-22 — Connect an approved frame when a scene needs a still
 
 The Namdaemun edit used two approved frames after the generated movement failed review. Offer this choice in the current scene's manual material picker. Preview the exact saved approval and convert it locally only when the user connects it. Recheck approval and byte identity around the conversion, then store the silent clip through the existing validated manual import. The editor holds the frame for the scene's duration. Preserve the native clip and its verdict and keep the automatic path's motion-review gate.

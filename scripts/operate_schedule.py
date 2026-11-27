@@ -16,6 +16,7 @@ from pathlib import Path
 from shorts_maker.services.operating_budget import begin_episode, episode_environment, episode_path, load_episode
 from shorts_maker.services.operating_status import operator_status, schedule_sha256
 from shorts_maker.services.queue_host_status import write_host_status
+from shorts_maker.services.scheduled_script_history import current_revision_copy
 from shorts_maker.utils.config import PROJECT_ROOT, settings
 from shorts_maker.utils.scheduler import ScheduleManager
 
@@ -68,6 +69,8 @@ def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedu
             local_edit = request.operation == 'local_edit'
         if schedule.get('last_youtube_id'):
             raise ValueError('비공개 완성본이 연결된 회차는 제작을 다시 실행할 수 없습니다. 완성본을 검토하세요.')
+        if schedule.get('last_result') == 'script_review_pending':
+            current_revision_copy(schedule)
         if local_edit:
             env = {'SHORTSMAKER_EPISODE_ID': record['id'], 'PAID_PRODUCTION_ENABLED': 'false', 'MAX_VISUAL_COST_USD': '0'}
             status = {'local_edit': True}
