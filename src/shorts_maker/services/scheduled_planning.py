@@ -7,6 +7,7 @@ import sys
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.planner.script_planner import ScriptPlanner
 from shorts_maker.services import google_budget, openai_budget
+from shorts_maker.services.monthly_opening import MonthOpeningRequired
 from shorts_maker.services.operating_budget import default_episode_caps, episode_video_spec, episode_visual_limits
 from shorts_maker.services.operating_status import operator_status, schedule_sha256
 from shorts_maker.services.visual_cost import minimum_planning_visuals
@@ -29,18 +30,26 @@ def planning_preflight(manager, expected: dict) -> dict:
     status = operator_status(current)
     if status.get('operation_pending_unverified'):
         raise ValueError('이전 실행 결과를 먼저 대조하세요.')
-    if status.get('budget_error'):
-        raise ValueError(status['budget_error'])
-    caps = status.get('budget') or default_episode_caps()
-    room = {}
+    monthly, failures = {}, []
     for provider, label, budget_status, amount in (
         ('google', 'Google', google_budget.budget_status, 'remaining_krw'),
         ('openai', 'OpenAI', openai_budget.budget_status, 'remaining_usd'),
     ):
-        snapshot = budget_status()
-        if not snapshot.get('enabled') or snapshot.get(amount, 0) <= 0:
-            raise ValueError(f'{label}의 검증된 현재 월 잔여 예산이 필요합니다.')
-        room[f'{provider}_{amount}'] = min(snapshot[amount], caps[f'{provider}_{amount}'])
+        try:
+            snapshot = budget_status()
+            if not snapshot.get('enabled') or snapshot.get(amount, 0) <= 0:
+                raise ValueError('검증된 현재 월 잔여 예산이 필요합니다.')
+            monthly[f'{provider}_{amount}'] = snapshot[amount]
+        except MonthOpeningRequired as error:
+            failures.append(f'{label} {error.period} 기준 사용액을 확인해 저장하세요.')
+        except (OSError, ValueError, RuntimeError) as error:
+            failures.append(f'{label} · {error}')
+    if failures:
+        raise ValueError('\n'.join([*failures, '제작 설정 → 예산·예약 현황에서 확인하세요.']))
+    if status.get('budget_error'):
+        raise ValueError(status['budget_error'])
+    caps = status.get('budget') or default_episode_caps()
+    room = {key: min(amount, caps[key]) for key, amount in monthly.items()}
     if room['google_remaining_krw'] <= 0 or room['openai_remaining_usd'] <= 0:
         raise ValueError('이 회차의 남은 제작 예산을 확인하세요.')
     mode = current.get('mode', 'image')

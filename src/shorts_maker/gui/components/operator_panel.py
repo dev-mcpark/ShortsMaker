@@ -12,6 +12,7 @@ from shorts_maker.gui.components.episode_review_recovery_panel import (
 )
 from shorts_maker.gui.components.scheduled_run_view import STOP_GUIDANCE
 from shorts_maker.gui.components.work_drafts_panel import render_episode_writer_draft
+from shorts_maker.gui.components.youtube_connection_panel import render_youtube_connection_panel
 from shorts_maker.services.operating_budget import episode_path, load_episode
 from shorts_maker.services.operating_status import episode_source_url, operator_status, schedule_sha256
 from shorts_maker.services.scheduled_script_history import restore_missing_revision_copy
@@ -488,6 +489,7 @@ def render_operator_panel(state, manager, schedule, on_attached):
         ui.label('예약 회차를 기획 중입니다. 메뉴를 이동해도 실행은 계속되며 저장된 회차에서 결과를 확인합니다.').classes('text-xs text-teal-200').bind_visibility_from(state, 'scheduled_planning_in_progress')
         if (schedule.get('review_operator') == 'agent' and schedule.get('last_result') == 'operator_pending'
                 and not schedule.get('enabled') and not schedule.get('last_video_path') and not schedule.get('last_youtube_id')):
+            render_youtube_connection_panel(state)
             if not schedule.get('direct_url'):
                 url = episode_source_url(schedule)
                 ui.label(f'이번 회차의 선택 기사 · {url}' if url else '이번 회차 소재 · RSS 자동 발견').classes(
@@ -498,7 +500,7 @@ def render_operator_panel(state, manager, schedule, on_attached):
                 state, 'is_busy', lambda busy: not busy and not planning_preview['checking'])
             ui.label('예약 기획 예산 확인 중…').classes('text-sm text-slate-300').props('role=status').bind_visibility_from(
                 planning_preview, 'checking')
-            planning_check = ui.label().classes('text-sm text-amber-200 break-words').props('role=alert')
+            planning_check = ui.label().classes('text-sm text-amber-200 break-words whitespace-pre-line').props('role=alert')
             planning_check.set_visibility(False)
         if schedule.get('last_result') == 'script_review_pending' and not schedule.get('last_youtube_id') and not schedule.get('enabled'):
             if not schedule.get('last_video_path'):

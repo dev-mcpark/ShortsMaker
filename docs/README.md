@@ -1,5 +1,7 @@
 # Project map
 
+`scheduled_planning.py` reports both providers' current-month blockers before offering a planning confirmation. The pending operator panel exposes the shared, explicit YouTube connection controls so account checks can be completed from the same screen.
+
 `scheduled_script_history.py` checks the current revision file at workspace entry and scoped execution. Its explicit recovery operation recreates a missing Studio-managed copy from the current run's verified history at the same path. The operator panel exposes the action after a missing-file status read.
 
 `publishing_tab.py` uses the production report to prefill primary and supporting source links. The explicit missing-credit action and pre-dispatch check share `source_credited_description` with existing link handling. `ProductionService` retains the final source check before any upload claim.

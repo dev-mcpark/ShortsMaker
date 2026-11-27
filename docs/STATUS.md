@@ -1,6 +1,6 @@
 # Current status
 
-Updated: 2026-11-27. This file owns the active milestone and known limits. Code and tests remain the final evidence.
+Updated: 2026-11-28. This file owns the active milestone and known limits. Code and tests remain the final evidence.
 
 ## Goal and milestones
 
@@ -44,6 +44,8 @@ The November 18 slot produced the Namdaemun review copy, which the owner publish
 | 5. Sustainable publishing and iterative development | First scheduled copy needs improvement after owner review; chat-model comparison/access and billed allocation open; no accepted recurring series | Meet the initial product and operational acceptance above: a usable deployed app and three consecutive accepted private-upload cycles within approved budgets, with evidence-based improvements, verification, and shared handoff after each cycle. Code repairs are allowed and tracked. Continue recurring operations after setup validation. |
 
 ## Current evidence and limits
+
+- **2026-11-28 show both providers' planning blockers and account recovery on the pending episode.** A regression demonstrated that the first stale ledger masked the second. Planning now lists both providers' current-month issues together and the existing YouTube connection panel is available in the pending episode. All 832 offline tests passed with no HTTP attempts. A 390px isolated Studio used copies of the November ledgers, December period inputs and a synthetic expired token. It showed both required openings and the unverified refresh hint, then only OpenAI after saving the fixture Google opening. After saving both fixture openings, the unchanged ₩3,000/$0.30 episode limits appeared in the cancelable confirmation, with no episode or provider dispatch. The actual November ledgers and running Studio remain unchanged. The locally inspected real token still requires a separate live check at the eligible slot. [Private QA evidence](../outputs/evaluation/studio_planning_prerequisites_20261127/review.json).
 
 - **2026-11-27 recover a missing current revision without changing episode identity.** The status readout flagged a missing file, while workspace entry and execution could still use the embedded script. They now share a check for the exact current revision file. In the pending episode, an explicit restore verifies the current script and review history then recreates only the absent managed file at the original path. This preserves the schedule and existing request hashes. All 832 offline tests passed with no HTTP attempts, covering missing-file admission, restoration, stale history and preservation of a changed file. A 390px Studio fixture using a Namdaemun script revision demonstrated blocked load, explicit restore, and reopening in ordinary script review with unchanged schedule and ledgers. The real host was left running pending confirmation that all unsaved input has been preserved. [Private QA evidence](../outputs/evaluation/studio_revision_copy_recovery_20261127/review.json).
 

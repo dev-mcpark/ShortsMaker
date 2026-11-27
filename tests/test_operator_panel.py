@@ -314,13 +314,17 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         ledgers = [google_budget._database_path(), openai_budget._database_path()]
         ledger_bytes = [path.read_bytes() for path in ledgers]
         with self.client, patch.object(operator_panel, 'plan_pending_schedule', new_callable=AsyncMock) as plan:
-            with patch.object(settings, 'google_budget_month', '2020-01'):
+            with patch.object(settings, 'google_budget_month', '2020-01'), patch.object(
+                    settings, 'openai_budget_month', '2020-01'):
                 await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
-                self.assertIn('이번 달 Google 사용액 기준을 다시 설정하세요', self.text(root))
+                self.assertIn(f'Google {google_budget._period()} 기준 사용액', self.text(root))
+                self.assertIn(f'OpenAI {openai_budget._period()} 기준 사용액', self.text(root))
+                self.assertIn('YouTube 업로드 연결', self.text(root))
                 self.assertFalse(any(getattr(e, 'text', '') == '이 회차 기획 실행'
                                      for e in self.client.elements.values()))
             await self.click_and_wait('예약 회차 기획 시작', 'plan_preview')
-            self.assertNotIn('이번 달 Google 사용액 기준을 다시 설정하세요', self.text(root))
+            self.assertNotIn(f'Google {google_budget._period()} 기준 사용액', self.text(root))
+            self.assertNotIn(f'OpenAI {openai_budget._period()} 기준 사용액', self.text(root))
             self.click('취소')
             plan.assert_not_awaited()
         self.assertEqual(before, self.manager.filename.read_bytes())
