@@ -169,9 +169,13 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
                 ('upload', 'upload_to_youtube', ProductionResult(True, youtube_id='private_test'))]:
             video = settings.output_dir / 'test.mp4'
             video.write_bytes(b'fixture')
-            video.with_suffix('.production.json').write_text(json.dumps({'script_sha256': script_sha256(self.script.model_dump(mode='json'))}))
+            video_digest = hashlib.sha256(video.read_bytes()).hexdigest()
+            video.with_suffix('.production.json').write_text(json.dumps({
+                'script_sha256': script_sha256(self.script.model_dump(mode='json')), 'video_sha256': video_digest,
+            }))
             request, path, digest = self.request(operation, manual_clip_paths=clips,
-                prepared_audio_paths=['scene.mp3'], narration_budget_usd=.002, video_path=str(video), metadata={'title': '한글'})
+                prepared_audio_paths=['scene.mp3'], narration_budget_usd=.002, video_path=str(video),
+                metadata={'title': '한글'}, video_sha256=video_digest if operation == 'upload' else None)
             parsed = action.read_request(path, digest)
             self.assertEqual(parsed.manual_clip_paths, clips)
             mock = AsyncMock(return_value=result)
@@ -182,6 +186,8 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
             if operation == 'edit':
                 self.assertTrue(mock.await_args.kwargs['retain_narration'])
                 self.assertEqual(mock.await_args.kwargs['prepared_audio_paths'], ['scene.mp3'])
+            if operation == 'upload':
+                mock.assert_awaited_once_with(str(video), {'title': '한글'}, expected_video_sha256=video_digest)
 
     async def test_worker_forwards_the_same_notice_to_the_existing_editor_path(self):
         self.scoped_env()
@@ -192,6 +198,41 @@ class EpisodeWorkspaceTests(IsolatedAsyncioTestCase):
                 patch.object(ProductionService, 'produce_video', AsyncMock(return_value=ProductionResult(True))):
             await action.execute_action(request, path, digest)
         self.assertEqual(factory.call_args.kwargs['editor_options']['text_overlays'], options['text_overlays'])
+
+    async def test_scoped_upload_rejects_a_different_cut_with_a_new_valid_report(self):
+        self.scoped_env()
+        video = settings.output_dir / 'reviewed.mp4'
+        video.write_bytes(b'reviewed cut')
+        reviewed = hashlib.sha256(video.read_bytes()).hexdigest()
+        request, path, digest = self.request('upload', video_path=str(video),
+                                             metadata={'title': '검토본'}, video_sha256=reviewed)
+        video.write_bytes(b'different cut of the same script')
+        report = video.with_suffix('.production.json')
+        report.write_text(json.dumps({'script_sha256': request.script_sha256, 'video_path': str(video),
+                                      'quality_passed': True,
+                                      'video_sha256': hashlib.sha256(video.read_bytes()).hexdigest()}))
+        before = video.read_bytes(), report.read_bytes()
+        with patch.object(ProductionService, 'upload_to_youtube', new_callable=AsyncMock) as upload:
+            with self.assertRaisesRegex(ValueError, '완성본.*변경'):
+                await action.execute_action(request, path, digest)
+            upload.assert_not_awaited()
+        self.assertEqual((video.read_bytes(), report.read_bytes()), before)
+        self.assertFalse(video.with_suffix('.upload-pending.json').exists())
+
+    async def test_scoped_worker_cannot_submit_when_reviewed_video_identity_is_missing(self):
+        self.scoped_env()
+        video = settings.output_dir / 'reviewed.mp4'
+        video.write_bytes(b'different cut of the same script')
+        request, path, digest = self.request('upload', video_path=str(video), metadata={'title': '검토본'})
+        video.with_suffix('.production.json').write_text(json.dumps({
+            'script_sha256': request.script_sha256, 'video_path': str(video), 'quality_passed': True,
+            'video_sha256': hashlib.sha256(video.read_bytes()).hexdigest(),
+        }))
+        with patch.object(ProductionService, 'upload_to_youtube', new_callable=AsyncMock,
+                          return_value=ProductionResult(True, youtube_id='fixture_123')) as upload:
+            with self.assertRaisesRegex(ValueError, '완성본.*해시'):
+                await action.execute_action(request, path, digest)
+            upload.assert_not_awaited()
 
     async def test_worker_rejects_wrong_profile_caps_hash_and_unreviewed_before_paid_work(self):
         self.scoped_env()

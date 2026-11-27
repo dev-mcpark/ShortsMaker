@@ -880,6 +880,36 @@ class ProductionGateTests(unittest.TestCase):
             service._uploader.upload.assert_awaited_once()
 
     @patch("shorts_maker.services.production_service.check_video_quality")
+    def test_replaced_cut_cannot_inherit_an_upload_result_or_be_retried(self, _check):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output.mp4"
+            report = output.with_suffix(".production.json")
+            output.write_bytes(b"reviewed cut")
+            original = {"video_path": str(output), "quality_passed": True,
+                        "video_sha256": hashlib.sha256(output.read_bytes()).hexdigest(), "youtube_id": None}
+            report.write_text(json.dumps(original), encoding="utf-8")
+            service = ProductionService()
+
+            async def send(*args):
+                output.write_bytes(b"replaced while request was pending")
+                report.write_text(json.dumps({
+                    **original, "video_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
+                }), encoding="utf-8")
+                return "video-id"
+
+            service._uploader = SimpleNamespace(upload=AsyncMock(side_effect=send))
+            result = asyncio.run(service.upload_to_youtube(
+                str(output), {"title": "Example"}, expected_video_sha256=original["video_sha256"],
+            ))
+            self.assertFalse(result.success)
+            self.assertIsNone(json.loads(report.read_text())["youtube_id"])
+            pending = output.with_suffix(".upload-pending.json")
+            self.assertEqual(json.loads(pending.read_text())["video_sha256"], original["video_sha256"])
+            again = asyncio.run(service.upload_to_youtube(str(output), {"title": "Example"}))
+            self.assertFalse(again.success)
+            service._uploader.upload.assert_awaited_once()
+
+    @patch("shorts_maker.services.production_service.check_video_quality")
     def test_invalid_upload_metadata_stops_before_claim_or_provider(self, _check):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "output.mp4"

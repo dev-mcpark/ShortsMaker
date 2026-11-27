@@ -1311,3 +1311,7 @@ If the Studio launcher stopped before archiving its pending audit, allow the own
 ## 2026-11-27 — Keep a complete local edit inside its episode
 
 When all current scene numbers have connected clips and the selected narration supplies every scene, use a fixed local-only edit through the existing episode launcher. The child requires provider calls disabled, a zero visual cap, and media paths within outputs. It runs the normal editor and technical checks. Keep the schedule, script review, execution marker and typed receipt checks so the edited file can be found again in the same episode. A paid request still needs current ledger checks, and uploading remains a separate action.
+
+## 2026-11-27 — Bind scoped uploads to the reviewed cut
+
+Carry the verified video digest from Publishing in each new scoped upload request. Require it before dispatch and compare it with the report and current video before claiming submission. If the video or report changes while the request is in progress, preserve the existing pending marker and leave the new report without the returned ID. For recovery, a digest in the request must match the verified stored video. Earlier completed records remain readable using their original checks.

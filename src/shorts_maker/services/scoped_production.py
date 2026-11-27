@@ -140,8 +140,12 @@ class ScopedProductionService(ProductionService):
         return await self._dispatch(operation, script, manual_clip_paths=manual_clip_paths,
                                     prepared_audio_paths=prepared_audio_paths, finish_phase=finish_phase)
 
-    async def upload_to_youtube(self, video_path, metadata):
-        return await self._dispatch('upload', video_path=video_path, metadata=metadata)
+    async def upload_to_youtube(self, video_path, metadata, *, expected_video_sha256=None):
+        if expected_video_sha256 is None:
+            raise ValueError('검토한 완성본의 파일 해시가 필요합니다.')
+        return await self._dispatch(
+            'upload', video_path=video_path, video_sha256=expected_video_sha256, metadata=metadata,
+        )
 
     async def generate_script(self, *args, **kwargs):
         raise ValueError('회차 기획은 예약 운영에서 진행하세요. 다른 소재는 수동 작업으로 전환하세요.')

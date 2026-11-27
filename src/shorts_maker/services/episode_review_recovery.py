@@ -92,7 +92,10 @@ def _recovered_uploads(manager, expected_schedule, reaped_command=None):
         else:
             video, digest, video_id = manager._verified_uploaded_file(expected_schedule, request.video_path)
             info = {'video_path': str(video), 'video_sha256': digest, 'youtube_id': video_id}
-        return info if info['youtube_id'] == result['youtube_id'] else None
+        if (info['youtube_id'] != result['youtube_id']
+                or (request.video_sha256 is not None and info['video_sha256'] != request.video_sha256)):
+            return None
+        return info
 
     return _recovered_results(manager, expected_schedule, {'upload'}, verify_media, reaped_command=reaped_command)
 

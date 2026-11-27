@@ -48,6 +48,7 @@ class StudioAction(BaseModel):
     prepared_audio_paths: list[str] | None = None
     finish_phase: bool = True
     video_path: str | None = None
+    video_sha256: str | None = Field(default=None, pattern=r'^[0-9a-f]{64}$')
     metadata: dict[str, JsonValue] | None = None
     editor_options: dict[str, JsonValue] = Field(default_factory=dict)
     overlay_options: dict[str, JsonValue] = Field(default_factory=dict)
@@ -220,6 +221,8 @@ async def execute_action(request: StudioAction, path: Path, digest: str):
         else:
             if not request.video_path or request.metadata is None:
                 raise ValueError('검토한 완성본과 게시 정보가 필요합니다.')
+            if request.video_sha256 is None:
+                raise ValueError('검토한 완성본의 파일 해시가 필요합니다.')
             video = Path(request.video_path)
             report_path = video.with_suffix('.production.json')
             if (video.is_symlink() or video.suffix.lower() != '.mp4'
@@ -229,7 +232,11 @@ async def execute_action(request: StudioAction, path: Path, digest: str):
             report = json.loads(report_path.read_text())
             if report.get('script_sha256') != request.script_sha256:
                 raise ValueError('완성본이 현재 회차 대본과 다릅니다.')
-            result = await service.upload_to_youtube(request.video_path, request.metadata)
+            if report.get('video_sha256') != request.video_sha256:
+                raise ValueError('검토한 완성본 또는 제작 기록이 변경됐습니다. 영상을 다시 확인하세요.')
+            result = await service.upload_to_youtube(
+                request.video_path, request.metadata, expected_video_sha256=request.video_sha256,
+            )
         if isinstance(result, str):
             payload = {'kind': 'path', 'value': result}
         else:

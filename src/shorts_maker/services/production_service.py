@@ -573,7 +573,9 @@ class ProductionService:
             os.fsync(file.fileno())
         return path
 
-    def _record_upload(self, video_path: str, video_id: str, upload_body: dict) -> Optional[str]:
+    def _record_upload(
+        self, video_path: str, video_id: str, upload_body: dict, *, expected_video_sha256: str | None = None,
+    ) -> Optional[str]:
         path = Path(video_path).with_suffix(".production.json")
         if not path.is_file():
             return None
@@ -581,6 +583,13 @@ class ProductionService:
             report = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(report, dict) or report.get("video_path") != video_path:
                 raise ValueError("영상 경로가 일치하지 않는 제작 기록")
+            if expected_video_sha256 is not None and (
+                report.get("quality_passed") is not True
+                or report.get("youtube_id") is not None
+                or report.get("video_sha256") != expected_video_sha256
+                or self._video_hash(video_path) != expected_video_sha256
+            ):
+                raise ValueError("업로드 중 완성본 또는 제작 기록이 변경됐습니다")
         except (OSError, ValueError, TypeError) as error:
             self.logger.warning(f"제작 기록을 갱신할 수 없습니다: {error}")
             return None
@@ -1043,7 +1052,9 @@ class ProductionService:
     async def upload_to_youtube(
         self,
         video_path: str,
-        metadata: Dict[str, Any]
+        metadata: Dict[str, Any],
+        *,
+        expected_video_sha256: str | None = None,
     ) -> ProductionResult:
         """
         YouTube에 비디오 업로드
@@ -1080,6 +1091,11 @@ class ProductionService:
             await asyncio.to_thread(check_video_quality, video_path)
             current_hash = await asyncio.to_thread(self._video_hash, video_path)
             recorded_hash = report.get("video_sha256")
+            if expected_video_sha256 is not None and (
+                current_hash != expected_video_sha256 or recorded_hash != expected_video_sha256
+            ):
+                return self._failed_result("검토한 완성본 또는 제작 기록이 변경됐습니다. 영상을 다시 확인하세요.",
+                                           video_path=video_path)
             if recorded_hash and recorded_hash != current_hash:
                 return self._failed_result("제작 이후 영상 파일이 변경되었습니다. 다시 검토하세요.",
                                            video_path=video_path)
@@ -1136,7 +1152,7 @@ class ProductionService:
 
             if video_id:
                 report_path = await asyncio.to_thread(
-                    self._record_upload, video_path, video_id, upload_body,
+                    self._record_upload, video_path, video_id, upload_body, expected_video_sha256=current_hash,
                 )
                 if not report_path:
                     return self._failed_result(

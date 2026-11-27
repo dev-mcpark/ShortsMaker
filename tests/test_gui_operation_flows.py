@@ -218,7 +218,9 @@ class CompletedOutputTests(TestCase):
         next(element for element in recorder.elements if element.kind == 'radio').value = 'yes'
         with patch.object(publishing_tab, 'safe_notify'):
             asyncio.run(recorder.find('button', 'YouTube에 비공개 업로드').callback())
-        service.upload_to_youtube.assert_awaited_once()
+        service.upload_to_youtube.assert_awaited_once_with(str(video), {
+            'title': '검토 제목', 'description': '', 'tags': [], 'contains_synthetic_media': True,
+        }, expected_video_sha256=hashlib.sha256(video.read_bytes()).hexdigest())
         self.assertFalse(state.youtube_upload_in_progress)
 
     def test_active_planning_blocks_upload_before_service_creation(self):

@@ -594,7 +594,7 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
             refresh = render_operator_panel(self.state, self.manager, self.schedule, self.attached)
         return root, refresh
 
-    def saved_upload(self, *, scope_episode=None, id_in_receipt='private_test_12', operation='upload'):
+    def saved_upload(self, *, scope_episode=None, id_in_receipt='private_test_12', operation='upload', video_sha256=None):
         from shorts_maker.services import studio_episode_action as action
         from shorts_maker.services.operating_status import schedule_sha256
         from shorts_maker.services.production_service import ProductionResult
@@ -608,6 +608,7 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
             script_sha256=script_sha256(self.schedule['last_script']), review_receipt=script_draft_key(saved_script),
             mode=self.schedule['mode'], image_model=settings.image_model_id,
             video_path=str(self.video) if operation == 'upload' else None,
+            video_sha256=video_sha256,
         )
         directory = action.action_directory()
         directory.mkdir(parents=True, exist_ok=True)
@@ -625,6 +626,15 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         command_sha256 = hashlib.sha256(json.dumps(action.worker_command(path, digest)).encode()).hexdigest()
         audit.write_text(json.dumps({'command_sha256': command_sha256, 'returncode': 0}))
         return result_path, audit
+
+    async def test_upload_recovery_checks_the_video_hash_from_new_requests(self):
+        from shorts_maker.services.episode_review_recovery import recovered_review_copies
+
+        self.saved_upload(video_sha256='b' * 64)
+        self.assertEqual(recovered_review_copies(self.manager, self.schedule), {})
+        current_hash = hashlib.sha256(self.video.read_bytes()).hexdigest()
+        self.saved_upload(video_sha256=current_hash)
+        self.assertEqual(recovered_review_copies(self.manager, self.schedule)[str(self.video)]['video_sha256'], current_hash)
 
     def saved_edit(self):
         report = json.loads(self.report.read_text())

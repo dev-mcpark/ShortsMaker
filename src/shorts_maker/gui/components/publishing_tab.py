@@ -340,7 +340,9 @@ def render_publishing_tab(state: 'AppState') -> None:
                             "contains_synthetic_media": synthetic_input.value == 'yes',
                         }
 
-                        result = await service.upload_to_youtube(state.final_video_path, meta)
+                        result = await service.upload_to_youtube(
+                            report['video_path'], meta, expected_video_sha256=report['video_sha256'],
+                        )
                         vid_id = result.youtube_id
 
                         if vid_id:

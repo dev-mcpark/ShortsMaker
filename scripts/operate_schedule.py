@@ -60,6 +60,8 @@ def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedu
                     or Path(request.scope.schedules_file).resolve() != manager.filename.resolve()
                     or request.schedule_sha256 != schedule_sha256(schedule)):
                 raise ValueError('변경되지 않은 회차의 고정 Studio 요청만 실행할 수 있습니다.')
+            if request.operation == 'upload' and request.video_sha256 is None:
+                raise ValueError('검토한 완성본의 파일 해시가 필요합니다.')
             receipt = Path(studio_request).with_suffix('.result.json')
             if receipt.exists() or receipt.is_symlink():
                 raise ValueError('이미 실행 결과가 있는 요청입니다. 다시 제출하지 않습니다.')
