@@ -13,24 +13,32 @@ def render_narration_panel(state):
         return
     media_source = media_sources(ui.context.client)
     rendered_script = state.script.model_dump_json()
+    rendered_execution = state.execution_key()
 
     @ui.refreshable
     def panel():
+        retained = list_narration_sets(state.script)
+        connected = state.prepared_narration_manifest
+        selected = connected if connected in retained else ''
+        if not connected and len(retained) == 1:
+            selected = next(iter(retained))
         with ui.expansion('내레이션 · 준비·재생·재사용', icon='graphic_eq',
-                          value=bool(state.prepared_narration_manifest)).classes('w-full bg-slate-900').props('dark') as view:
+                          value=bool(connected or retained)).classes('w-full bg-slate-900').props('dark') as view:
+            if retained and not connected:
+                ui.label(f'재사용할 수 있는 음성 {len(retained)}세트 · 연결하면 새 음성 요청 없이 편집에 사용합니다.').classes(
+                    'text-sm text-teal-300')
             ui.label('현재 내레이션과 모든 장면의 기록·파일 해시가 일치하는 세트만 표시합니다. 연결 전에 소리·길이도 검사합니다.').classes('text-xs text-slate-300')
             ui.label('연결·새 음성 전환 후 우측의 각본별 음성·음악 설정 저장을 누르면 같은 대본을 다시 열 때 선택이 복원됩니다.').classes('text-xs text-slate-300')
-            render_narration_prepare(state, panel)
-            options = {'': '선택하세요', **list_narration_sets(state.script)}
-            choice = ui.select(options, value=state.prepared_narration_manifest if state.prepared_narration_manifest in options else '',
+            choice = ui.select({'': '선택하세요', **retained}, value=selected,
                                label='준비된 내레이션 세트').props('dark outlined').classes('w-full')
             choice.bind_enabled_from(state, 'is_busy', lambda busy: not busy)
 
             def select(use_prepared=True):
                 if view.is_deleted or choice.is_deleted:
                     return
-                if not state.script or state.script.model_dump_json() != rendered_script:
-                    safe_notify('각본이 변경됐습니다. 현재 제작 화면에서 음성을 다시 선택하세요.', type='warning')
+                if (not state.script or state.script.model_dump_json() != rendered_script
+                        or state.execution_key() != rendered_execution):
+                    safe_notify('각본이나 회차 연결이 변경됐습니다. 현재 제작 화면에서 음성을 다시 선택하세요.', type='warning')
                     return
                 try:
                     if use_prepared and not choice.value:
@@ -59,7 +67,8 @@ def render_narration_panel(state):
                     ui.label(f'연결한 음성을 다시 확인하세요: {error}').classes('text-xs text-amber-300')
                     ui.label('새 음성으로 자동 전환하지 않습니다. 파일을 복구하거나, 목록에서 다시 연결하거나, 새 음성 생성으로 전환을 직접 선택하세요.').classes('text-xs text-amber-300')
             else:
-                ui.label('현재 선택: 기본 음성 준비 · 같은 음색·문장의 보관 세트를 재사용하고, 미완료 장면 요청에 API 비용이 발생합니다.').classes('text-xs text-amber-200')
+                ui.label('연결한 음성 없음 · 기본 음성 준비는 같은 음색·문장의 보관 세트를 사용하고, 필요한 장면 요청에 API 비용이 발생합니다.').classes('text-xs text-amber-200')
+            render_narration_prepare(state, panel)
             if state.narration_preparing:
                 def settled():
                     if view.is_deleted:

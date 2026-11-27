@@ -286,6 +286,52 @@ class ProductionMaterialsTests(IsolatedAsyncioTestCase):
         finally:
             client.delete()
 
+    def test_reopened_script_offers_the_only_retained_narration_before_new_speech(self):
+        manifest, audio = self.narration()
+        state = AppState(script=self.script, tts_voice='alloy')
+        client = Client(page('/reopen-narration-choice'))
+        try:
+            with client, ui.column() as root:
+                narration_panel.render_narration_panel(state)
+            elements = list(root.descendants())
+            expansion = next(e for e in elements if isinstance(e, ui.expansion))
+            choice = next(e for e in elements if isinstance(e, ui.select))
+            connect = next(e for e in elements if getattr(e, 'text', '') == '이 음성 세트 연결')
+            prepare = next(e for e in elements if getattr(e, 'text', '') == '음성만 준비 · 비용 확인')
+            self.assertTrue(expansion.value)
+            self.assertEqual(choice.value, str(manifest))
+            self.assertLess(elements.index(connect), elements.index(prepare))
+            self.assertIsNone(state.prepared_narration_manifest)
+            original = audio.read_bytes()
+            with client, patch.object(state, 'new_production_service') as production, patch.object(
+                    narration_panel, 'safe_refresh'):
+                next(e.handler for e in connect._event_listeners.values() if e.type == 'click')(None)
+                production.assert_not_called()
+            self.assertEqual(state.prepared_audio_paths(), [str(audio)])
+            self.assertEqual(state.tts_voice, 'alloy')
+            self.assertEqual(audio.read_bytes(), original)
+        finally:
+            client.delete()
+
+    def test_old_narration_choice_cannot_modify_a_changed_episode_context(self):
+        manifest, _ = self.narration()
+        state = AppState(script=self.script, operating_scope={'episode_id': 'previous'})
+        state.select_prepared_narration(str(manifest))
+        state.final_video_path = 'kept.mp4'
+        client = Client(page('/changed-narration-scope'))
+        try:
+            with client, ui.column() as root:
+                narration_panel.render_narration_panel(state)
+            button = next(e for e in root.descendants() if getattr(e, 'text', '') == '새 음성 생성으로 전환')
+            state.detach_operating_scope()
+            with client, patch.object(narration_panel, 'safe_notify') as notify:
+                next(e.handler for e in button._event_listeners.values() if e.type == 'click')(None)
+            self.assertIn('회차 연결이 변경', notify.call_args.args[0])
+            self.assertEqual(state.prepared_narration_manifest, str(manifest))
+            self.assertEqual(state.final_video_path, 'kept.mp4')
+        finally:
+            client.delete()
+
     def test_reconnecting_same_voice_or_clearing_an_empty_selection_preserves_the_edit(self):
         manifest, audio = self.narration()
         state = AppState(script=self.script, final_video_path='retained.mp4')
