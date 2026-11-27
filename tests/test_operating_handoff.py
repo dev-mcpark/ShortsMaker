@@ -258,6 +258,12 @@ class OperatingHandoffTests(unittest.TestCase):
             child.assert_called_once()
         self.assertEqual(len(records), 1)
         self.assertEqual(self.manager.get_schedule(self.schedule['id'])['last_episode_id'], records[0])
+        base = episode_path(records[0])
+        archive, = base.parent.glob(f'{base.stem}.operation.*.json')
+        audit = json.loads(archive.read_text())
+        self.assertEqual(audit['operation_kind'], 'planning')
+        self.assertEqual(audit['studio_parent_pid'], os.getpid())
+        self.assertEqual(audit['returncode'], 0)
 
     def test_planning_snapshot_recheck_happens_before_baseline_or_child(self):
         expected = self.pending_schedule()

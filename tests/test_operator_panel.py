@@ -947,6 +947,62 @@ class OperatorPanelTests(IsolatedAsyncioTestCase):
         from shorts_maker.services.episode_review_recovery import recovered_review_copies
         self.assertEqual(list(recovered_review_copies(self.manager, self.schedule)), [str(self.video)])
 
+    async def test_exited_planning_can_be_archived_and_resume_from_the_saved_script(self):
+        from shorts_maker.services.episode_review_recovery import archive_reaped_planning, preview_reaped_planning
+        from shorts_maker.utils.config import PROJECT_ROOT
+
+        exited = await asyncio.create_subprocess_exec(sys.executable, '-c', 'pass')
+        self.assertEqual(await exited.wait(), 0)
+        base = episode_path(self.episode['id'])
+        pending = base.with_suffix('.operation.pending.json')
+        command = [sys.executable, str(PROJECT_ROOT / 'scripts/operate_schedule.py'), '--schedules',
+                   str(self.manager.filename.resolve()), '_plan', self.schedule['id']]
+        audit = {'operation_kind': 'planning', 'command_sha256': hashlib.sha256(json.dumps(command).encode()).hexdigest(),
+                 'studio_parent_pid': exited.pid, 'returncode': 0}
+        pending.write_text(json.dumps(audit))
+        script_file = base.with_suffix('.script.json')
+        script_file.write_text(json.dumps(self.schedule['last_script']))
+        script_bytes = script_file.read_bytes()
+        for changed, message in [
+            ({'returncode': 1}, '정상 종료한'),
+            ({'studio_parent_pid': os.getpid()}, '프로세스가 종료'),
+            ({'command_sha256': '0' * 64}, '같은 회차의'),
+        ]:
+            pending.write_text(json.dumps({**audit, **changed}))
+            with self.assertRaisesRegex(ValueError, message):
+                preview_reaped_planning(self.manager, self.schedule)
+        pending.write_text(json.dumps(audit))
+        proof = preview_reaped_planning(self.manager, self.schedule)
+        script_file.write_text(json.dumps({**self.schedule['last_script'], 'title': 'Other title'}))
+        with self.assertRaisesRegex(ValueError, '대본·출처와 현재 회차가 일치하지 않습니다'):
+            archive_reaped_planning(self.manager, self.schedule, proof)
+        self.assertEqual(pending.read_text(), json.dumps(audit))
+        script_file.write_bytes(script_bytes)
+        protected = [self.manager.filename, base, script_file,
+                     google_budget._database_path(), openai_budget._database_path()]
+        before = [path.read_bytes() for path in protected]
+        root, refresh = self.render()
+        with self.client:
+            await refresh()
+            await asyncio.sleep(0)
+            self.assertIn('완료된 기획 기록 대조', self.text(root))
+            pending_bytes = pending.read_bytes()
+            await self.click_and_wait('완료된 기획 기록 대조', 'preview')
+            self.assertEqual(pending.read_bytes(), pending_bytes)
+            self.click('닫기')
+            self.assertEqual(pending.read_bytes(), pending_bytes)
+            await self.click_and_wait('완료된 기획 기록 대조', 'preview')
+            await self.click_and_wait('이 실행 기록 보관', 'archive')
+        self.assertFalse(pending.exists())
+        archived, = base.parent.glob(f'{base.stem}.operation.*.json')
+        self.assertEqual(archived.read_bytes(), pending_bytes)
+        self.assertEqual([path.read_bytes() for path in protected], before)
+        fresh = AppState()
+        fresh.load_scheduled_script(self.manager, self.schedule['id'])
+        self.assertEqual(fresh.script, script())
+        self.assertFalse(fresh.is_script_reviewed())
+        self.attached.assert_not_called()
+
     async def test_pending_recovery_requires_exit_receipt_and_rechecks_the_displayed_video(self):
         from shorts_maker.services.episode_review_recovery import archive_reaped_upload, preview_reaped_upload
 

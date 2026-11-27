@@ -1,22 +1,23 @@
-"""Recover completed edits and private uploads from the exact Studio episode."""
+"""Recover completed planning, edits and private uploads from the exact Studio episode."""
 
 import hashlib
 import json
 import os
 import re
-import stat
 from pathlib import Path
 from uuid import uuid4
 
 from shorts_maker.planner.models import ShortsScript
 from shorts_maker.services.completed_video import completed_video
 from shorts_maker.services.operating_budget import episode_path
-from shorts_maker.services.operating_status import schedule_sha256
+from shorts_maker.services.operating_status import episode_source_url, read_episode_object, schedule_sha256
 from shorts_maker.services.production_service import script_sha256
+from shorts_maker.services.scheduled_planning import planning_worker_command
 from shorts_maker.services.studio_episode_action import (
     EpisodeScope, action_directory, action_path, read_request, scope_status, validate_receipt, worker_command,
 )
 from shorts_maker.services.work_drafts import script_draft_key
+from shorts_maker.utils.source_manager import SourceManager
 
 
 def _completed_commands(episode_id: str) -> set[str]:
@@ -100,50 +101,77 @@ def _recovered_uploads(manager, expected_schedule, reaped_command=None):
     return _recovered_results(manager, expected_schedule, {'upload'}, verify_media, reaped_command=reaped_command)
 
 
-def _reaped_upload_audit(path: Path) -> tuple[str, str]:
-    attributes = path.lstat()
-    limit = 2 * 1024 * 1024
-    if not stat.S_ISREG(attributes.st_mode) or attributes.st_size > limit:
-        raise ValueError('회차 대기 기록을 확인할 수 없습니다.')
-    with path.open('rb') as stream:
-        raw = stream.read(limit + 1)
-    if len(raw) > limit:
-        raise ValueError('회차 대기 기록을 확인할 수 없습니다.')
-    audit = json.loads(raw)
-    if not isinstance(audit, dict):
-        raise ValueError('회차 대기 기록을 확인할 수 없습니다.')
+def _reaped_operation_audit(path: Path, *, planning: bool = False) -> tuple[str, str]:
+    raw, audit = read_episode_object(path)
     command, pid = audit.get('command_sha256'), audit.get('studio_parent_pid')
+    if planning and audit.get('operation_kind') != 'planning':
+        raise ValueError('같은 회차의 기획 실행 기록이 필요합니다.')
     if (type(audit.get('returncode')) is not int or audit['returncode'] != 0
             or type(pid) is not int or not 1 < pid <= 2**31 - 1
             or not isinstance(command, str) or not re.fullmatch(r'[0-9a-f]{64}', command)):
-        raise ValueError('정상 종료한 Studio 업로드 기록이 없습니다. 실행 결과를 먼저 대조하세요.')
+        raise ValueError('정상 종료한 실행 기록이 없습니다. 실행 결과를 먼저 대조하세요.')
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return hashlib.sha256(raw).hexdigest(), command
     except PermissionError:
         pass
-    raise ValueError('업로드를 실행한 프로세스가 종료됐는지 확인할 수 없습니다.')
+    raise ValueError('작업을 실행한 프로세스가 종료됐는지 확인할 수 없습니다.')
 
 
 def preview_reaped_upload(manager, schedule) -> tuple[str, dict[str, str]]:
     pending = episode_path(schedule.get('last_episode_id')).with_suffix('.operation.pending.json')
-    digest, command = _reaped_upload_audit(pending)
+    digest, command = _reaped_operation_audit(pending)
     matches = _recovered_uploads(manager, schedule, reaped_command=command)
     if len(matches) != 1:
         raise ValueError('회차의 요청·업로드 결과·영상이 일치하지 않습니다. YouTube Studio에서 결과를 먼저 대조하세요.')
-    if _reaped_upload_audit(pending) != (digest, command):
+    if _reaped_operation_audit(pending) != (digest, command):
         raise ValueError('회차 대기 기록이 조회 중 변경됐습니다.')
     return digest, next(iter(matches.values()))
 
 
-def archive_reaped_upload(manager, schedule, expected: tuple[str, dict[str, str]]) -> None:
-    """Move a confirmed, exited upload audit to history, leaving approval and attachment separate."""
+def _archive_reaped_operation(manager, schedule, expected, verify) -> None:
     with manager._review_transition_lock():
-        if preview_reaped_upload(manager, schedule) != expected:
-            raise ValueError('회차 대기 기록이나 영상이 변경됐습니다. 다시 확인하세요.')
+        if verify(manager, schedule) != expected:
+            raise ValueError('회차 실행 기록 또는 결과가 변경됐습니다. 다시 확인하세요.')
         base = episode_path(schedule['last_episode_id'])
         base.with_suffix('.operation.pending.json').rename(base.with_suffix(f'.operation.{uuid4().hex}.json'))
+
+
+def archive_reaped_upload(manager, schedule, expected: tuple[str, dict[str, str]]) -> None:
+    """Move a confirmed, exited upload audit to history, leaving attachment separate."""
+    _archive_reaped_operation(manager, schedule, expected, preview_reaped_upload)
+
+
+def preview_reaped_planning(manager, schedule) -> tuple[str, dict[str, str]]:
+    scope = EpisodeScope(schedules_file=str(manager.filename.resolve()), schedule_id=schedule['id'],
+                         episode_id=schedule.get('last_episode_id'))
+    current, _ = scope_status(scope, child=True)
+    if current != schedule:
+        raise ValueError('회차 상태가 변경됐습니다. 예약 화면을 다시 확인하세요.')
+    base = episode_path(scope.episode_id)
+    pending = base.with_suffix('.operation.pending.json')
+    digest, command = _reaped_operation_audit(pending, planning=True)
+    fixed = planning_worker_command(manager, scope.schedule_id)
+    if command != hashlib.sha256(json.dumps(fixed).encode()).hexdigest():
+        raise ValueError('같은 회차의 기획 실행 기록이 필요합니다.')
+    raw, saved = read_episode_object(base.with_suffix('.script.json'))
+    script = ShortsScript.model_validate(saved)
+    selected_source = episode_source_url(current)
+    if (script_sha256(saved) != script_sha256(current['last_script'])
+            or not script.source_url or not SourceManager.is_allowed_url(script.source_url)
+            or (selected_source and selected_source != script.source_url)):
+        raise ValueError('저장된 기획 대본·출처와 현재 회차가 일치하지 않습니다.')
+    if (manager.get_schedule(scope.schedule_id) != current
+            or _reaped_operation_audit(pending, planning=True) != (digest, command)):
+        raise ValueError('회차 실행 기록이 조회 중 변경됐습니다.')
+    return digest, {'title': script.title, 'source_url': script.source_url,
+                    'script_file_sha256': hashlib.sha256(raw).hexdigest()}
+
+
+def archive_reaped_planning(manager, schedule, expected: tuple[str, dict[str, str]]) -> None:
+    """Archive confirmed planning while leaving the same script queued for review."""
+    _archive_reaped_operation(manager, schedule, expected, preview_reaped_planning)
 
 
 def recovered_episode_edits(manager, expected_schedule: dict) -> dict[str, dict[str, str]]:

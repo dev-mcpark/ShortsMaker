@@ -20,7 +20,7 @@
 
 `revision_validation.py` verifies the currently applied episode revision against its reassessment history, exact revision request and named model-review record. `script_review_panel.py` displays the retained excerpt and owner rationale independently of model verdicts for the applied script.
 
-`episode_review_recovery.py` also verifies an interrupted launcher’s pending upload audit when its worker exit and exact private result are already recorded. `episode_review_recovery_panel.py` offers explicit archival under the existing schedule lock before the normal attachment flow. `operate_schedule.py` records the launcher PID for scoped Studio work.
+`episode_review_recovery.py` verifies an interrupted launcher's pending planning or upload audit when the worker exit and exact local result are saved. `episode_review_recovery_panel.py` offers explicit archival under the existing schedule lock before opening the saved script or attaching the private review copy. `operate_schedule.py` records the launcher PID and atomically persists the returned exit code. `scheduled_planning.py` shares the fixed planning command with the launcher and recovery verifier. `operating_status.py` reads bounded episode records and exposes the pending operation kind to Studio.
 
 `services/youtube_connection.py` derives a local hint from the saved scope, expiry and token-field presence. `youtube_connection_panel.py` displays the hint and uses the existing auth-only/check subprocess for an explicit authorization check or reconnect.
 

@@ -16,7 +16,9 @@ from pathlib import Path
 from shorts_maker.services.operating_budget import begin_episode, episode_environment, episode_path, load_episode
 from shorts_maker.services.operating_status import operator_status, schedule_sha256
 from shorts_maker.services.queue_host_status import write_host_status
+from shorts_maker.services.scheduled_planning import planning_worker_command
 from shorts_maker.services.scheduled_script_history import current_revision_copy
+from shorts_maker.services.studio_episode_action import write_message
 from shorts_maker.utils.config import PROJECT_ROOT, settings
 from shorts_maker.utils.scheduler import ScheduleManager
 
@@ -78,7 +80,9 @@ def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedu
             env, status = episode_environment(record)
         path = episode_path(record['id']).with_suffix('.operation.pending.json')
         audit = {'command_sha256': hashlib.sha256(json.dumps(command).encode()).hexdigest(), 'status': status}
-        if studio_request is not None:
+        if planning:
+            audit['operation_kind'] = 'planning'
+        if planning or studio_request is not None:
             audit['studio_parent_pid'] = os.getpid()
         with path.open('x') as file:
             json.dump(audit, file)
@@ -89,10 +93,7 @@ def run_scoped(manager, schedule_id, command, *, planning=False, expected_schedu
     # A killed parent retains the marker. Inspect its child and provider records before recovery.
     result = subprocess.run(command, cwd=PROJECT_ROOT, env={**os.environ, **env})
     audit['returncode'] = result.returncode
-    with path.open('w') as file:
-        json.dump(audit, file)
-        file.flush()
-        os.fsync(file.fileno())
+    write_message(path, audit)
     if studio_request is not None:
         from shorts_maker.services.studio_episode_action import validate_receipt
         # Missing/corrupt results retain the existing episode pending gate for reconciliation.
@@ -195,10 +196,8 @@ def main():
             if schedule.get('review_operator') == 'agent':
                 print(json.dumps(operator_status(schedule), ensure_ascii=False))
     elif args.action == 'plan':
-        raise SystemExit(run_scoped(manager, args.schedule_id, [
-            sys.executable, str(Path(__file__).resolve()), '--schedules', str(manager.filename.resolve()),
-            '_plan', args.schedule_id,
-        ], planning=True, expected_schedule_sha256=args.expected_schedule_sha256))
+        raise SystemExit(run_scoped(manager, args.schedule_id, planning_worker_command(manager, args.schedule_id),
+                                    planning=True, expected_schedule_sha256=args.expected_schedule_sha256))
     elif args.action == '_plan':
         schedule, record = active_episode(manager, args.schedule_id)
         expected, _ = episode_environment(record)
@@ -213,6 +212,8 @@ def main():
         script_path = episode_path(record['id']).with_suffix('.script.json')
         with script_path.open('x', encoding='utf-8') as file:
             json.dump(current['last_script'], file, ensure_ascii=False, indent=2)
+            file.flush()
+            os.fsync(file.fileno())
         print('Script awaiting editorial review:', script_path)
     elif args.action == '_validate-revision':
         from shorts_maker.services.revision_validation import execute

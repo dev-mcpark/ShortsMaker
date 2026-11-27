@@ -8,7 +8,7 @@ from nicegui import run, ui
 from shorts_maker.gui.components.common.safe_ui import safe_notify, safe_refresh
 from shorts_maker.gui.components.episode_reservation_panel import render_episode_reservation_panel
 from shorts_maker.gui.components.episode_review_recovery_panel import (
-    render_episode_review_recovery, render_pending_upload_recovery,
+    render_episode_review_recovery, render_pending_result_recovery,
 )
 from shorts_maker.gui.components.scheduled_run_view import STOP_GUIDANCE
 from shorts_maker.gui.components.work_drafts_panel import render_episode_writer_draft
@@ -356,7 +356,9 @@ def render_operator_panel(state, manager, schedule, on_attached):
             ui.label('실행 결과 대조 필요 · 요청 기록을 확인하기 전 재실행·연결을 중단합니다.').classes('text-xs text-amber-200')
             if (schedule.get('review_operator') == 'agent' and schedule.get('last_result') == 'script_review_pending'
                     and not schedule.get('enabled') and not schedule.get('last_youtube_id') and not schedule.get('last_video_path')):
-                render_pending_upload_recovery(state, manager, schedule, refresh)
+                render_pending_result_recovery(
+                    state, manager, schedule, refresh, planning=data.get('operation_kind') == 'planning',
+                )
         elif stop:
             ui.label(stop[1]).classes('text-sm text-slate-300 break-words')
         if 'budget_error' in data:

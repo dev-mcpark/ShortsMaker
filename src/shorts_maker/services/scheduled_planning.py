@@ -18,6 +18,11 @@ from shorts_maker.utils.paid_gate import require_paid_production_enabled
 logger = get_logger(__name__)
 
 
+def planning_worker_command(manager, schedule_id: str) -> list[str]:
+    return [sys.executable, str(PROJECT_ROOT / 'scripts/operate_schedule.py'),
+            '--schedules', str(manager.filename.resolve()), '_plan', schedule_id]
+
+
 def planning_preflight(manager, expected: dict) -> dict:
     require_paid_production_enabled()
     current = manager.get_schedule(expected['id'])

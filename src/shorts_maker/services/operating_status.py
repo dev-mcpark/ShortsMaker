@@ -2,9 +2,12 @@
 
 import hashlib
 import json
+import stat
+from pathlib import Path
 
 from shorts_maker.services.operating_budget import episode_environment, episode_path, load_episode
 from shorts_maker.services.scheduled_script_history import MissingRevisionCopy, current_revision_copy
+from shorts_maker.utils.config import settings
 
 
 def schedule_sha256(schedule: dict) -> str:
@@ -16,6 +19,23 @@ def episode_source_url(schedule: dict) -> str | None:
     run = schedule.get('episode_source_run_count')
     url = schedule.get('episode_source_url')
     return url if isinstance(url, str) and type(run) is int and run == schedule.get('run_count') else None
+
+
+def read_episode_object(path: Path) -> tuple[bytes, dict]:
+    """Read a bounded local record from an episode's managed output folder."""
+    details = path.lstat()
+    limit = 2 * 1024 * 1024
+    if (not stat.S_ISREG(details.st_mode) or details.st_size > limit
+            or not path.resolve().is_relative_to(settings.output_dir.resolve())):
+        raise ValueError('회차 기록 파일을 확인할 수 없습니다.')
+    with path.open('rb') as stream:
+        raw = stream.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError('회차 기록 파일을 확인할 수 없습니다.')
+    document = json.loads(raw)
+    if not isinstance(document, dict):
+        raise ValueError('회차 기록 파일을 확인할 수 없습니다.')
+    return raw, document
 
 
 def operator_status(schedule: dict) -> dict:
@@ -37,6 +57,13 @@ def operator_status(schedule: dict) -> dict:
             path = episode_path(schedule['last_episode_id'])
             pending = path.with_suffix('.operation.pending.json')
             result['operation_pending_unverified'] = pending.exists() or pending.is_symlink()
+            if result['operation_pending_unverified']:
+                try:
+                    _, operation = read_episode_object(pending)
+                    if operation.get('operation_kind') == 'planning':
+                        result['operation_kind'] = 'planning'
+                except (OSError, ValueError):
+                    pass  # Keep the pending state even when its operation type cannot be read.
             script = path.with_suffix('.script.json')
             result['planned_script_path'] = str(script) if script.is_file() else None
             if schedule.get('review_operator') == 'agent':

@@ -1314,6 +1314,8 @@ Find the review copy from the exact episode's completed command audit, upload re
 
 If the Studio launcher stopped before archiving its pending audit, allow the owner to archive the original bytes under the existing scheduler lock. Require a recorded zero exit code from the upload worker, confirmed absence of the recorded launcher PID, the exact request and successful receipt, and matching local private-video evidence. Keep incomplete, PID-less, live or conflicting audits pending. Archiving leaves attachment and owner adoption as separate actions.
 
+2026-11-28 update. Recover an interrupted planning launcher under the same lock when its zero exit code and departed PID are recorded, its fixed command identifies the same schedule, and the saved script matches that episode's script and source. Recheck the preview on confirmation before archiving the audit. Reopening the saved script returns to ordinary review. A missing terminal result or a mismatched file leaves the episode blocked.
+
 ## 2026-11-27 — Keep a complete local edit inside its episode
 
 When all current scene numbers have connected clips and the selected narration supplies every scene, use a fixed local-only edit through the existing episode launcher. The child requires provider calls disabled, a zero visual cap, and media paths within outputs. It runs the normal editor and technical checks. Keep the schedule, script review, execution marker and typed receipt checks so the edited file can be found again in the same episode. A paid request still needs current ledger checks, and uploading remains a separate action.

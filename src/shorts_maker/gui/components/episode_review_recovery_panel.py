@@ -1,4 +1,4 @@
-"""Reopen a finished episode edit or attach its confirmed private upload."""
+"""Recover an episode's completed planning, edit, or private upload."""
 
 import asyncio
 from pathlib import Path
@@ -7,8 +7,8 @@ from nicegui import ui
 
 from shorts_maker.gui.components.common.safe_ui import safe_notify
 from shorts_maker.services.episode_review_recovery import (
-    archive_reaped_upload, attach_recovered_review_copy, preview_reaped_upload,
-    recovered_episode_edits, recovered_review_copies,
+    archive_reaped_planning, archive_reaped_upload, attach_recovered_review_copy,
+    preview_reaped_planning, preview_reaped_upload, recovered_episode_edits, recovered_review_copies,
 )
 
 
@@ -120,7 +120,11 @@ def render_episode_review_recovery(state, manager, schedule, refresh, *, edit=Fa
             'min-h-[44px]').bind_enabled_from(state, 'is_busy', lambda busy: not busy and not working['value'])
 
 
-def render_pending_upload_recovery(state, manager, schedule, refresh):
+def render_pending_result_recovery(state, manager, schedule, refresh, *, planning=False):
+    preview_result = preview_reaped_planning if planning else preview_reaped_upload
+    archive_result = archive_reaped_planning if planning else archive_reaped_upload
+    stage = '기획' if planning else '업로드'
+    next_step = '검토할 각본을 다시 불러오세요.' if planning else '업로드한 검토본을 찾아 이 회차에 연결하세요.'
     working = {'value': False}
     current_dialog = None
     with ui.column().classes('w-full gap-1') as panel:
@@ -134,7 +138,7 @@ def render_pending_upload_recovery(state, manager, schedule, refresh):
             working['value'] = True
             notice.text = '저장된 결과를 대조하고 있습니다…'
             try:
-                proof = await asyncio.to_thread(preview_reaped_upload, manager, schedule)
+                proof = await asyncio.to_thread(preview_result, manager, schedule)
             except (OSError, ValueError, RuntimeError) as error:
                 if not panel.is_deleted:
                     notice.text = f'복구 중단 · {error}'
@@ -148,10 +152,14 @@ def render_pending_upload_recovery(state, manager, schedule, refresh):
                 current_dialog.delete()
             with ui.dialog().props('persistent') as dialog, ui.card().classes('w-full max-w-xl'):
                 info = proof[1]
-                ui.label('완료된 업로드 기록 복구').classes('text-lg font-bold')
-                ui.label(Path(info['video_path']).name).classes('text-sm break-all')
-                ui.link(f'YouTube {info["youtube_id"]}', f'https://www.youtube.com/shorts/{info["youtube_id"]}', new_tab=True)
-                ui.label('대기 기록을 실행 이력에 보관합니다. 이후 업로드한 검토본을 찾아 이 회차에 연결하세요.').classes('text-sm')
+                ui.label(f'완료된 {stage} 기록 복구').classes('text-lg font-bold')
+                if planning:
+                    ui.label(info['title']).classes('text-sm break-words')
+                    ui.label(info['source_url']).classes('text-xs break-all')
+                else:
+                    ui.label(Path(info['video_path']).name).classes('text-sm break-all')
+                    ui.link(f'YouTube {info["youtube_id"]}', f'https://www.youtube.com/shorts/{info["youtube_id"]}', new_tab=True)
+                ui.label(f'대기 기록을 실행 이력에 보관합니다. 이후 {next_step}').classes('text-sm')
                 error_label = ui.label().props('role=alert').classes('text-sm text-amber-200 break-words')
 
                 async def archive():
@@ -159,7 +167,7 @@ def render_pending_upload_recovery(state, manager, schedule, refresh):
                         return
                     working['value'] = True
                     try:
-                        await asyncio.to_thread(archive_reaped_upload, manager, schedule, proof)
+                        await asyncio.to_thread(archive_result, manager, schedule, proof)
                     except (OSError, ValueError, RuntimeError) as error:
                         if not error_label.is_deleted:
                             error_label.text = f'복구 중단 · {error}'
@@ -169,7 +177,7 @@ def render_pending_upload_recovery(state, manager, schedule, refresh):
                     if not panel.is_deleted:
                         dialog.close()
                         await refresh()
-                        safe_notify('실행 기록을 보관했습니다. 업로드한 검토본 찾기로 이어가세요.', type='positive')
+                        safe_notify(f'실행 기록을 보관했습니다. {next_step}', type='positive')
 
                 with ui.row().classes('flex-wrap'):
                     ui.button('닫기', on_click=dialog.close).props('flat').classes('min-h-[44px]').bind_enabled_from(
@@ -179,5 +187,5 @@ def render_pending_upload_recovery(state, manager, schedule, refresh):
             current_dialog = dialog
             dialog.open()
 
-        ui.button('완료된 업로드 기록 대조', on_click=preview).props('outline').classes('min-h-[44px]').bind_enabled_from(
+        ui.button(f'완료된 {stage} 기록 대조', on_click=preview).props('outline').classes('min-h-[44px]').bind_enabled_from(
             state, 'is_busy', lambda busy: not busy and not working['value'])
